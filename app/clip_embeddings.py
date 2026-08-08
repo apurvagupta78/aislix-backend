@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-import torch
 from PIL import Image
 
 _model = None
@@ -16,6 +15,7 @@ def _load_clip():
     if _model is not None:
         return _model, _preprocess, _device
     import open_clip
+    import torch
 
     _device = "cuda" if torch.cuda.is_available() else "cpu"
     _model, _, _preprocess = open_clip.create_model_and_transforms(
@@ -30,6 +30,8 @@ def _load_clip():
 def embed_pil_images(images: list[Image.Image]) -> np.ndarray:
     if not images:
         return np.zeros((0, 512), dtype=np.float32)
+    import torch
+
     model, preprocess, device = _load_clip()
     batch = torch.stack([preprocess(img) for img in images]).to(device)
     with torch.no_grad():
