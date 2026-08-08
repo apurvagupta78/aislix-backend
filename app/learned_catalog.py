@@ -22,6 +22,7 @@ _lock = threading.Lock()
 _learned_index: Any | None = None
 _learned_catalog: list[dict] = []
 _loaded = False
+_pending_updates: list[dict] = []
 
 
 def metadata_to_sku(brand: str, product_name: str, variant: str = "") -> str:
@@ -76,6 +77,55 @@ def load_learned() -> int:
         _loaded = True
         print(f"Loaded {len(_learned_catalog)} learned SKUs")
         return len(_learned_catalog)
+
+
+def import_learned_catalog(entries: list[dict]) -> int:
+    """Merge learned SKUs sent from Lovable (no Railway Supabase key required)."""
+    global _loaded
+    if not entries:
+        return count_learned()
+    with _lock:
+        added = 0
+        for raw in entries:
+            sku = (raw.get("sku") or "").strip()
+            embedding = raw.get("embedding")
+            if not sku or not embedding:
+                continue
+            if any(entry.get("sku") == sku for entry in _learned_catalog):
+                continue
+            vector = np.asarray(embedding, dtype=np.float32).reshape(-1)
+            norm = np.linalg.norm(vector)
+            if norm > 0:
+                vector = vector / norm
+            _learned_catalog.append(
+                {
+                    "sku": sku,
+                    "brand": raw.get("brand") or "",
+                    "product_name": raw.get("product_name") or "",
+                    "variant": raw.get("variant") or "",
+                    "category": raw.get("category") or "General",
+                    "embedding": vector.astype(float).tolist(),
+                    "hit_count": int(raw.get("hit_count") or 1),
+                    "source_scan_id": raw.get("source_scan_id"),
+                    "recognition_source": "learned",
+                }
+            )
+            added += 1
+        if added:
+            _rebuild_index_unlocked()
+        _loaded = True
+        if added:
+            print(f"Imported {added} learned SKU(s) from Lovable")
+        return len(_learned_catalog)
+
+
+def pop_learned_updates() -> list[dict]:
+    """Return newly learned SKUs from the latest scan for Lovable to persist."""
+    global _pending_updates
+    with _lock:
+        updates = _pending_updates[:]
+        _pending_updates = []
+    return updates
 
 
 def _rebuild_index_unlocked() -> None:
@@ -165,6 +215,7 @@ def learn_sku(
             _learned_index.add(vec)
 
         _persist_unlocked(new_entry)
+        _pending_updates.append(dict(new_entry))
         print(f"Learned new SKU: {sku} (scan={scan_id})")
         return True
 

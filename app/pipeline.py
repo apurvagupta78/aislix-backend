@@ -59,7 +59,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         recommendations = build_recommendations(metrics, inventory)
         summary_text = executive_summary(metrics)
 
-        from app.learned_catalog import flush_learned
+        from app.learned_catalog import flush_learned, pop_learned_updates
 
         flush_learned()
 
@@ -97,6 +97,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             "annotated_image_base64": annotated_b64,
             "pdf_base64": pdf_b64,
             "csv_base64": csv_b64,
+            "learned_updates": pop_learned_updates(),
             "shelf_label": metadata.get("shelf_label"),
             "category": metadata.get("category"),
         }

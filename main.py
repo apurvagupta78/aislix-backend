@@ -127,8 +127,13 @@ async def scan(request: Request):
                 raise HTTPException(status_code=422, detail=error)
 
         image_url = image_urls[0]
+        learned_catalog = body.get("learned_catalog") or []
 
         def _run() -> dict:
+            if learned_catalog:
+                from app.learned_catalog import import_learned_catalog
+
+                import_learned_catalog(learned_catalog)
             return run_scan_from_url(image_url, scan_id=scan_id, metadata=metadata)
 
         started = start_job(scan_id, _run)
