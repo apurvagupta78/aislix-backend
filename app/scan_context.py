@@ -31,7 +31,8 @@ AISLE_BRAND_HINTS: dict[str, set[str]] = {
     "beverages": {
         "lipton", "tetley", "tata", "brooke bond", "taj mahal", "red label", "yellow label",
         "nescafe", "bru", "coca cola", "pepsi", "frooti", "maaza", "real", "tropicana",
-        "boost", "horlicks", "complan", "sofit", "bournvita",
+        "boost", "horlicks", "complan", "sofit", "bournvita", "sprite", "coca cola",
+        "pepsi", "fanta", "paper boat", "tang", "minute maid",
     },
     "packaged food & snacks": {
         "haldiram", "haldiram's", "britannia", "parle", "bisk farm", "sunfeast", "mtr",
@@ -52,6 +53,22 @@ AISLE_BRAND_HINTS: dict[str, set[str]] = {
     "grocery & staples": {
         "india gate", "fortune", "saffola", "aashirvaad", "pillsbury", "mdh", "everest",
         "tata sampann", "patanjali", "24 mantra",
+    },
+}
+
+# Brands that must never appear when a specific aisle category is selected.
+AISLE_BRAND_BLOCKLIST: dict[str, set[str]] = {
+    "beverages": {
+        "mars", "cadbury", "snickers", "kitkat", "munch", "perk", "galaxy", "twix",
+        "bounty", "haldiram", "haldiram's", "britannia", "parle", "bisk farm", "mtr",
+        "maggi", "maggie", "lays", "lay's", "kurkure", "bingo", "sunfeast",
+        "dove", "lux", "colgate", "pepsodent", "harpic", "vim", "surf excel",
+    },
+    "packaged food & snacks": {
+        "lipton", "tetley", "coca cola", "pepsi", "sprite", "fanta", "tropicana",
+    },
+    "personal care": {
+        "lipton", "tetley", "coca cola", "pepsi", "haldiram", "lays",
     },
 }
 
@@ -150,8 +167,8 @@ def gpt_context_prompt(context: dict | None) -> str:
         f"\nScan context: this shelf photo is from the **{name}** aisle.",
         f"Expected product types: {examples}." if examples else "",
         f"Location: {shelf}." if shelf else "",
-        "Only label products that belong in this aisle. Reject brands from other aisles "
-        "(e.g. do not label snack or personal-care brands on a Beverages shelf).",
+        "Only label products that belong in this aisle. Never label chocolate, biscuits, "
+        "snacks, or personal-care brands on a Beverages shelf.",
     ]
     return "\n".join(line for line in lines if line)
 
@@ -172,6 +189,10 @@ def sku_allowed_in_context(
     aislix_key = _normalize_key(context["aislix_category"])
     allowed_catalog = context.get("catalog_categories") or []
     hints = context.get("brand_hints") or set()
+    blocklist = AISLE_BRAND_BLOCKLIST.get(aislix_key, set())
+
+    if brand_l in blocklist:
+        return False
 
     sku_cat = (entry_category or infer_category(sku or brand_l)).lower()
 

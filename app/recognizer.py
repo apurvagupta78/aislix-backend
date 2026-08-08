@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from PIL import Image
 
-from app.brand_dictionary import category_allows_brand, reconcile_label_with_text
+from app.brand_dictionary import category_allows_brand, match_from_text, reconcile_label_with_text
 from app.clip_embeddings import embed_pil_images
 from app.faiss_matcher import is_ready, match_embeddings_batch
 from app.learned_catalog import learn_sku, metadata_to_sku
@@ -23,7 +23,7 @@ load_dotenv()
 
 _client: OpenAI | None = None
 GPT_MODEL = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini")
-GPT_MAX_FALLBACKS = int(os.getenv("GPT_MAX_FALLBACKS", "150"))
+GPT_MAX_FALLBACKS = int(os.getenv("GPT_MAX_FALLBACKS", "50"))
 RECOGNITION_V2 = os.getenv("RECOGNITION_V2", "true").lower() in {"1", "true", "yes"}
 FAISS_THRESHOLD = float(os.getenv("FAISS_SIMILARITY_THRESHOLD", "0.92"))
 FAISS_THRESHOLD_CONTEXT = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_CONTEXT", "0.88"))
@@ -180,7 +180,9 @@ def _propagate_shelf_labels(
     records: list[dict],
     classified: list[dict | None],
     embeddings: np.ndarray,
+    images: list[Image.Image],
     unknown_indices: list[int],
+    scan_context: dict | None = None,
 ) -> tuple[list[int], int]:
     """Copy labels from identified facings to visually identical neighbors on the same shelf."""
     known: list[tuple[np.ndarray, dict]] = []
@@ -196,6 +198,17 @@ def _propagate_shelf_labels(
     propagated = 0
     still_unknown: list[int] = []
     for index in unknown_indices:
+        pack_text = read_packaging_text(images[index])
+        ocr_match = match_from_text(pack_text)
+        if ocr_match and _is_valid_label(ocr_match) and _accept_ocr_label(ocr_match, scan_context):
+            row = _merge_label(records[index], ocr_match)
+            row["_index"] = index
+            row["recognition_source"] = "ocr+propagate"
+            classified[index] = row
+            known.append((embeddings[index], row))
+            propagated += 1
+            continue
+
         probe = embeddings[index]
         best_sim = 0.0
         best_label: dict | None = None
@@ -204,6 +217,18 @@ def _propagate_shelf_labels(
             if sim >= PROPAGATE_THRESHOLD and sim > best_sim:
                 best_sim = sim
                 best_label = ref_label
+
+        if best_label and pack_text:
+            ref_brand = (best_label.get("brand") or "").lower()
+            text_l = pack_text.lower()
+            # Do not spread Tata onto Lipton packs (and vice versa) when OCR shows the logo.
+            if "lipton" in text_l and ref_brand == "tata":
+                still_unknown.append(index)
+                continue
+            if "tata" in text_l and ref_brand == "lipton" and "tea" in text_l:
+                still_unknown.append(index)
+                continue
+
         if best_label:
             label = {
                 k: v
@@ -215,7 +240,19 @@ def _propagate_shelf_labels(
                 "confidence": round(min(0.97, best_sim * 0.98), 4),
                 "recognition_source": "propagate",
             }
+            if pack_text:
+                label = reconcile_label_with_text(label, pack_text)
+            if scan_context and not category_allows_brand(
+                None,
+                label.get("brand") or "",
+                label.get("sku") or "",
+                label.get("category") or "",
+                scan_context=scan_context,
+            ):
+                still_unknown.append(index)
+                continue
             classified[index] = _merge_label(records[index], label)
+            classified[index]["_index"] = index
             known.append((probe, classified[index]))
             propagated += 1
         else:
@@ -270,7 +307,7 @@ def classify_records_v2(
     scan_category: str | None = None,
     scan_context: dict | None = None,
 ) -> tuple[list[dict], dict]:
-    """FAISS first (fast) → OCR → GPT → FAISS retry → shelf propagation → unknown."""
+    """FAISS → retry → propagate → OCR → GPT → unknown (OCR/GPT only on hard crops)."""
     if not records:
         return [], {}
 
@@ -283,11 +320,14 @@ def classify_records_v2(
     ocr_texts: list[str] = [""] * len(records)
     faiss_cutoff = _faiss_threshold(scan_context)
 
-    if pending and is_ready():
-        matches = match_embeddings_batch(embeddings[pending], threshold=faiss_cutoff)
-        still_pending: list[int] = []
+    def _apply_faiss(indices: list[int], threshold: float) -> list[int]:
+        nonlocal learned_new
+        if not indices or not is_ready():
+            return indices
+        matches = match_embeddings_batch(embeddings[indices], threshold=threshold)
+        still: list[int] = []
         for local_idx, (match, score) in enumerate(matches):
-            global_idx = pending[local_idx]
+            global_idx = indices[local_idx]
             if match and _accept_faiss_match(match, scan_category, scan_context=scan_context):
                 merged = {**records[global_idx], **match}
                 merged["confidence"] = float(match.get("confidence") or score)
@@ -296,8 +336,19 @@ def classify_records_v2(
                 stats["learned" if source == "learned" else "faiss"] += 1
                 classified[global_idx] = merged
             else:
-                still_pending.append(global_idx)
-        pending = still_pending
+                still.append(global_idx)
+        return still
+
+    pending = _apply_faiss(pending, faiss_cutoff)
+    pending = _apply_faiss(pending, FAISS_THRESHOLD_RETRY)
+
+    for _ in range(2):
+        if not pending:
+            break
+        pending, round_prop = _propagate_shelf_labels(
+            records, classified, embeddings, images, pending, scan_context=scan_context
+        )
+        stats["propagate"] += round_prop
 
     ocr_gpt_queue: list[int] = []
     for index in pending:
@@ -335,31 +386,15 @@ def classify_records_v2(
                 continue
         faiss_retry_queue.append(index)
 
-    if faiss_retry_queue and is_ready():
-        matches = match_embeddings_batch(embeddings[faiss_retry_queue], threshold=FAISS_THRESHOLD_RETRY)
-        still_pending = []
-        for local_idx, (match, score) in enumerate(matches):
-            global_idx = faiss_retry_queue[local_idx]
-            if match and _accept_faiss_match(match, scan_category, scan_context=scan_context):
-                merged = {**records[global_idx], **match}
-                merged["confidence"] = float(match.get("confidence") or score)
-                merged = reconcile_label_with_text(merged, ocr_texts[global_idx])
-                merged["_index"] = global_idx
-                source = match.get("recognition_source") or "faiss"
-                stats["learned" if source == "learned" else "faiss"] += 1
-                classified[global_idx] = merged
-            else:
-                still_pending.append(global_idx)
-        faiss_retry_queue = still_pending
-
     faiss_retry_queue, propagated = _propagate_shelf_labels(
-        records, classified, embeddings, faiss_retry_queue
+        records, classified, embeddings, images, faiss_retry_queue, scan_context=scan_context
     )
-    stats["propagate"] = propagated
+    stats["propagate"] += propagated
 
     for index in faiss_retry_queue:
-        classified[index] = _merge_label(records[index], _unknown_label())
-        stats["none"] += 1
+        if classified[index] is None:
+            classified[index] = _merge_label(records[index], _unknown_label())
+            stats["none"] += 1
 
     if learned_new:
         print(f"Learned {learned_new} new SKU(s) (scan={scan_id})")
