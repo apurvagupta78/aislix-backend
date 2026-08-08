@@ -7,6 +7,7 @@ import json
 import os
 from io import BytesIO
 
+import numpy as np
 from dotenv import load_dotenv
 from openai import OpenAI
 from PIL import Image
@@ -22,9 +23,12 @@ load_dotenv()
 
 _client: OpenAI | None = None
 GPT_MODEL = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini")
-GPT_MAX_FALLBACKS = int(os.getenv("GPT_MAX_FALLBACKS", "80"))
+GPT_MAX_FALLBACKS = int(os.getenv("GPT_MAX_FALLBACKS", "150"))
 RECOGNITION_V2 = os.getenv("RECOGNITION_V2", "true").lower() in {"1", "true", "yes"}
 FAISS_THRESHOLD = float(os.getenv("FAISS_SIMILARITY_THRESHOLD", "0.92"))
+FAISS_THRESHOLD_CONTEXT = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_CONTEXT", "0.88"))
+FAISS_THRESHOLD_RETRY = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_RETRY", "0.82"))
+PROPAGATE_THRESHOLD = float(os.getenv("PROPAGATE_SIMILARITY_THRESHOLD", "0.93"))
 LEARN_MIN_CONFIDENCE = float(os.getenv("LEARN_MIN_CONFIDENCE", "0.7"))
 
 
@@ -150,8 +154,73 @@ def _should_learn(label: dict) -> bool:
 
 
 def _smart_gpt_cap(miss_count: int) -> int:
-    dynamic = max(20, int(miss_count * 0.4))
-    return min(GPT_MAX_FALLBACKS, dynamic)
+    if miss_count <= 0:
+        return 0
+    return min(GPT_MAX_FALLBACKS, miss_count)
+
+
+def _faiss_threshold(scan_context: dict | None) -> float:
+    if scan_context and scan_context.get("aislix_category"):
+        return FAISS_THRESHOLD_CONTEXT
+    return FAISS_THRESHOLD
+
+
+def _is_unknown_label(label: dict | None) -> bool:
+    if not label:
+        return True
+    brand = (label.get("brand") or "").strip().lower()
+    return brand in {"", "unknown"}
+
+
+def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    return float(np.dot(a, b))
+
+
+def _propagate_shelf_labels(
+    records: list[dict],
+    classified: list[dict | None],
+    embeddings: np.ndarray,
+    unknown_indices: list[int],
+) -> tuple[list[int], int]:
+    """Copy labels from identified facings to visually identical neighbors on the same shelf."""
+    known: list[tuple[np.ndarray, dict]] = []
+    for row in classified:
+        if row and not _is_unknown_label(row):
+            idx = row.get("_index")
+            if idx is not None:
+                known.append((embeddings[int(idx)], row))
+
+    if not known:
+        return unknown_indices, 0
+
+    propagated = 0
+    still_unknown: list[int] = []
+    for index in unknown_indices:
+        probe = embeddings[index]
+        best_sim = 0.0
+        best_label: dict | None = None
+        for ref_emb, ref_label in known:
+            sim = _cosine_similarity(probe, ref_emb)
+            if sim >= PROPAGATE_THRESHOLD and sim > best_sim:
+                best_sim = sim
+                best_label = ref_label
+        if best_label:
+            label = {
+                k: v
+                for k, v in best_label.items()
+                if k not in {"_index", "image_path", "bbox", "crop_path"}
+            }
+            label = {
+                **label,
+                "confidence": round(min(0.97, best_sim * 0.98), 4),
+                "recognition_source": "propagate",
+            }
+            classified[index] = _merge_label(records[index], label)
+            known.append((probe, classified[index]))
+            propagated += 1
+        else:
+            still_unknown.append(index)
+    return still_unknown, propagated
 
 
 def _merge_label(record: dict, label: dict) -> dict:
@@ -201,63 +270,94 @@ def classify_records_v2(
     scan_category: str | None = None,
     scan_context: dict | None = None,
 ) -> tuple[list[dict], dict]:
-    """OCR → GPT → learned/base FAISS → unknown."""
+    """FAISS first (fast) → OCR → GPT → FAISS retry → shelf propagation → unknown."""
     if not records:
         return [], {}
 
     images = [Image.open(record["image_path"]).convert("RGB") for record in records]
     embeddings = embed_pil_images(images)
     classified: list[dict | None] = [None] * len(records)
-    stats = {"ocr": 0, "gpt": 0, "faiss": 0, "learned": 0, "none": 0}
-    gpt_queue: list[tuple[int, str]] = []
-    faiss_queue: list[int] = []
+    stats = {"ocr": 0, "gpt": 0, "faiss": 0, "learned": 0, "propagate": 0, "none": 0}
+    pending: list[int] = list(range(len(records)))
     learned_new = 0
     ocr_texts: list[str] = [""] * len(records)
+    faiss_cutoff = _faiss_threshold(scan_context)
 
-    for index, (record, image) in enumerate(zip(records, images)):
-        pack_text = read_packaging_text(image)
-        ocr_texts[index] = pack_text
-        ocr_label = classify_with_ocr(image, raw_text=pack_text)
-        if ocr_label and _is_valid_label(ocr_label) and _accept_ocr_label(ocr_label, scan_context):
-            classified[index] = _merge_label(record, ocr_label)
-            stats["ocr"] += 1
-            if _should_learn(ocr_label) and learn_sku(embeddings[index], ocr_label, scan_id=scan_id):
-                learned_new += 1
-            continue
-        gpt_queue.append((index, pack_text))
-
-    gpt_cap = _smart_gpt_cap(len(gpt_queue))
-    gpt_used = 0
-    for index, ocr_hint in gpt_queue:
-        if gpt_used < gpt_cap:
-            label = classify_with_gpt(images[index], ocr_hint=ocr_hint, scan_context=scan_context)
-            gpt_used += 1
-            if _is_valid_label(label):
-                classified[index] = _merge_label(records[index], label)
-                stats["gpt"] += 1
-                if _should_learn(label) and learn_sku(embeddings[index], label, scan_id=scan_id):
-                    learned_new += 1
-                continue
-        faiss_queue.append(index)
-
-    if faiss_queue and is_ready():
-        sub_embeddings = embeddings[faiss_queue]
-        matches = match_embeddings_batch(sub_embeddings, threshold=FAISS_THRESHOLD)
-        still_unknown: list[int] = []
+    if pending and is_ready():
+        matches = match_embeddings_batch(embeddings[pending], threshold=faiss_cutoff)
+        still_pending: list[int] = []
         for local_idx, (match, score) in enumerate(matches):
-            global_idx = faiss_queue[local_idx]
+            global_idx = pending[local_idx]
             if match and _accept_faiss_match(match, scan_category, scan_context=scan_context):
                 merged = {**records[global_idx], **match}
                 merged["confidence"] = float(match.get("confidence") or score)
-                merged = reconcile_label_with_text(merged, ocr_texts[global_idx])
+                merged["_index"] = global_idx
                 source = match.get("recognition_source") or "faiss"
                 stats["learned" if source == "learned" else "faiss"] += 1
                 classified[global_idx] = merged
             else:
-                still_unknown.append(global_idx)
-        faiss_queue = still_unknown
+                still_pending.append(global_idx)
+        pending = still_pending
 
-    for index in faiss_queue:
+    ocr_gpt_queue: list[int] = []
+    for index in pending:
+        pack_text = read_packaging_text(images[index])
+        ocr_texts[index] = pack_text
+        ocr_label = classify_with_ocr(images[index], raw_text=pack_text)
+        if ocr_label and _is_valid_label(ocr_label) and _accept_ocr_label(ocr_label, scan_context):
+            row = _merge_label(records[index], ocr_label)
+            row["_index"] = index
+            classified[index] = row
+            stats["ocr"] += 1
+            if _should_learn(ocr_label) and learn_sku(embeddings[index], ocr_label, scan_id=scan_id):
+                learned_new += 1
+            continue
+        ocr_gpt_queue.append(index)
+
+    gpt_cap = _smart_gpt_cap(len(ocr_gpt_queue))
+    gpt_used = 0
+    faiss_retry_queue: list[int] = []
+    for index in ocr_gpt_queue:
+        if gpt_used < gpt_cap:
+            label = classify_with_gpt(
+                images[index],
+                ocr_hint=ocr_texts[index],
+                scan_context=scan_context,
+            )
+            gpt_used += 1
+            if _is_valid_label(label):
+                row = _merge_label(records[index], label)
+                row["_index"] = index
+                classified[index] = row
+                stats["gpt"] += 1
+                if _should_learn(label) and learn_sku(embeddings[index], label, scan_id=scan_id):
+                    learned_new += 1
+                continue
+        faiss_retry_queue.append(index)
+
+    if faiss_retry_queue and is_ready():
+        matches = match_embeddings_batch(embeddings[faiss_retry_queue], threshold=FAISS_THRESHOLD_RETRY)
+        still_pending = []
+        for local_idx, (match, score) in enumerate(matches):
+            global_idx = faiss_retry_queue[local_idx]
+            if match and _accept_faiss_match(match, scan_category, scan_context=scan_context):
+                merged = {**records[global_idx], **match}
+                merged["confidence"] = float(match.get("confidence") or score)
+                merged = reconcile_label_with_text(merged, ocr_texts[global_idx])
+                merged["_index"] = global_idx
+                source = match.get("recognition_source") or "faiss"
+                stats["learned" if source == "learned" else "faiss"] += 1
+                classified[global_idx] = merged
+            else:
+                still_pending.append(global_idx)
+        faiss_retry_queue = still_pending
+
+    faiss_retry_queue, propagated = _propagate_shelf_labels(
+        records, classified, embeddings, faiss_retry_queue
+    )
+    stats["propagate"] = propagated
+
+    for index in faiss_retry_queue:
         classified[index] = _merge_label(records[index], _unknown_label())
         stats["none"] += 1
 
@@ -266,7 +366,13 @@ def classify_records_v2(
 
     stats["gpt_calls"] = gpt_used
     stats["unknown_count"] = stats["none"]
-    return [row for row in classified if row is not None], stats
+    output: list[dict] = []
+    for row in classified:
+        if not row:
+            continue
+        cleaned = {k: v for k, v in row.items() if k != "_index"}
+        output.append(cleaned)
+    return output, stats
 
 
 def classify_records_v1(records: list[dict], scan_id: str | None = None) -> list[dict]:
@@ -332,6 +438,7 @@ def classify_records(
             f"gpt={stats.get('gpt', 0)}",
             f"faiss={stats.get('faiss', 0)}",
             f"learned={stats.get('learned', 0)}",
+            f"propagate={stats.get('propagate', 0)}",
             f"unknown={stats.get('none', 0)}",
             f"gpt_calls={stats.get('gpt_calls', 0)}",
         )

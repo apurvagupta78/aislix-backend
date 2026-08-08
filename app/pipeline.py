@@ -38,12 +38,20 @@ LOGO_PATH = BASE_DIR / "assets" / "aislix_logo.png"
 
 
 def _recognition_stats(classified: list[dict]) -> dict:
-    counts = {"ocr": 0, "gpt": 0, "faiss": 0, "learned": 0, "none": 0}
+    counts = {"ocr": 0, "gpt": 0, "faiss": 0, "learned": 0, "propagate": 0, "none": 0}
     for item in classified:
         source = (item.get("recognition_source") or "none").lower()
-        if source in counts:
-            counts[source] += 1
-        elif source == "none":
+        if source.startswith("ocr"):
+            counts["ocr"] += 1
+        elif source.startswith("gpt"):
+            counts["gpt"] += 1
+        elif source == "propagate":
+            counts["propagate"] += 1
+        elif source == "learned":
+            counts["learned"] += 1
+        elif source == "faiss":
+            counts["faiss"] += 1
+        elif source == "none" or (item.get("brand") or "").lower() == "unknown":
             counts["none"] += 1
         else:
             counts["faiss"] += 1
@@ -52,6 +60,7 @@ def _recognition_stats(classified: list[dict]) -> dict:
         "recognition_gpt": counts["gpt"],
         "recognition_faiss": counts["faiss"],
         "recognition_learned": counts["learned"],
+        "recognition_propagate": counts["propagate"],
         "recognition_unknown": counts["none"],
     }
 
