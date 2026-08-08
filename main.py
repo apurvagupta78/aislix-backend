@@ -6,6 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 load_dotenv()
 
@@ -52,8 +53,19 @@ def health():
     }
 
 
+@app.get("/scan/{scan_id}")
+def scan_status(scan_id: str):
+    from app.jobs import get_job
+
+    job = get_job(scan_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Scan job not found.")
+    return job
+
+
 @app.post("/scan")
 async def scan(request: Request):
+    from app.jobs import get_job, start_job
     from app.pipeline import run_scan_from_bytes, run_scan_from_url
 
     content_type = request.headers.get("content-type", "")
@@ -74,6 +86,8 @@ async def scan(request: Request):
     if "application/json" in content_type:
         body = await request.json()
         scan_id = body.get("scan_id")
+        if not scan_id:
+            raise HTTPException(status_code=400, detail="scan_id is required.")
         metadata = {
             "shelf_label": body.get("shelf_label"),
             "category": body.get("category"),
@@ -84,10 +98,27 @@ async def scan(request: Request):
             image_urls = [item.get("url") for item in body["images"] if item.get("url")]
         if not image_urls:
             raise HTTPException(status_code=400, detail="No image_urls provided.")
-        try:
-            return run_scan_from_url(image_urls[0], scan_id=scan_id, metadata=metadata)
-        except Exception as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        existing = get_job(scan_id)
+        if existing:
+            if existing["status"] == "completed" and existing.get("result"):
+                return existing["result"]
+            if existing["status"] == "processing":
+                return JSONResponse(
+                    status_code=202,
+                    content={"scan_id": scan_id, "status": "processing"},
+                )
+            if existing["status"] == "failed":
+                error = existing.get("error") or "Scan failed."
+                raise HTTPException(status_code=422, detail=error)
+
+        image_url = image_urls[0]
+
+        def _run() -> dict:
+            return run_scan_from_url(image_url, scan_id=scan_id, metadata=metadata)
+
+        started = start_job(scan_id, _run)
+        return JSONResponse(status_code=202, content=started)
 
     raise HTTPException(
         status_code=400,
