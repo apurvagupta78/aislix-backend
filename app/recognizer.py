@@ -23,12 +23,12 @@ load_dotenv()
 
 _client: OpenAI | None = None
 GPT_MODEL = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini")
-GPT_MAX_FALLBACKS = int(os.getenv("GPT_MAX_FALLBACKS", "50"))
+GPT_MAX_FALLBACKS = int(os.getenv("GPT_MAX_FALLBACKS", "80"))
 RECOGNITION_V2 = os.getenv("RECOGNITION_V2", "true").lower() in {"1", "true", "yes"}
 FAISS_THRESHOLD = float(os.getenv("FAISS_SIMILARITY_THRESHOLD", "0.92"))
 FAISS_THRESHOLD_CONTEXT = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_CONTEXT", "0.88"))
 FAISS_THRESHOLD_RETRY = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_RETRY", "0.82"))
-PROPAGATE_THRESHOLD = float(os.getenv("PROPAGATE_SIMILARITY_THRESHOLD", "0.93"))
+PROPAGATE_THRESHOLD = float(os.getenv("PROPAGATE_SIMILARITY_THRESHOLD", "0.90"))
 LEARN_MIN_CONFIDENCE = float(os.getenv("LEARN_MIN_CONFIDENCE", "0.7"))
 
 
@@ -183,6 +183,8 @@ def _propagate_shelf_labels(
     images: list[Image.Image],
     unknown_indices: list[int],
     scan_context: dict | None = None,
+    ocr_texts: list[str] | None = None,
+    use_ocr: bool = False,
 ) -> tuple[list[int], int]:
     """Copy labels from identified facings to visually identical neighbors on the same shelf."""
     known: list[tuple[np.ndarray, dict]] = []
@@ -198,16 +200,22 @@ def _propagate_shelf_labels(
     propagated = 0
     still_unknown: list[int] = []
     for index in unknown_indices:
-        pack_text = read_packaging_text(images[index])
-        ocr_match = match_from_text(pack_text)
-        if ocr_match and _is_valid_label(ocr_match) and _accept_ocr_label(ocr_match, scan_context):
-            row = _merge_label(records[index], ocr_match)
-            row["_index"] = index
-            row["recognition_source"] = "ocr+propagate"
-            classified[index] = row
-            known.append((embeddings[index], row))
-            propagated += 1
-            continue
+        pack_text = (ocr_texts[index] if ocr_texts else "") or ""
+        if use_ocr and not pack_text:
+            pack_text = read_packaging_text(images[index])
+            if ocr_texts is not None:
+                ocr_texts[index] = pack_text
+
+        if use_ocr and pack_text:
+            ocr_match = match_from_text(pack_text)
+            if ocr_match and _is_valid_label(ocr_match) and _accept_ocr_label(ocr_match, scan_context):
+                row = _merge_label(records[index], ocr_match)
+                row["_index"] = index
+                row["recognition_source"] = "ocr+propagate"
+                classified[index] = row
+                known.append((embeddings[index], row))
+                propagated += 1
+                continue
 
         probe = embeddings[index]
         best_sim = 0.0
@@ -218,11 +226,19 @@ def _propagate_shelf_labels(
                 best_sim = sim
                 best_label = ref_label
 
-        if best_label and pack_text:
+        if use_ocr and best_label and pack_text:
             ref_brand = (best_label.get("brand") or "").lower()
             text_l = pack_text.lower()
-            # Do not spread Tata onto Lipton packs (and vice versa) when OCR shows the logo.
             if "lipton" in text_l and ref_brand == "tata":
+                ocr_fix = match_from_text(pack_text)
+                if ocr_fix and _is_valid_label(ocr_fix) and _accept_ocr_label(ocr_fix, scan_context):
+                    row = _merge_label(records[index], ocr_fix)
+                    row["_index"] = index
+                    row["recognition_source"] = "ocr+propagate"
+                    classified[index] = row
+                    known.append((probe, row))
+                    propagated += 1
+                    continue
                 still_unknown.append(index)
                 continue
             if "tata" in text_l and ref_brand == "lipton" and "tea" in text_l:
@@ -235,13 +251,6 @@ def _propagate_shelf_labels(
                 for k, v in best_label.items()
                 if k not in {"_index", "image_path", "bbox", "crop_path"}
             }
-            label = {
-                **label,
-                "confidence": round(min(0.97, best_sim * 0.98), 4),
-                "recognition_source": "propagate",
-            }
-            if pack_text:
-                label = reconcile_label_with_text(label, pack_text)
             if scan_context and not category_allows_brand(
                 None,
                 label.get("brand") or "",
@@ -251,6 +260,22 @@ def _propagate_shelf_labels(
             ):
                 still_unknown.append(index)
                 continue
+            label = {
+                **label,
+                "confidence": round(min(0.97, best_sim * 0.98), 4),
+                "recognition_source": "propagate",
+            }
+            if use_ocr and pack_text:
+                label = reconcile_label_with_text(label, pack_text)
+                if scan_context and not category_allows_brand(
+                    None,
+                    label.get("brand") or "",
+                    label.get("sku") or "",
+                    label.get("category") or "",
+                    scan_context=scan_context,
+                ):
+                    still_unknown.append(index)
+                    continue
             classified[index] = _merge_label(records[index], label)
             classified[index]["_index"] = index
             known.append((probe, classified[index]))
@@ -342,11 +367,13 @@ def classify_records_v2(
     pending = _apply_faiss(pending, faiss_cutoff)
     pending = _apply_faiss(pending, FAISS_THRESHOLD_RETRY)
 
-    for _ in range(2):
+    # Fast visual-only propagation — no OCR (seeds from FAISS spread to identical facings).
+    for _ in range(3):
         if not pending:
             break
         pending, round_prop = _propagate_shelf_labels(
-            records, classified, embeddings, images, pending, scan_context=scan_context
+            records, classified, embeddings, images, pending,
+            scan_context=scan_context, use_ocr=False,
         )
         stats["propagate"] += round_prop
 
@@ -386,10 +413,16 @@ def classify_records_v2(
                 continue
         faiss_retry_queue.append(index)
 
-    faiss_retry_queue, propagated = _propagate_shelf_labels(
-        records, classified, embeddings, images, faiss_retry_queue, scan_context=scan_context
-    )
-    stats["propagate"] += propagated
+    faiss_retry_queue = _apply_faiss(faiss_retry_queue, 0.78)
+
+    for _ in range(2):
+        if not faiss_retry_queue:
+            break
+        faiss_retry_queue, propagated = _propagate_shelf_labels(
+            records, classified, embeddings, images, faiss_retry_queue,
+            scan_context=scan_context, ocr_texts=ocr_texts, use_ocr=True,
+        )
+        stats["propagate"] += propagated
 
     for index in faiss_retry_queue:
         if classified[index] is None:
