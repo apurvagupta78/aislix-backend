@@ -8,11 +8,21 @@ from pathlib import Path
 import cv2
 import numpy as np
 import requests
-from ultralytics import YOLO
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_DIR / "best.pt"
-MODEL = YOLO(str(MODEL_PATH)) if MODEL_PATH.exists() else None
+_MODEL = None
+
+
+def get_yolo_model():
+    global _MODEL
+    if _MODEL is None:
+        if not MODEL_PATH.exists():
+            raise RuntimeError(f"YOLO model not found at {MODEL_PATH}")
+        from ultralytics import YOLO
+
+        _MODEL = YOLO(str(MODEL_PATH))
+    return _MODEL
 
 
 def load_image_bytes(data: bytes) -> np.ndarray:
@@ -29,9 +39,8 @@ def load_image_from_url(url: str, timeout: int = 60) -> np.ndarray:
 
 
 def detect_products(image: np.ndarray):
-    if MODEL is None:
-        raise RuntimeError(f"YOLO model not found at {MODEL_PATH}")
-    return MODEL.predict(source=image, imgsz=640, conf=0.05, save=False, verbose=False)
+    model = get_yolo_model()
+    return model.predict(source=image, imgsz=640, conf=0.05, save=False, verbose=False)
 
 
 def get_boxes(results) -> list[np.ndarray]:

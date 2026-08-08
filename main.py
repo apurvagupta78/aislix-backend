@@ -6,8 +6,6 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.pipeline import run_scan_from_bytes, run_scan_from_url
-
 load_dotenv()
 
 DEFAULT_ORIGINS = [
@@ -48,6 +46,8 @@ def health():
 
 @app.post("/scan")
 async def scan(request: Request):
+    from app.pipeline import run_scan_from_bytes, run_scan_from_url
+
     content_type = request.headers.get("content-type", "")
 
     if "multipart/form-data" in content_type:
