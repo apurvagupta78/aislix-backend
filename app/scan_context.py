@@ -89,12 +89,15 @@ def resolve_aislix_category(raw: str | None) -> dict | None:
 def build_shelf_label(
     *,
     shelf_label: str | None = None,
+    location: str | None = None,
     aisle: str | None = None,
     rack: str | None = None,
     bin_label: str | None = None,
 ) -> str:
     if shelf_label and shelf_label.strip():
         return shelf_label.strip()
+    if location and location.strip():
+        return location.strip()
     parts: list[str] = []
     if aisle and aisle.strip():
         parts.append(f"Aisle {aisle.strip()}" if not aisle.strip().lower().startswith("aisle") else aisle.strip())
@@ -115,6 +118,7 @@ def resolve_scan_context(metadata: dict | None) -> dict:
 
     shelf_label = build_shelf_label(
         shelf_label=metadata.get("shelf_label"),
+        location=metadata.get("location"),
         aisle=metadata.get("aisle"),
         rack=metadata.get("rack"),
         bin_label=metadata.get("bin"),
@@ -129,9 +133,7 @@ def resolve_scan_context(metadata: dict | None) -> dict:
         "aislix_category_id": aislix_id or None,
         "aislix_examples": (resolved or {}).get("examples") or "",
         "shelf_label": shelf_label or None,
-        "aisle": (metadata.get("aisle") or "").strip() or None,
-        "rack": (metadata.get("rack") or "").strip() or None,
-        "bin": (metadata.get("bin") or "").strip() or None,
+        "location": (metadata.get("location") or shelf_label or "").strip() or None,
         "notes": (metadata.get("notes") or "").strip() or None,
         "catalog_categories": catalog_cats,
         "brand_hints": brand_hints,
@@ -211,11 +213,12 @@ def validate_scan_metadata(metadata: dict | None) -> list[str]:
 
     shelf_label = build_shelf_label(
         shelf_label=metadata.get("shelf_label"),
+        location=metadata.get("location"),
         aisle=metadata.get("aisle"),
         rack=metadata.get("rack"),
         bin_label=metadata.get("bin"),
     )
     if required and not shelf_label:
-        errors.append("At least aisle (or shelf_label) is required.")
+        errors.append("location is required.")
 
     return errors

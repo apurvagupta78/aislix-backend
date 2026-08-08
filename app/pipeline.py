@@ -136,6 +136,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             "scan_context": {
                 "aislix_category": scan_context.get("aislix_category"),
                 "aislix_category_id": scan_context.get("aislix_category_id"),
+                "location": scan_context.get("location"),
                 "shelf_label": scan_context.get("shelf_label"),
                 "store_id": scan_context.get("store_id"),
             },

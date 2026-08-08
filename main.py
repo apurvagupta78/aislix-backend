@@ -112,12 +112,14 @@ async def scan(request: Request):
 
         metadata = {
             "store_id": body.get("store_id"),
-            "aisle": body.get("aisle"),
-            "rack": body.get("rack"),
-            "bin": body.get("bin"),
+            "location": body.get("location"),
             "shelf_label": body.get("shelf_label"),
             "category": body.get("category"),
             "notes": body.get("notes"),
+            # legacy fields — still accepted if sent
+            "aisle": body.get("aisle"),
+            "rack": body.get("rack"),
+            "bin": body.get("bin"),
         }
 
         from app.scan_context import build_shelf_label, validate_scan_metadata
@@ -128,6 +130,7 @@ async def scan(request: Request):
 
         if not metadata.get("shelf_label"):
             metadata["shelf_label"] = build_shelf_label(
+                location=metadata.get("location"),
                 aisle=metadata.get("aisle"),
                 rack=metadata.get("rack"),
                 bin_label=metadata.get("bin"),
