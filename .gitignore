@@ -2,3 +2,8 @@
 __pycache__/
 *.pyc
 .env
+.idea/
+product_*.jpg
+aislix_crops_*/
+audit_report.pdf
+*.log

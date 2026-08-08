@@ -1,0 +1,4892 @@
+{
+  "products": [
+    {
+      "class_id": 0,
+      "brand": "4700Bc",
+      "product_name": "Microwave Popcorn Butter",
+      "variant": "85 gms",
+      "sku": "4700bc_microwave_popcorn_butter_85_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 1,
+      "brand": "7",
+      "product_name": "Up Nimbooz Soft Drink",
+      "variant": "250 ml",
+      "sku": "7_up_nimbooz_soft_drink_250_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 4,
+      "brand": "Aashirvaad",
+      "product_name": "Shudh Chakki Atta",
+      "variant": "",
+      "sku": "aashirvaad_shudh_chakki_atta",
+      "category": "Staples"
+    },
+    {
+      "class_id": 5,
+      "brand": "Aashirvaad",
+      "product_name": "Superior Mp Whole Wheat Atta",
+      "variant": "5 kg",
+      "sku": "aashirvaad_superior_mp_whole_wheat_atta_5_kg",
+      "category": "Staples"
+    },
+    {
+      "class_id": 6,
+      "brand": "Act",
+      "product_name": "2 Butter Lovers Microwave",
+      "variant": "",
+      "sku": "act_2_butter_lovers_microwave",
+      "category": "General"
+    },
+    {
+      "class_id": 7,
+      "brand": "Act",
+      "product_name": "2 Chilli Surprise Popcorn Sachet",
+      "variant": "40 gms",
+      "sku": "act_2_chilli_surprise_popcorn_sachet_40_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 8,
+      "brand": "Act",
+      "product_name": "2 Classic Salted",
+      "variant": "",
+      "sku": "act_2_classic_salted",
+      "category": "General"
+    },
+    {
+      "class_id": 9,
+      "brand": "Act",
+      "product_name": "2 Instant Golden Sizzle Popcorn 60G",
+      "variant": "",
+      "sku": "act_2_instant_golden_sizzle_popcorn_60g",
+      "category": "General"
+    },
+    {
+      "class_id": 10,
+      "brand": "Act",
+      "product_name": "2 Natural Microwave Popcorn",
+      "variant": "99 gms",
+      "sku": "act_2_natural_microwave_popcorn_99_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 11,
+      "brand": "Act",
+      "product_name": "2 Popcorn Butter Pepper",
+      "variant": "70 gms",
+      "sku": "act_2_popcorn_butter_pepper_70_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 14,
+      "brand": "Act",
+      "product_name": "Ii Instant Golden Sizzle Popcorn",
+      "variant": "120 gms",
+      "sku": "act_ii_instant_golden_sizzle_popcorn_120_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 16,
+      "brand": "Active",
+      "product_name": "Wheel 2 In 1 Clean Fresh Detergent Powder",
+      "variant": "500 gms",
+      "sku": "active_wheel_2_in_1_clean_fresh_detergent_powder_500_gms",
+      "category": "Household"
+    },
+    {
+      "class_id": 17,
+      "brand": "Adidas",
+      "product_name": "Dynamic Pulse Deodorant Body Spray For Men",
+      "variant": "",
+      "sku": "adidas_dynamic_pulse_deodorant_body_spray_for_men",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 19,
+      "brand": "American",
+      "product_name": "Garden Apple Cider Vinegar",
+      "variant": "473 ml",
+      "sku": "american_garden_apple_cider_vinegar_473_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 20,
+      "brand": "American",
+      "product_name": "Garden Jalapeno Pepper Sliced",
+      "variant": "454 gms",
+      "sku": "american_garden_jalapeno_pepper_sliced_454_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 21,
+      "brand": "American",
+      "product_name": "Garden Jalapeno Pepper Sliced Bottle",
+      "variant": "454 ml",
+      "sku": "american_garden_jalapeno_pepper_sliced_bottle_454_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 22,
+      "brand": "American",
+      "product_name": "Garden Pancake Syrup",
+      "variant": "355 ml",
+      "sku": "american_garden_pancake_syrup_355_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 23,
+      "brand": "Amul",
+      "product_name": "99 Cacao Ultimate Dark Chocolate",
+      "variant": "125 gms",
+      "sku": "amul_99_cacao_ultimate_dark_chocolate_125_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 24,
+      "brand": "Amul",
+      "product_name": "Almondo Roasted Almonds Coated With Milk Chocolate",
+      "variant": "200 gms",
+      "sku": "amul_almondo_roasted_almonds_coated_with_milk_chocolate_200_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 25,
+      "brand": "Amul",
+      "product_name": "Alphonso Mango Cup Ice Cream",
+      "variant": "100 ml",
+      "sku": "amul_alphonso_mango_cup_ice_cream_100_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 26,
+      "brand": "Amul",
+      "product_name": "Asli Aam Ice Cream",
+      "variant": "80 ml",
+      "sku": "amul_asli_aam_ice_cream_80_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 27,
+      "brand": "Amul",
+      "product_name": "Badam Pista Shrikhand",
+      "variant": "200 gms",
+      "sku": "amul_badam_pista_shrikhand_200_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 29,
+      "brand": "Amul",
+      "product_name": "Buffalo Milk Uht Treated Calcium Rich No Preservatives 1 Ltr Tetra Pack",
+      "variant": "1 ltr",
+      "sku": "amul_buffalo_milk_uht_treated_calcium_rich_no_preservatives_1_ltr_tetra_pack_1_ltr",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 30,
+      "brand": "Amul",
+      "product_name": "Buttermilk Pouch",
+      "variant": "500 ml",
+      "sku": "amul_buttermilk_pouch_500_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 31,
+      "brand": "Amul",
+      "product_name": "Cheese Block",
+      "variant": "200 gms",
+      "sku": "amul_cheese_block_200_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 32,
+      "brand": "Amul",
+      "product_name": "Cheese Cubes",
+      "variant": "200 gms",
+      "sku": "amul_cheese_cubes_200_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 34,
+      "brand": "Amul",
+      "product_name": "Cow Ghee",
+      "variant": "1 kg",
+      "sku": "amul_cow_ghee_1_kg",
+      "category": "Staples"
+    },
+    {
+      "class_id": 35,
+      "brand": "Amul",
+      "product_name": "Cow Milk",
+      "variant": "500 ml",
+      "sku": "amul_cow_milk_500_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 36,
+      "brand": "Amul",
+      "product_name": "Deutz Mango Ice Cream Stick",
+      "variant": "60 ml",
+      "sku": "amul_deutz_mango_ice_cream_stick_60_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 37,
+      "brand": "Amul",
+      "product_name": "Fresh Cream Tetra Pack",
+      "variant": "250 ml",
+      "sku": "amul_fresh_cream_tetra_pack_250_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 41,
+      "brand": "Amul",
+      "product_name": "Gold Milk Pouch",
+      "variant": "500 ml",
+      "sku": "amul_gold_milk_pouch_500_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 43,
+      "brand": "Amul",
+      "product_name": "Ice Cream Chocolate Brownie Tub",
+      "variant": "1 ltr",
+      "sku": "amul_ice_cream_chocolate_brownie_tub_1_ltr",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 45,
+      "brand": "Amul",
+      "product_name": "Kesar Pista Ice Cream",
+      "variant": "750 ml",
+      "sku": "amul_kesar_pista_ice_cream_750_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 46,
+      "brand": "Amul",
+      "product_name": "Kesar Shrikhand Cup",
+      "variant": "500 gms",
+      "sku": "amul_kesar_shrikhand_cup_500_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 47,
+      "brand": "Amul",
+      "product_name": "Lactose Free Milk Tetra Pack",
+      "variant": "250 ml",
+      "sku": "amul_lactose_free_milk_tetra_pack_250_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 48,
+      "brand": "Amul",
+      "product_name": "Lassi Tetra Pack",
+      "variant": "200 ml",
+      "sku": "amul_lassi_tetra_pack_200_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 49,
+      "brand": "Amul",
+      "product_name": "Masti Buttermilk Spice Carton",
+      "variant": "200 ml",
+      "sku": "amul_masti_buttermilk_spice_carton_200_ml",
+      "category": "Staples"
+    },
+    {
+      "class_id": 50,
+      "brand": "Amul",
+      "product_name": "Masti Dahi Cup",
+      "variant": "200 gms",
+      "sku": "amul_masti_dahi_cup_200_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 51,
+      "brand": "Amul",
+      "product_name": "Masti Dahi Pouch",
+      "variant": "400 ml",
+      "sku": "amul_masti_dahi_pouch_400_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 53,
+      "brand": "Amul",
+      "product_name": "Mithai Mate Condensed Milk",
+      "variant": "200 gms",
+      "sku": "amul_mithai_mate_condensed_milk_200_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 54,
+      "brand": "Amul",
+      "product_name": "Organic Whole Green Moong Dal",
+      "variant": "1 kg",
+      "sku": "amul_organic_whole_green_moong_dal_1_kg",
+      "category": "Staples"
+    },
+    {
+      "class_id": 56,
+      "brand": "Amul",
+      "product_name": "Pasteurised Butter",
+      "variant": "100 gms",
+      "sku": "amul_pasteurised_butter_100_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 57,
+      "brand": "Amul",
+      "product_name": "Pasteurised Butter",
+      "variant": "500 gms",
+      "sku": "amul_pasteurised_butter_500_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 58,
+      "brand": "Amul",
+      "product_name": "Pasteurised Butter Tub",
+      "variant": "200 gms",
+      "sku": "amul_pasteurised_butter_tub_200_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 60,
+      "brand": "Amul",
+      "product_name": "Probiotic Chocobar Ice Cream",
+      "variant": "60 ml",
+      "sku": "amul_probiotic_chocobar_ice_cream_60_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 61,
+      "brand": "Amul",
+      "product_name": "Processed Cheese Cubes",
+      "variant": "500 gms",
+      "sku": "amul_processed_cheese_cubes_500_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 62,
+      "brand": "Amul",
+      "product_name": "Pure Ghee",
+      "variant": "1 kg",
+      "sku": "amul_pure_ghee_1_kg",
+      "category": "Staples"
+    },
+    {
+      "class_id": 64,
+      "brand": "Amul",
+      "product_name": "Pure Ghee",
+      "variant": "500 gms",
+      "sku": "amul_pure_ghee_500_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 65,
+      "brand": "Amul",
+      "product_name": "Pure Ghee Pouch",
+      "variant": "500 gms",
+      "sku": "amul_pure_ghee_pouch_500_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 66,
+      "brand": "Amul",
+      "product_name": "Pure Ghee Tin",
+      "variant": "1 ltr",
+      "sku": "amul_pure_ghee_tin_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 67,
+      "brand": "Amul",
+      "product_name": "Pure Milk Cheese Slices",
+      "variant": "100 gms",
+      "sku": "amul_pure_milk_cheese_slices_100_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 68,
+      "brand": "Amul",
+      "product_name": "Rabdi Kulfi Ice Cream Stick",
+      "variant": "36 gms",
+      "sku": "amul_rabdi_kulfi_ice_cream_stick_36_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 69,
+      "brand": "Amul",
+      "product_name": "Rajwadi Kulfi Ice Cream",
+      "variant": "40 ml",
+      "sku": "amul_rajwadi_kulfi_ice_cream_40_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 72,
+      "brand": "Amul",
+      "product_name": "Slim N Trim Skimmed Milk Tetra Pak",
+      "variant": "1 ltr",
+      "sku": "amul_slim_n_trim_skimmed_milk_tetra_pak_1_ltr",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 74,
+      "brand": "Amul",
+      "product_name": "Strawberry Ice Cream Cup",
+      "variant": "65 ml",
+      "sku": "amul_strawberry_ice_cream_cup_65_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 75,
+      "brand": "Amul",
+      "product_name": "Taaza Homogenised Toned Milk",
+      "variant": "200 ml",
+      "sku": "amul_taaza_homogenised_toned_milk_200_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 76,
+      "brand": "Amul",
+      "product_name": "Taaza Homogenised Toned Milk Carton",
+      "variant": "1 ltr",
+      "sku": "amul_taaza_homogenised_toned_milk_carton_1_ltr",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 77,
+      "brand": "Amul",
+      "product_name": "Taaza Milk Pouch",
+      "variant": "500 ml",
+      "sku": "amul_taaza_milk_pouch_500_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 79,
+      "brand": "Amul",
+      "product_name": "Tricone Vanilla Ice Cream",
+      "variant": "40 ml",
+      "sku": "amul_tricone_vanilla_ice_cream_40_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 80,
+      "brand": "Amul",
+      "product_name": "Utterly Deli Alphonso Mango Ice Cream",
+      "variant": "750 ml",
+      "sku": "amul_utterly_deli_alphonso_mango_ice_cream_750_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 81,
+      "brand": "Amul",
+      "product_name": "Vanilla Royale Flavour Ice Cream",
+      "variant": "750 ml",
+      "sku": "amul_vanilla_royale_flavour_ice_cream_750_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 83,
+      "brand": "Appy",
+      "product_name": "Fizz Sparkling Apple Juice Drink",
+      "variant": "1 ltr",
+      "sku": "appy_fizz_sparkling_apple_juice_drink_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 89,
+      "brand": "Ashirvaad",
+      "product_name": "Atta With Multigrains Pouch",
+      "variant": "1 kg",
+      "sku": "ashirvaad_atta_with_multigrains_pouch_1_kg",
+      "category": "Staples"
+    },
+    {
+      "class_id": 90,
+      "brand": "B",
+      "product_name": "Natural Orange Juice Pack Of 3",
+      "variant": "1 ltr",
+      "sku": "b_natural_orange_juice_pack_of_3_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 91,
+      "brand": "Bagrrys",
+      "product_name": "Crunchy Muesli Almond Raisins And Honey",
+      "variant": "1 kg",
+      "sku": "bagrrys_crunchy_muesli_almond_raisins_and_honey_1_kg",
+      "category": "General"
+    },
+    {
+      "class_id": 92,
+      "brand": "Bagrrys",
+      "product_name": "Crunchy No Added Sugar Muesli",
+      "variant": "1 kg",
+      "sku": "bagrrys_crunchy_no_added_sugar_muesli_1_kg",
+      "category": "General"
+    },
+    {
+      "class_id": 93,
+      "brand": "Bagrrys",
+      "product_name": "Fruit N Fibre Muesli Mixed Fruit",
+      "variant": "500 gms",
+      "sku": "bagrrys_fruit_n_fibre_muesli_mixed_fruit_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 94,
+      "brand": "Bagrrys",
+      "product_name": "No Added Sugar Crunchy Muesli",
+      "variant": "500 gms",
+      "sku": "bagrrys_no_added_sugar_crunchy_muesli_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 95,
+      "brand": "Bajaj",
+      "product_name": "Almond Drops Hair Oil",
+      "variant": "",
+      "sku": "bajaj_almond_drops_hair_oil",
+      "category": "Staples"
+    },
+    {
+      "class_id": 96,
+      "brand": "Balaji",
+      "product_name": "Chat Chaska Wafers",
+      "variant": "40 gms",
+      "sku": "balaji_chat_chaska_wafers_40_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 98,
+      "brand": "Balaji",
+      "product_name": "Rumbles Pudina Twist Chips",
+      "variant": "40 gms",
+      "sku": "balaji_rumbles_pudina_twist_chips_40_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 100,
+      "brand": "Balaji",
+      "product_name": "Wafers Chataka Pataka Masala Masti Namkeen",
+      "variant": "50 gms",
+      "sku": "balaji_wafers_chataka_pataka_masala_masti_namkeen_50_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 101,
+      "brand": "Balaji",
+      "product_name": "Wafers Wheels Masala Wheels",
+      "variant": "30 gms",
+      "sku": "balaji_wafers_wheels_masala_wheels_30_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 102,
+      "brand": "Bambino",
+      "product_name": "Daily Pasta Made From Durum Wheat Spirali",
+      "variant": "500 gms",
+      "sku": "bambino_daily_pasta_made_from_durum_wheat_spirali_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 103,
+      "brand": "Bauli",
+      "product_name": "Veg Chocolate Flavoured Moonfils",
+      "variant": "47 gms",
+      "sku": "bauli_veg_chocolate_flavoured_moonfils_47_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 105,
+      "brand": "Bertolli",
+      "product_name": "Classico Olive Oil",
+      "variant": "1 ltr",
+      "sku": "bertolli_classico_olive_oil_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 106,
+      "brand": "Betty",
+      "product_name": "Crocker Pancake Mix",
+      "variant": "1 kg",
+      "sku": "betty_crocker_pancake_mix_1_kg",
+      "category": "General"
+    },
+    {
+      "class_id": 107,
+      "brand": "Betty",
+      "product_name": "Crocker Pancake Mix",
+      "variant": "500 gms",
+      "sku": "betty_crocker_pancake_mix_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 108,
+      "brand": "Beyond",
+      "product_name": "Snack Kerala Banana Chips",
+      "variant": "85 gms",
+      "sku": "beyond_snack_kerala_banana_chips_85_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 109,
+      "brand": "Bingo",
+      "product_name": "Mad Angles Chips Pizza Aah",
+      "variant": "33 gms",
+      "sku": "bingo_mad_angles_chips_pizza_aah_33_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 110,
+      "brand": "Bingo",
+      "product_name": "Mad Angles Very Peri Peri Cornbased Spicy Crunchy Chips Perfect For Snacking",
+      "variant": "130 gms",
+      "sku": "bingo_mad_angles_very_peri_peri_cornbased_spicy_crunchy_chips_perfect_for_snacking_130_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 111,
+      "brand": "Bingo",
+      "product_name": "Potato Chips Masala Flavour Crispy Spicy Pack For Snacks Pouch",
+      "variant": "25 gms",
+      "sku": "bingo_potato_chips_masala_flavour_crispy_spicy_pack_for_snacks_pouch_25_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 112,
+      "brand": "Biotique",
+      "product_name": "Bio Cucumber Pore Tightening Toner",
+      "variant": "120 ml",
+      "sku": "biotique_bio_cucumber_pore_tightening_toner_120_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 113,
+      "brand": "Biotique",
+      "product_name": "Bio Green Apple Shampoo Conditioner",
+      "variant": "200 ml",
+      "sku": "biotique_bio_green_apple_shampoo_conditioner_200_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 115,
+      "brand": "Bisleri",
+      "product_name": "Drinking Water Can",
+      "variant": "5 ltr",
+      "sku": "bisleri_drinking_water_can_5_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 117,
+      "brand": "Bisleri",
+      "product_name": "Mineral Water",
+      "variant": "20 ltr",
+      "sku": "bisleri_mineral_water_20_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 118,
+      "brand": "Bisleri",
+      "product_name": "Mineral Water Bottle",
+      "variant": "1 ltr",
+      "sku": "bisleri_mineral_water_bottle_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 119,
+      "brand": "Bisleri",
+      "product_name": "Soda Club Bottle",
+      "variant": "750 ml",
+      "sku": "bisleri_soda_club_bottle_750_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 120,
+      "brand": "Bisleri",
+      "product_name": "Spyci Masala Maar Ke",
+      "variant": "600 ml",
+      "sku": "bisleri_spyci_masala_maar_ke_600_ml",
+      "category": "Staples"
+    },
+    {
+      "class_id": 121,
+      "brand": "Blue",
+      "product_name": "Bird Caster Sugar",
+      "variant": "",
+      "sku": "blue_bird_caster_sugar",
+      "category": "General"
+    },
+    {
+      "class_id": 122,
+      "brand": "Blue",
+      "product_name": "Bird Chocolate Mousse",
+      "variant": "",
+      "sku": "blue_bird_chocolate_mousse",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 123,
+      "brand": "Blue",
+      "product_name": "Bird Cocoa",
+      "variant": "",
+      "sku": "blue_bird_cocoa",
+      "category": "General"
+    },
+    {
+      "class_id": 124,
+      "brand": "Blue",
+      "product_name": "Bird Demerana Sugar",
+      "variant": "",
+      "sku": "blue_bird_demerana_sugar",
+      "category": "General"
+    },
+    {
+      "class_id": 125,
+      "brand": "Blue",
+      "product_name": "Bird Jelly",
+      "variant": "",
+      "sku": "blue_bird_jelly",
+      "category": "General"
+    },
+    {
+      "class_id": 126,
+      "brand": "Borges",
+      "product_name": "Classic Olive Oil",
+      "variant": "1 ltr",
+      "sku": "borges_classic_olive_oil_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 127,
+      "brand": "Borges",
+      "product_name": "Original Extra Virgin Olive Oil Glass Bottle",
+      "variant": "1 ltr",
+      "sku": "borges_original_extra_virgin_olive_oil_glass_bottle_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 128,
+      "brand": "Bragg",
+      "product_name": "Raw Unfiltered Apple Cider Vinegar",
+      "variant": "473 ml",
+      "sku": "bragg_raw_unfiltered_apple_cider_vinegar_473_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 129,
+      "brand": "Britannia",
+      "product_name": "100 Whole Wheat Bread",
+      "variant": "200 gms",
+      "sku": "britannia_100_whole_wheat_bread_200_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 132,
+      "brand": "Britannia",
+      "product_name": "Bourbon Biscuits",
+      "variant": "120 gms",
+      "sku": "britannia_bourbon_biscuits_120_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 133,
+      "brand": "Britannia",
+      "product_name": "Bourbon Chocolate Cream Biscuits",
+      "variant": "",
+      "sku": "britannia_bourbon_chocolate_cream_biscuits",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 134,
+      "brand": "Britannia",
+      "product_name": "Breakfast Slice Bread",
+      "variant": "450 gms",
+      "sku": "britannia_breakfast_slice_bread_450_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 135,
+      "brand": "Britannia",
+      "product_name": "Cheese Block",
+      "variant": "200 gms",
+      "sku": "britannia_cheese_block_200_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 136,
+      "brand": "Britannia",
+      "product_name": "Cheese Slice Pouch",
+      "variant": "100 gms",
+      "sku": "britannia_cheese_slice_pouch_100_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 137,
+      "brand": "Britannia",
+      "product_name": "Classic Little Hearts Biscuits",
+      "variant": "34 gms",
+      "sku": "britannia_classic_little_hearts_biscuits_34_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 138,
+      "brand": "Britannia",
+      "product_name": "Come Alive Thick Dahi",
+      "variant": "150 gms",
+      "sku": "britannia_come_alive_thick_dahi_150_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 139,
+      "brand": "Britannia",
+      "product_name": "Good Day Badam Pista Cookies",
+      "variant": "45 gms",
+      "sku": "britannia_good_day_badam_pista_cookies_45_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 140,
+      "brand": "Britannia",
+      "product_name": "Good Day Butter Cookies Biscuits",
+      "variant": "150 gms",
+      "sku": "britannia_good_day_butter_cookies_biscuits_150_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 141,
+      "brand": "Britannia",
+      "product_name": "Good Day Cashew Biscuits",
+      "variant": "200 gms",
+      "sku": "britannia_good_day_cashew_biscuits_200_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 142,
+      "brand": "Britannia",
+      "product_name": "Good Day Chocochips Biscuits",
+      "variant": "39 gms",
+      "sku": "britannia_good_day_chocochips_biscuits_39_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 143,
+      "brand": "Britannia",
+      "product_name": "Good Day Rich Cashew Biscuit",
+      "variant": "120 gms",
+      "sku": "britannia_good_day_rich_cashew_biscuit_120_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 144,
+      "brand": "Britannia",
+      "product_name": "Good Day Rich Pista Badam Biscuit",
+      "variant": "100 gms",
+      "sku": "britannia_good_day_rich_pista_badam_biscuit_100_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 145,
+      "brand": "Britannia",
+      "product_name": "Jim Jam Cream Biscuits",
+      "variant": "",
+      "sku": "britannia_jim_jam_cream_biscuits",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 146,
+      "brand": "Britannia",
+      "product_name": "Jim Jam Cream Biscuits",
+      "variant": "138 gms",
+      "sku": "britannia_jim_jam_cream_biscuits_138_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 148,
+      "brand": "Britannia",
+      "product_name": "Marie Gold Biscuits",
+      "variant": "250 gms",
+      "sku": "britannia_marie_gold_biscuits_250_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 149,
+      "brand": "Britannia",
+      "product_name": "Milk Bikis Milky Sandwich Biscuits",
+      "variant": "200 gms",
+      "sku": "britannia_milk_bikis_milky_sandwich_biscuits_200_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 151,
+      "brand": "Britannia",
+      "product_name": "Nice Time Coconut Biscuit",
+      "variant": "150 gms",
+      "sku": "britannia_nice_time_coconut_biscuit_150_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 152,
+      "brand": "Britannia",
+      "product_name": "Nutrichoice Digestive Biscuit",
+      "variant": "41 gms",
+      "sku": "britannia_nutrichoice_digestive_biscuit_41_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 154,
+      "brand": "Britannia",
+      "product_name": "Toastea Premium Bake Rusk",
+      "variant": "273 gms",
+      "sku": "britannia_toastea_premium_bake_rusk_273_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 156,
+      "brand": "Britannia",
+      "product_name": "Treat Mixed Fruit Croissant",
+      "variant": "45 gms",
+      "sku": "britannia_treat_mixed_fruit_croissant_45_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 158,
+      "brand": "Britannia",
+      "product_name": "Treat Rich Creme Coconut Flavoured Wafers",
+      "variant": "55 gms",
+      "sku": "britannia_treat_rich_creme_coconut_flavoured_wafers_55_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 159,
+      "brand": "Britannia",
+      "product_name": "Treat Rich Creme Strawberry Flavoured Wafers",
+      "variant": "55 gms",
+      "sku": "britannia_treat_rich_creme_strawberry_flavoured_wafers_55_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 160,
+      "brand": "Britannia",
+      "product_name": "Treat Rich Creme Vanilla Flavoured Wafers",
+      "variant": "55 gms",
+      "sku": "britannia_treat_rich_creme_vanilla_flavoured_wafers_55_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 161,
+      "brand": "Britannia",
+      "product_name": "Vita Marie Gold",
+      "variant": "100 gms",
+      "sku": "britannia_vita_marie_gold_100_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 162,
+      "brand": "Britannia",
+      "product_name": "Vita Marie Gold Biscuits",
+      "variant": "75 gms",
+      "sku": "britannia_vita_marie_gold_biscuits_75_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 163,
+      "brand": "Brooke",
+      "product_name": "Bond Red Label Natural Care Tea",
+      "variant": "250 gms",
+      "sku": "brooke_bond_red_label_natural_care_tea_250_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 164,
+      "brand": "Brooke",
+      "product_name": "Bond Red Label Tea",
+      "variant": "250 gms",
+      "sku": "brooke_bond_red_label_tea_250_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 165,
+      "brand": "Brooke",
+      "product_name": "Bond Taj Mahal Tea",
+      "variant": "500 gms",
+      "sku": "brooke_bond_taj_mahal_tea_500_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 167,
+      "brand": "Bru",
+      "product_name": "Filter Coffee Green Label",
+      "variant": "200 gms",
+      "sku": "bru_filter_coffee_green_label_200_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 168,
+      "brand": "Bru",
+      "product_name": "Instant Coffee",
+      "variant": "100 gms",
+      "sku": "bru_instant_coffee_100_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 170,
+      "brand": "Brut",
+      "product_name": "Deodorant Spray Ocean",
+      "variant": "200 ml",
+      "sku": "brut_deodorant_spray_ocean_200_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 171,
+      "brand": "Cadbury",
+      "product_name": "5 Star Chocolate Bar",
+      "variant": "16 gms",
+      "sku": "cadbury_5_star_chocolate_bar_16_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 172,
+      "brand": "Cadbury",
+      "product_name": "5 Star Chocolate Bar",
+      "variant": "22 gms",
+      "sku": "cadbury_5_star_chocolate_bar_22_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 173,
+      "brand": "Cadbury",
+      "product_name": "Bournville 50 Dark Chocolate Bar",
+      "variant": "31 gms",
+      "sku": "cadbury_bournville_50_dark_chocolate_bar_31_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 174,
+      "brand": "Cadbury",
+      "product_name": "Bournville Rich Cocoa 50 Dark Chocolate Bar",
+      "variant": "80 gms",
+      "sku": "cadbury_bournville_rich_cocoa_50_dark_chocolate_bar_80_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 175,
+      "brand": "Cadbury",
+      "product_name": "Chocobakes Chocfilled Cookies",
+      "variant": "75 gms",
+      "sku": "cadbury_chocobakes_chocfilled_cookies_75_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 176,
+      "brand": "Cadbury",
+      "product_name": "Dairy Milk Chocolate Bar",
+      "variant": "6 gms",
+      "sku": "cadbury_dairy_milk_chocolate_bar_6_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 178,
+      "brand": "Cadbury",
+      "product_name": "Dairy Milk Fruit And Nut Chocolate Bar",
+      "variant": "36 gms",
+      "sku": "cadbury_dairy_milk_fruit_and_nut_chocolate_bar_36_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 179,
+      "brand": "Cadbury",
+      "product_name": "Dairy Milk Roast Almond Chocolate Bar",
+      "variant": "36 gms",
+      "sku": "cadbury_dairy_milk_roast_almond_chocolate_bar_36_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 180,
+      "brand": "Cadbury",
+      "product_name": "Dairy Milk Shots Pouch",
+      "variant": "18 gms",
+      "sku": "cadbury_dairy_milk_shots_pouch_18_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 183,
+      "brand": "Cadbury",
+      "product_name": "Dairy Milk Silk Mousse Chocolate Bar",
+      "variant": "50 gms",
+      "sku": "cadbury_dairy_milk_silk_mousse_chocolate_bar_50_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 185,
+      "brand": "Cadbury",
+      "product_name": "Fuse Chocolate Bar",
+      "variant": "25 gms",
+      "sku": "cadbury_fuse_chocolate_bar_25_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 186,
+      "brand": "Cadbury",
+      "product_name": "Hot Chocolate",
+      "variant": "200 gms",
+      "sku": "cadbury_hot_chocolate_200_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 187,
+      "brand": "Cadbury",
+      "product_name": "Hot Chocolate Drink Powder Mix",
+      "variant": "200 gms",
+      "sku": "cadbury_hot_chocolate_drink_powder_mix_200_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 188,
+      "brand": "Cadbury",
+      "product_name": "Nutties Chocolate Bar",
+      "variant": "30 gms",
+      "sku": "cadbury_nutties_chocolate_bar_30_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 190,
+      "brand": "Cadbury",
+      "product_name": "Oreo Original Vanilla Creme Biscuit",
+      "variant": "120 gms",
+      "sku": "cadbury_oreo_original_vanilla_creme_biscuit_120_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 191,
+      "brand": "Cadbury",
+      "product_name": "Oreo Red Velvet Cream Sandwich Biscuit",
+      "variant": "60 gms",
+      "sku": "cadbury_oreo_red_velvet_cream_sandwich_biscuit_60_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 195,
+      "brand": "Cadbury",
+      "product_name": "Silk Mouse",
+      "variant": "",
+      "sku": "cadbury_silk_mouse",
+      "category": "General"
+    },
+    {
+      "class_id": 200,
+      "brand": "Cavins",
+      "product_name": "Vanilla Milk Shake",
+      "variant": "200 ml",
+      "sku": "cavins_vanilla_milk_shake_200_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 201,
+      "brand": "Charlie",
+      "product_name": "Revlon Deo",
+      "variant": "",
+      "sku": "charlie_revlon_deo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 202,
+      "brand": "Cheerios",
+      "product_name": "100 Percent Oats",
+      "variant": "",
+      "sku": "cheerios_100_percent_oats",
+      "category": "General"
+    },
+    {
+      "class_id": 203,
+      "brand": "Cheerios",
+      "product_name": "Real Honey Loops",
+      "variant": "",
+      "sku": "cheerios_real_honey_loops",
+      "category": "General"
+    },
+    {
+      "class_id": 204,
+      "brand": "Cheetos",
+      "product_name": "Cheez Puffs",
+      "variant": "",
+      "sku": "cheetos_cheez_puffs",
+      "category": "General"
+    },
+    {
+      "class_id": 205,
+      "brand": "Cherry",
+      "product_name": "Blossom Black Shoe Polish",
+      "variant": "40 gms",
+      "sku": "cherry_blossom_black_shoe_polish_40_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 206,
+      "brand": "Chhedas",
+      "product_name": "Golden Lightly Salted Potato Chips",
+      "variant": "170 gms",
+      "sku": "chhedas_golden_lightly_salted_potato_chips_170_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 207,
+      "brand": "Chhedas",
+      "product_name": "Masala Banana Chips",
+      "variant": "25 gms",
+      "sku": "chhedas_masala_banana_chips_25_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 208,
+      "brand": "Chhedas",
+      "product_name": "Salted French Fries Pouch",
+      "variant": "25 gms",
+      "sku": "chhedas_salted_french_fries_pouch_25_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 209,
+      "brand": "Chheddas",
+      "product_name": "Kachori",
+      "variant": "204 gms",
+      "sku": "chheddas_kachori_204_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 210,
+      "brand": "Ching",
+      "product_name": "Veg Hakka Noodles",
+      "variant": "150 gms",
+      "sku": "ching_veg_hakka_noodles_150_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 211,
+      "brand": "Chings",
+      "product_name": "Paneer Chilli Miracle Masala Pouch",
+      "variant": "20 gms",
+      "sku": "chings_paneer_chilli_miracle_masala_pouch_20_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 212,
+      "brand": "Chings",
+      "product_name": "Secret Schezwan Chutney Jar",
+      "variant": "250 gms",
+      "sku": "chings_secret_schezwan_chutney_jar_250_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 213,
+      "brand": "Chings",
+      "product_name": "Wheat Noodles",
+      "variant": "150 gms",
+      "sku": "chings_wheat_noodles_150_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 214,
+      "brand": "Chitale",
+      "product_name": "Amba Shrikhand Cup",
+      "variant": "100 gms",
+      "sku": "chitale_amba_shrikhand_cup_100_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 215,
+      "brand": "Chitale",
+      "product_name": "Badam Pista Full Cream Shrikhand",
+      "variant": "250 gms",
+      "sku": "chitale_badam_pista_full_cream_shrikhand_250_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 216,
+      "brand": "Chitale",
+      "product_name": "Bandhu Amrakhand",
+      "variant": "250 gms",
+      "sku": "chitale_bandhu_amrakhand_250_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 217,
+      "brand": "Chitale",
+      "product_name": "Dahi",
+      "variant": "1 kg",
+      "sku": "chitale_dahi_1_kg",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 218,
+      "brand": "Chitale",
+      "product_name": "Dairy Full Cream Elaichi Shrikhand Cup",
+      "variant": "250 gms",
+      "sku": "chitale_dairy_full_cream_elaichi_shrikhand_cup_250_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 219,
+      "brand": "Chitale",
+      "product_name": "Srikhand Elachi Cup",
+      "variant": "500 gms",
+      "sku": "chitale_srikhand_elachi_cup_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 220,
+      "brand": "Chitale",
+      "product_name": "Srikhand Kesar Cup",
+      "variant": "500 gms",
+      "sku": "chitale_srikhand_kesar_cup_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 222,
+      "brand": "Cinthol",
+      "product_name": "Lime Refreshing Deo Soap",
+      "variant": "100 gms",
+      "sku": "cinthol_lime_refreshing_deo_soap_100_gms",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 225,
+      "brand": "Clean",
+      "product_name": "Clear Foaming Face Wash",
+      "variant": "100 ml",
+      "sku": "clean_clear_foaming_face_wash_100_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 229,
+      "brand": "Clinic",
+      "product_name": "Plus Strong And Long Health Shampoo",
+      "variant": "",
+      "sku": "clinic_plus_strong_and_long_health_shampoo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 230,
+      "brand": "Coca",
+      "product_name": "Cola Diet Coke",
+      "variant": "300 ml",
+      "sku": "coca_cola_diet_coke_300_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 231,
+      "brand": "Coca",
+      "product_name": "Cola Light Taste",
+      "variant": "",
+      "sku": "coca_cola_light_taste",
+      "category": "General"
+    },
+    {
+      "class_id": 232,
+      "brand": "Coca",
+      "product_name": "Cola Soft Drink",
+      "variant": "600 ml",
+      "sku": "coca_cola_soft_drink_600_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 233,
+      "brand": "Coca",
+      "product_name": "Cola Tin",
+      "variant": "",
+      "sku": "coca_cola_tin",
+      "category": "General"
+    },
+    {
+      "class_id": 234,
+      "brand": "Coca",
+      "product_name": "Cola Zero Sugar Soft Drink Can",
+      "variant": "300 ml",
+      "sku": "coca_cola_zero_sugar_soft_drink_can_300_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 235,
+      "brand": "Coca",
+      "product_name": "Cola Zero Tina",
+      "variant": "",
+      "sku": "coca_cola_zero_tina",
+      "category": "General"
+    },
+    {
+      "class_id": 237,
+      "brand": "Colgate",
+      "product_name": "Ayurvedic Protection Toothpaste",
+      "variant": "180 gms",
+      "sku": "colgate_ayurvedic_protection_toothpaste_180_gms",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 238,
+      "brand": "Colgate",
+      "product_name": "Max Fresh Charcoal Toothpaste",
+      "variant": "130 gms",
+      "sku": "colgate_max_fresh_charcoal_toothpaste_130_gms",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 239,
+      "brand": "Colgate",
+      "product_name": "Maxfresh Spicy Red Gel Toothpaste",
+      "variant": "",
+      "sku": "colgate_maxfresh_spicy_red_gel_toothpaste",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 241,
+      "brand": "Colgate",
+      "product_name": "Sensitive Plus Toothpaste",
+      "variant": "",
+      "sku": "colgate_sensitive_plus_toothpaste",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 244,
+      "brand": "Colgate",
+      "product_name": "Strong Teeth Anticavity Toothpaste",
+      "variant": "100 gms",
+      "sku": "colgate_strong_teeth_anticavity_toothpaste_100_gms",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 245,
+      "brand": "Colgate",
+      "product_name": "Strong Teeth Dental Cream Toothpaste",
+      "variant": "200 gms",
+      "sku": "colgate_strong_teeth_dental_cream_toothpaste_200_gms",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 246,
+      "brand": "Colgate",
+      "product_name": "Strong Teeth Tooth Paste",
+      "variant": "",
+      "sku": "colgate_strong_teeth_tooth_paste",
+      "category": "General"
+    },
+    {
+      "class_id": 249,
+      "brand": "Colgate",
+      "product_name": "Total Charcoal Deep Clean Toothpaste",
+      "variant": "",
+      "sku": "colgate_total_charcoal_deep_clean_toothpaste",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 250,
+      "brand": "Colgate",
+      "product_name": "Visible White Toothpaste",
+      "variant": "",
+      "sku": "colgate_visible_white_toothpaste",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 251,
+      "brand": "Colin",
+      "product_name": "Glass And Surface Cleaner Liquid Spray",
+      "variant": "250 ml",
+      "sku": "colin_glass_and_surface_cleaner_liquid_spray_250_ml",
+      "category": "Household"
+    },
+    {
+      "class_id": 253,
+      "brand": "Daawat",
+      "product_name": "Basmati Ricebasmati Chawal Rozana Super 90",
+      "variant": "1 kg",
+      "sku": "daawat_basmati_ricebasmati_chawal_rozana_super_90_1_kg",
+      "category": "Staples"
+    },
+    {
+      "class_id": 254,
+      "brand": "Daawat",
+      "product_name": "Biryani Basmati Rice Pouch",
+      "variant": "1 kg",
+      "sku": "daawat_biryani_basmati_rice_pouch_1_kg",
+      "category": "Staples"
+    },
+    {
+      "class_id": 255,
+      "brand": "Daawat",
+      "product_name": "Dubar Basmati Rice",
+      "variant": "1 kg",
+      "sku": "daawat_dubar_basmati_rice_1_kg",
+      "category": "Staples"
+    },
+    {
+      "class_id": 257,
+      "brand": "Dabur",
+      "product_name": "Hajmola Imli Digestive Tablets",
+      "variant": "120 unit",
+      "sku": "dabur_hajmola_imli_digestive_tablets_120_unit",
+      "category": "General"
+    },
+    {
+      "class_id": 258,
+      "brand": "Dabur",
+      "product_name": "Hommade Ginger Garlic Paste Pouch",
+      "variant": "100 gms",
+      "sku": "dabur_hommade_ginger_garlic_paste_pouch_100_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 259,
+      "brand": "Dabur",
+      "product_name": "Hommade Tomato Puree",
+      "variant": "200 gms",
+      "sku": "dabur_hommade_tomato_puree_200_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 261,
+      "brand": "Dabur",
+      "product_name": "Real Apple Fruit Juice Drink",
+      "variant": "1 ltr",
+      "sku": "dabur_real_apple_fruit_juice_drink_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 262,
+      "brand": "Dabur",
+      "product_name": "Red Toothpaste",
+      "variant": "",
+      "sku": "dabur_red_toothpaste",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 263,
+      "brand": "Dairy",
+      "product_name": "Milk Fruit And Nut",
+      "variant": "",
+      "sku": "dairy_milk_fruit_and_nut",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 264,
+      "brand": "Dairy",
+      "product_name": "Milk Silk Bubbly",
+      "variant": "",
+      "sku": "dairy_milk_silk_bubbly",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 265,
+      "brand": "Dairy",
+      "product_name": "Milk Silk Ganache",
+      "variant": "",
+      "sku": "dairy_milk_silk_ganache",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 267,
+      "brand": "Dairy",
+      "product_name": "Milk Silk Oreo",
+      "variant": "",
+      "sku": "dairy_milk_silk_oreo",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 268,
+      "brand": "Davidoff",
+      "product_name": "Cafe Fine Aroma",
+      "variant": "100 gms",
+      "sku": "davidoff_cafe_fine_aroma_100_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 269,
+      "brand": "Davidoff",
+      "product_name": "Espresso 57",
+      "variant": "100 gms",
+      "sku": "davidoff_espresso_57_100_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 270,
+      "brand": "Davidoff",
+      "product_name": "Rich Aroma Coffee 100G",
+      "variant": "",
+      "sku": "davidoff_rich_aroma_coffee_100g",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 271,
+      "brand": "Del",
+      "product_name": "Monte Penne Rigate Pasta",
+      "variant": "500 gms",
+      "sku": "del_monte_penne_rigate_pasta_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 272,
+      "brand": "Del",
+      "product_name": "Monte Sliced Black Olives",
+      "variant": "450 gms",
+      "sku": "del_monte_sliced_black_olives_450_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 274,
+      "brand": "Dettol",
+      "product_name": "Antiseptic Liquid",
+      "variant": "125 ml",
+      "sku": "dettol_antiseptic_liquid_125_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 275,
+      "brand": "Dettol",
+      "product_name": "Hand Sanitizer",
+      "variant": "50 ml",
+      "sku": "dettol_hand_sanitizer_50_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 278,
+      "brand": "Dhara",
+      "product_name": "Refined Sunflower Oil Pouch",
+      "variant": "1 ltr",
+      "sku": "dhara_refined_sunflower_oil_pouch_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 279,
+      "brand": "Domex",
+      "product_name": "Disinfectant Surface Floor Cleaner",
+      "variant": "500 ml",
+      "sku": "domex_disinfectant_surface_floor_cleaner_500_ml",
+      "category": "Household"
+    },
+    {
+      "class_id": 280,
+      "brand": "Domex",
+      "product_name": "Ocean Fresh Toilet Cleaner",
+      "variant": "500 ml",
+      "sku": "domex_ocean_fresh_toilet_cleaner_500_ml",
+      "category": "Household"
+    },
+    {
+      "class_id": 281,
+      "brand": "Doritos",
+      "product_name": "Cheese Flavoured Nachos Chips",
+      "variant": "60 gms",
+      "sku": "doritos_cheese_flavoured_nachos_chips_60_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 282,
+      "brand": "Doritos",
+      "product_name": "Nacho Cheese",
+      "variant": "",
+      "sku": "doritos_nacho_cheese",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 283,
+      "brand": "Dove",
+      "product_name": "Anti Dandruff Solutions Dandruff Clean Fresh Shampoo",
+      "variant": "340 ml",
+      "sku": "dove_anti_dandruff_solutions_dandruff_clean_fresh_shampoo_340_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 284,
+      "brand": "Dove",
+      "product_name": "Antidandruff Solutions Dandruff Care Shampoo Clinically Proven",
+      "variant": "80 ml",
+      "sku": "dove_antidandruff_solutions_dandruff_care_shampoo_clinically_proven_80_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 285,
+      "brand": "Dove",
+      "product_name": "Daily Shine Conditioner",
+      "variant": "",
+      "sku": "dove_daily_shine_conditioner",
+      "category": "General"
+    },
+    {
+      "class_id": 286,
+      "brand": "Dove",
+      "product_name": "Daily Shine Shampoo",
+      "variant": "",
+      "sku": "dove_daily_shine_shampoo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 287,
+      "brand": "Dove",
+      "product_name": "Dandruff Care Shampoo",
+      "variant": "180 ml",
+      "sku": "dove_dandruff_care_shampoo_180_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 288,
+      "brand": "Dove",
+      "product_name": "Dryness Care Conditioner",
+      "variant": "",
+      "sku": "dove_dryness_care_conditioner",
+      "category": "General"
+    },
+    {
+      "class_id": 289,
+      "brand": "Dove",
+      "product_name": "Dryness Care Shampoo",
+      "variant": "",
+      "sku": "dove_dryness_care_shampoo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 290,
+      "brand": "Dove",
+      "product_name": "Hair Fall Rescue Conditioner",
+      "variant": "",
+      "sku": "dove_hair_fall_rescue_conditioner",
+      "category": "General"
+    },
+    {
+      "class_id": 291,
+      "brand": "Dove",
+      "product_name": "Hair Fall Rescue Shampoo",
+      "variant": "",
+      "sku": "dove_hair_fall_rescue_shampoo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 292,
+      "brand": "Dove",
+      "product_name": "Hair Fall Rescue Shampoo Sachet",
+      "variant": "7 ml",
+      "sku": "dove_hair_fall_rescue_shampoo_sachet_7_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 293,
+      "brand": "Dove",
+      "product_name": "Intense Repair Conditioner",
+      "variant": "175 ml",
+      "sku": "dove_intense_repair_conditioner_175_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 294,
+      "brand": "Dove",
+      "product_name": "Intense Repair Shampoo",
+      "variant": "340 ml",
+      "sku": "dove_intense_repair_shampoo_340_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 295,
+      "brand": "Dove",
+      "product_name": "Oxygen Moisture Shampoo",
+      "variant": "180 ml",
+      "sku": "dove_oxygen_moisture_shampoo_180_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 296,
+      "brand": "Dr",
+      "product_name": "Oetker Funfoods Veg Original Mayonnaise",
+      "variant": "400 gms",
+      "sku": "dr_oetker_funfoods_veg_original_mayonnaise_400_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 297,
+      "brand": "Duracell",
+      "product_name": "Chota Power Aa Alkaline Battery",
+      "variant": "10 unit",
+      "sku": "duracell_chota_power_aa_alkaline_battery_10_unit",
+      "category": "General"
+    },
+    {
+      "class_id": 298,
+      "brand": "Durex",
+      "product_name": "Extra Time Condoms",
+      "variant": "10 unit",
+      "sku": "durex_extra_time_condoms_10_unit",
+      "category": "General"
+    },
+    {
+      "class_id": 299,
+      "brand": "Dynamix",
+      "product_name": "Cow Ghee",
+      "variant": "",
+      "sku": "dynamix_cow_ghee",
+      "category": "Staples"
+    },
+    {
+      "class_id": 300,
+      "brand": "Elite",
+      "product_name": "Dates Pudding Sliced Cake",
+      "variant": "150 gms",
+      "sku": "elite_dates_pudding_sliced_cake_150_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 305,
+      "brand": "English",
+      "product_name": "Oven Whole Wheat Bread",
+      "variant": "450 gms",
+      "sku": "english_oven_whole_wheat_bread_450_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 306,
+      "brand": "Eno",
+      "product_name": "Cola Flavour",
+      "variant": "5 gms",
+      "sku": "eno_cola_flavour_5_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 307,
+      "brand": "Eno",
+      "product_name": "Fruit Salt Regular Soda Sachet",
+      "variant": "5 gms",
+      "sku": "eno_fruit_salt_regular_soda_sachet_5_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 308,
+      "brand": "Eno",
+      "product_name": "Lemon Flavour Digestive Fruit Salt",
+      "variant": "6 unit",
+      "sku": "eno_lemon_flavour_digestive_fruit_salt_6_unit",
+      "category": "General"
+    },
+    {
+      "class_id": 309,
+      "brand": "Epigamia",
+      "product_name": "Low Fat Blueberry Greek Yogurt",
+      "variant": "85 gms",
+      "sku": "epigamia_low_fat_blueberry_greek_yogurt_85_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 310,
+      "brand": "Epigamia",
+      "product_name": "Natural Greek Yogurt",
+      "variant": "85 gms",
+      "sku": "epigamia_natural_greek_yogurt_85_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 311,
+      "brand": "Et",
+      "product_name": "Mi Cornflour",
+      "variant": "100 gms",
+      "sku": "et_mi_cornflour_100_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 312,
+      "brand": "Everest",
+      "product_name": "Asafoetida Hing Powder Jar",
+      "variant": "50 gms",
+      "sku": "everest_asafoetida_hing_powder_jar_50_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 313,
+      "brand": "Everest",
+      "product_name": "Chaat Masala Carton",
+      "variant": "100 gms",
+      "sku": "everest_chaat_masala_carton_100_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 314,
+      "brand": "Everest",
+      "product_name": "Chat Masala",
+      "variant": "",
+      "sku": "everest_chat_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 315,
+      "brand": "Everest",
+      "product_name": "Chhole Masala",
+      "variant": "",
+      "sku": "everest_chhole_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 316,
+      "brand": "Everest",
+      "product_name": "Chhole Masala Carton",
+      "variant": "100 gms",
+      "sku": "everest_chhole_masala_carton_100_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 317,
+      "brand": "Everest",
+      "product_name": "Chicken Masala",
+      "variant": "",
+      "sku": "everest_chicken_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 318,
+      "brand": "Everest",
+      "product_name": "Chicken Masala Carton",
+      "variant": "100 gms",
+      "sku": "everest_chicken_masala_carton_100_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 319,
+      "brand": "Everest",
+      "product_name": "Desi Meat Masala",
+      "variant": "",
+      "sku": "everest_desi_meat_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 320,
+      "brand": "Everest",
+      "product_name": "Dry Ginger Powder",
+      "variant": "",
+      "sku": "everest_dry_ginger_powder",
+      "category": "General"
+    },
+    {
+      "class_id": 321,
+      "brand": "Everest",
+      "product_name": "Dry Mango Powder",
+      "variant": "",
+      "sku": "everest_dry_mango_powder",
+      "category": "General"
+    },
+    {
+      "class_id": 323,
+      "brand": "Everest",
+      "product_name": "Garam Masala",
+      "variant": "",
+      "sku": "everest_garam_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 325,
+      "brand": "Everest",
+      "product_name": "Kasturi Methi",
+      "variant": "",
+      "sku": "everest_kasturi_methi",
+      "category": "General"
+    },
+    {
+      "class_id": 326,
+      "brand": "Everest",
+      "product_name": "Kitchen King Masala",
+      "variant": "",
+      "sku": "everest_kitchen_king_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 327,
+      "brand": "Everest",
+      "product_name": "Kitchen King Masala Carton",
+      "variant": "100 gms",
+      "sku": "everest_kitchen_king_masala_carton_100_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 328,
+      "brand": "Everest",
+      "product_name": "Masala Super Garam Pouch",
+      "variant": "200 gms",
+      "sku": "everest_masala_super_garam_pouch_200_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 329,
+      "brand": "Everest",
+      "product_name": "Meat Masala",
+      "variant": "",
+      "sku": "everest_meat_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 330,
+      "brand": "Everest",
+      "product_name": "Pani Puri Masala",
+      "variant": "",
+      "sku": "everest_pani_puri_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 331,
+      "brand": "Everest",
+      "product_name": "Pav Bhaji Masala",
+      "variant": "",
+      "sku": "everest_pav_bhaji_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 332,
+      "brand": "Everest",
+      "product_name": "Sabj Masala",
+      "variant": "",
+      "sku": "everest_sabj_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 334,
+      "brand": "Everest",
+      "product_name": "Sambhar Masala",
+      "variant": "",
+      "sku": "everest_sambhar_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 335,
+      "brand": "Everest",
+      "product_name": "Shahi Biryani Powder",
+      "variant": "",
+      "sku": "everest_shahi_biryani_powder",
+      "category": "General"
+    },
+    {
+      "class_id": 336,
+      "brand": "Everest",
+      "product_name": "Shahi Paneer Masala",
+      "variant": "",
+      "sku": "everest_shahi_paneer_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 337,
+      "brand": "Everest",
+      "product_name": "Tandoori Chicken Masala",
+      "variant": "",
+      "sku": "everest_tandoori_chicken_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 338,
+      "brand": "Everest",
+      "product_name": "Tea Masala",
+      "variant": "",
+      "sku": "everest_tea_masala",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 339,
+      "brand": "Everest",
+      "product_name": "Turmeric Powder Pouch",
+      "variant": "100 gms",
+      "sku": "everest_turmeric_powder_pouch_100_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 340,
+      "brand": "Exo",
+      "product_name": "Dish Wash Bar Anti Bacterial",
+      "variant": "60 gms",
+      "sku": "exo_dish_wash_bar_anti_bacterial_60_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 341,
+      "brand": "Fa",
+      "product_name": "Empowering Moments Deo",
+      "variant": "",
+      "sku": "fa_empowering_moments_deo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 342,
+      "brand": "Fa",
+      "product_name": "Mystic Moments Deo",
+      "variant": "",
+      "sku": "fa_mystic_moments_deo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 343,
+      "brand": "Fa",
+      "product_name": "Passion Deo",
+      "variant": "",
+      "sku": "fa_passion_deo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 345,
+      "brand": "Fanta",
+      "product_name": "Orange Flavoured Refreshing Soft Drink Pet Bottle",
+      "variant": "750 ml",
+      "sku": "fanta_orange_flavoured_refreshing_soft_drink_pet_bottle_750_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 346,
+      "brand": "Fanta",
+      "product_name": "Orange Flavoured Soft Drink Bottle",
+      "variant": "600 ml",
+      "sku": "fanta_orange_flavoured_soft_drink_bottle_600_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 347,
+      "brand": "Figaro",
+      "product_name": "Extra Virgin Olive Oil",
+      "variant": "250 ml",
+      "sku": "figaro_extra_virgin_olive_oil_250_ml",
+      "category": "Staples"
+    },
+    {
+      "class_id": 348,
+      "brand": "Figaro",
+      "product_name": "Olive Oil",
+      "variant": "200 ml",
+      "sku": "figaro_olive_oil_200_ml",
+      "category": "Staples"
+    },
+    {
+      "class_id": 349,
+      "brand": "Figaro",
+      "product_name": "Plain Black Olives",
+      "variant": "450 gms",
+      "sku": "figaro_plain_black_olives_450_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 350,
+      "brand": "Figaro",
+      "product_name": "Sliced Green Olives",
+      "variant": "450 gms",
+      "sku": "figaro_sliced_green_olives_450_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 351,
+      "brand": "Figaro",
+      "product_name": "Stuffed Green Olives With Pimiento",
+      "variant": "450 gms",
+      "sku": "figaro_stuffed_green_olives_with_pimiento_450_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 355,
+      "brand": "Fortune",
+      "product_name": "100 Vegetarian Soya Chunks Pouch",
+      "variant": "50 gms",
+      "sku": "fortune_100_vegetarian_soya_chunks_pouch_50_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 356,
+      "brand": "Fortune",
+      "product_name": "Besan Chana Dal Pouch",
+      "variant": "500 gms",
+      "sku": "fortune_besan_chana_dal_pouch_500_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 358,
+      "brand": "Fortune",
+      "product_name": "Premium Kachi Ghani Pure Mustard Oil Pet Bottle",
+      "variant": "1 ltr",
+      "sku": "fortune_premium_kachi_ghani_pure_mustard_oil_pet_bottle_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 359,
+      "brand": "Fortune",
+      "product_name": "Rozana Basmati Rice Pouch",
+      "variant": "5 kg",
+      "sku": "fortune_rozana_basmati_rice_pouch_5_kg",
+      "category": "Staples"
+    },
+    {
+      "class_id": 360,
+      "brand": "Fortune",
+      "product_name": "Soya Chunks Pouch",
+      "variant": "1 kg",
+      "sku": "fortune_soya_chunks_pouch_1_kg",
+      "category": "General"
+    },
+    {
+      "class_id": 361,
+      "brand": "Fortune",
+      "product_name": "Sunflower Oil Bottle",
+      "variant": "2 ltr",
+      "sku": "fortune_sunflower_oil_bottle_2_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 363,
+      "brand": "Fortune",
+      "product_name": "Sunlite Refined Sunflower Oil Pouch",
+      "variant": "1 ltr",
+      "sku": "fortune_sunlite_refined_sunflower_oil_pouch_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 364,
+      "brand": "Fortune",
+      "product_name": "Thick Poha",
+      "variant": "500 gms",
+      "sku": "fortune_thick_poha_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 365,
+      "brand": "Fortune",
+      "product_name": "Unpolished Chana Dal",
+      "variant": "500 gms",
+      "sku": "fortune_unpolished_chana_dal_500_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 366,
+      "brand": "Frooti",
+      "product_name": "Mango Fruit Drink",
+      "variant": "",
+      "sku": "frooti_mango_fruit_drink",
+      "category": "General"
+    },
+    {
+      "class_id": 370,
+      "brand": "Garnier",
+      "product_name": "Hair Colour Black Naturals 4 Natural Brown",
+      "variant": "20 gms",
+      "sku": "garnier_hair_colour_black_naturals_4_natural_brown_20_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 372,
+      "brand": "Gemini",
+      "product_name": "Groundnut Oil Pouch",
+      "variant": "1 ltr",
+      "sku": "gemini_groundnut_oil_pouch_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 373,
+      "brand": "Gemini",
+      "product_name": "Refined Sunflower Oil Pouch",
+      "variant": "1 ltr",
+      "sku": "gemini_refined_sunflower_oil_pouch_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 379,
+      "brand": "Girnar",
+      "product_name": "3 In 1 Coffee",
+      "variant": "10 bags",
+      "sku": "girnar_3_in_1_coffee_10_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 380,
+      "brand": "Girnar",
+      "product_name": "Detox Desi Kahwa Green Tea",
+      "variant": "10 unit",
+      "sku": "girnar_detox_desi_kahwa_green_tea_10_unit",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 381,
+      "brand": "Girnar",
+      "product_name": "Detox Desi Kahwa Green Tea",
+      "variant": "36 unit",
+      "sku": "girnar_detox_desi_kahwa_green_tea_36_unit",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 382,
+      "brand": "Girnar",
+      "product_name": "Ginger Chai Instant Tea",
+      "variant": "10 bags",
+      "sku": "girnar_ginger_chai_instant_tea_10_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 383,
+      "brand": "Girnar",
+      "product_name": "Ginger Green Tea Bags",
+      "variant": "10 unit",
+      "sku": "girnar_ginger_green_tea_bags_10_unit",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 384,
+      "brand": "Girnar",
+      "product_name": "Instant Premix Cardamom Low Sugar 10 Sachets",
+      "variant": "",
+      "sku": "girnar_instant_premix_cardamom_low_sugar_10_sachets",
+      "category": "General"
+    },
+    {
+      "class_id": 385,
+      "brand": "Girnar",
+      "product_name": "Kashmiri Kahwa 5 Sachets",
+      "variant": "",
+      "sku": "girnar_kashmiri_kahwa_5_sachets",
+      "category": "General"
+    },
+    {
+      "class_id": 386,
+      "brand": "Girnar",
+      "product_name": "Lemongrass Low Sugar Tea 10 Sachets",
+      "variant": "",
+      "sku": "girnar_lemongrass_low_sugar_tea_10_sachets",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 387,
+      "brand": "Girnar",
+      "product_name": "Lemongrass Tea",
+      "variant": "140 gms",
+      "sku": "girnar_lemongrass_tea_140_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 388,
+      "brand": "Girnar",
+      "product_name": "Royal Cup Tea Premium Assam Ctc Leaf",
+      "variant": "1 kg",
+      "sku": "girnar_royal_cup_tea_premium_assam_ctc_leaf_1_kg",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 390,
+      "brand": "Gits",
+      "product_name": "Pure Cow Ghee",
+      "variant": "100 ml",
+      "sku": "gits_pure_cow_ghee_100_ml",
+      "category": "Staples"
+    },
+    {
+      "class_id": 392,
+      "brand": "Glucon",
+      "product_name": "D Nimbu Pani Instant Energy Health Drink",
+      "variant": "125 gms",
+      "sku": "glucon_d_nimbu_pani_instant_energy_health_drink_125_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 393,
+      "brand": "Go",
+      "product_name": "Cheese Slices",
+      "variant": "10 unit",
+      "sku": "go_cheese_slices_10_unit",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 394,
+      "brand": "Godrej",
+      "product_name": "Aer Power Pocket Sea Breeze Bathroom Fragrance",
+      "variant": "10 gms",
+      "sku": "godrej_aer_power_pocket_sea_breeze_bathroom_fragrance_10_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 396,
+      "brand": "Gokul",
+      "product_name": "Dahi",
+      "variant": "500 gms",
+      "sku": "gokul_dahi_500_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 397,
+      "brand": "Gokul",
+      "product_name": "Taaza Milk",
+      "variant": "500 ml",
+      "sku": "gokul_taaza_milk_500_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 399,
+      "brand": "Good",
+      "product_name": "Life Crystal Sugar",
+      "variant": "1 kg",
+      "sku": "good_life_crystal_sugar_1_kg",
+      "category": "General"
+    },
+    {
+      "class_id": 400,
+      "brand": "Good",
+      "product_name": "Life Refined Sunflower Oil",
+      "variant": "1 ltr",
+      "sku": "good_life_refined_sunflower_oil_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 401,
+      "brand": "Govind",
+      "product_name": "Lassi Tetra Pack",
+      "variant": "200 ml",
+      "sku": "govind_lassi_tetra_pack_200_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 402,
+      "brand": "Gowardhan",
+      "product_name": "Cow Ghee",
+      "variant": "500 gms",
+      "sku": "gowardhan_cow_ghee_500_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 403,
+      "brand": "Gowardhan",
+      "product_name": "Dahi",
+      "variant": "200 gms",
+      "sku": "gowardhan_dahi_200_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 404,
+      "brand": "Gowardhan",
+      "product_name": "Fresh Curd Pouch",
+      "variant": "500 gms",
+      "sku": "gowardhan_fresh_curd_pouch_500_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 405,
+      "brand": "Gowardhan",
+      "product_name": "Fresh Paneer Classic Block Pouch",
+      "variant": "200 gms",
+      "sku": "gowardhan_fresh_paneer_classic_block_pouch_200_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 406,
+      "brand": "Gowardhan",
+      "product_name": "Pure Cow Ghee Jar",
+      "variant": "200 ml",
+      "sku": "gowardhan_pure_cow_ghee_jar_200_ml",
+      "category": "Staples"
+    },
+    {
+      "class_id": 409,
+      "brand": "Haldirams",
+      "product_name": "Bhujia Sev",
+      "variant": "200 gms",
+      "sku": "haldirams_bhujia_sev_200_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 410,
+      "brand": "Haldirams",
+      "product_name": "Bhujia Sev",
+      "variant": "400 gms",
+      "sku": "haldirams_bhujia_sev_400_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 411,
+      "brand": "Haldirams",
+      "product_name": "Chana Nut",
+      "variant": "200 gms",
+      "sku": "haldirams_chana_nut_200_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 412,
+      "brand": "Haldirams",
+      "product_name": "Chatpata Dal Namkeen Pouch",
+      "variant": "200 gms",
+      "sku": "haldirams_chatpata_dal_namkeen_pouch_200_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 413,
+      "brand": "Haldirams",
+      "product_name": "Gulab Jamun Tin",
+      "variant": "1 kg",
+      "sku": "haldirams_gulab_jamun_tin_1_kg",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 414,
+      "brand": "Haldirams",
+      "product_name": "Khatta Meetha",
+      "variant": "400 gms",
+      "sku": "haldirams_khatta_meetha_400_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 415,
+      "brand": "Haldirams",
+      "product_name": "Moong Dal",
+      "variant": "400 gms",
+      "sku": "haldirams_moong_dal_400_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 416,
+      "brand": "Haldirams",
+      "product_name": "Moong Dal Namkeen",
+      "variant": "200 gms",
+      "sku": "haldirams_moong_dal_namkeen_200_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 417,
+      "brand": "Haldirams",
+      "product_name": "Namkeen Navratan Mix Pouch",
+      "variant": "150 gms",
+      "sku": "haldirams_namkeen_navratan_mix_pouch_150_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 418,
+      "brand": "Haldirams",
+      "product_name": "Namkeen Panchratan Mixture",
+      "variant": "",
+      "sku": "haldirams_namkeen_panchratan_mixture",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 419,
+      "brand": "Haldirams",
+      "product_name": "Ratlami Sev Namkeen Pouch",
+      "variant": "150 gms",
+      "sku": "haldirams_ratlami_sev_namkeen_pouch_150_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 422,
+      "brand": "Harpic",
+      "product_name": "Flushmatic In Cistern Toilet Cleaner Blocks Aquamarine",
+      "variant": "100 gms",
+      "sku": "harpic_flushmatic_in_cistern_toilet_cleaner_blocks_aquamarine_100_gms",
+      "category": "Household"
+    },
+    {
+      "class_id": 423,
+      "brand": "Harpic",
+      "product_name": "Hygienic Jasmine Rim Block",
+      "variant": "26 gms",
+      "sku": "harpic_hygienic_jasmine_rim_block_26_gms",
+      "category": "Household"
+    },
+    {
+      "class_id": 424,
+      "brand": "Harpic",
+      "product_name": "Lemon Disinfectant Bathroom Cleaner",
+      "variant": "500 ml",
+      "sku": "harpic_lemon_disinfectant_bathroom_cleaner_500_ml",
+      "category": "Household"
+    },
+    {
+      "class_id": 425,
+      "brand": "Harpic",
+      "product_name": "Power Plus Original Toilet Cleaner",
+      "variant": "650 ml",
+      "sku": "harpic_power_plus_original_toilet_cleaner_650_ml",
+      "category": "Household"
+    },
+    {
+      "class_id": 426,
+      "brand": "Hathi",
+      "product_name": "Chhap Sev",
+      "variant": "250 gms",
+      "sku": "hathi_chhap_sev_250_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 427,
+      "brand": "Havmor",
+      "product_name": "Sandwich Ice Cream",
+      "variant": "100 ml",
+      "sku": "havmor_sandwich_ice_cream_100_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 428,
+      "brand": "Havmor",
+      "product_name": "Vanilla Cup Ice Cream",
+      "variant": "120 ml",
+      "sku": "havmor_vanilla_cup_ice_cream_120_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 429,
+      "brand": "Head",
+      "product_name": "And Shoulders 2 In 1 Active Protect Shampoo",
+      "variant": "180 ml",
+      "sku": "head_and_shoulders_2_in_1_active_protect_shampoo_180_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 430,
+      "brand": "Head",
+      "product_name": "And Shoulders Anti Dandruff Cool Menthol Shampoo",
+      "variant": "",
+      "sku": "head_and_shoulders_anti_dandruff_cool_menthol_shampoo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 431,
+      "brand": "Head",
+      "product_name": "And Shoulders Silky Black Shampoo",
+      "variant": "",
+      "sku": "head_and_shoulders_silky_black_shampoo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 432,
+      "brand": "Head",
+      "product_name": "Shoulders Anti Dandruff Lemon Fresh Shampoo",
+      "variant": "180 ml",
+      "sku": "head_shoulders_anti_dandruff_lemon_fresh_shampoo_180_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 438,
+      "brand": "Hersheys",
+      "product_name": "Chocolate Flavour Syrup",
+      "variant": "200 gms",
+      "sku": "hersheys_chocolate_flavour_syrup_200_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 439,
+      "brand": "Hersheys",
+      "product_name": "Chocolate Syrup",
+      "variant": "623 gms",
+      "sku": "hersheys_chocolate_syrup_623_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 444,
+      "brand": "Hersheys",
+      "product_name": "Kisses Hazelnut N Cookies Milk Chocolate",
+      "variant": "33 gms",
+      "sku": "hersheys_kisses_hazelnut_n_cookies_milk_chocolate_33_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 445,
+      "brand": "Hersheys",
+      "product_name": "Strawberry Milkshake",
+      "variant": "180 ml",
+      "sku": "hersheys_strawberry_milkshake_180_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 446,
+      "brand": "Himalaya",
+      "product_name": "Anti Dandruff Soothing Shampoo 400Ml",
+      "variant": "",
+      "sku": "himalaya_anti_dandruff_soothing_shampoo_400ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 447,
+      "brand": "Himalaya",
+      "product_name": "Baby Massage Oil Bottle",
+      "variant": "100 ml",
+      "sku": "himalaya_baby_massage_oil_bottle_100_ml",
+      "category": "Staples"
+    },
+    {
+      "class_id": 450,
+      "brand": "Himalaya",
+      "product_name": "Purifying Neem Face Wash",
+      "variant": "50 ml",
+      "sku": "himalaya_purifying_neem_face_wash_50_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 451,
+      "brand": "Himalayan",
+      "product_name": "Natural Mineral Water Bottle",
+      "variant": "1 ltr",
+      "sku": "himalayan_natural_mineral_water_bottle_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 452,
+      "brand": "Hit",
+      "product_name": "Anti Roach Gel",
+      "variant": "15 gms",
+      "sku": "hit_anti_roach_gel_15_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 453,
+      "brand": "Homelite",
+      "product_name": "Matchsticks Box",
+      "variant": "1 unit",
+      "sku": "homelite_matchsticks_box_1_unit",
+      "category": "General"
+    },
+    {
+      "class_id": 455,
+      "brand": "Horlicks",
+      "product_name": "High Protein Drink Chocolate Protein 2X Multipack",
+      "variant": "400 gms",
+      "sku": "horlicks_high_protein_drink_chocolate_protein_2x_multipack_400_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 456,
+      "brand": "Huggies",
+      "product_name": "Wonder Pants Diaper Xl",
+      "variant": "56 unit",
+      "sku": "huggies_wonder_pants_diaper_xl_56_unit",
+      "category": "General"
+    },
+    {
+      "class_id": 457,
+      "brand": "Id",
+      "product_name": "Fresh Malabar Parota",
+      "variant": "400 gms",
+      "sku": "id_fresh_malabar_parota_400_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 458,
+      "brand": "Id",
+      "product_name": "Fresho Idlidosa Batter",
+      "variant": "1 kg",
+      "sku": "id_fresho_idlidosa_batter_1_kg",
+      "category": "General"
+    },
+    {
+      "class_id": 459,
+      "brand": "Id",
+      "product_name": "Fresho Wheat Lachha Paratha Pack Of 5",
+      "variant": "400 gms",
+      "sku": "id_fresho_wheat_lachha_paratha_pack_of_5_400_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 460,
+      "brand": "Indulekha",
+      "product_name": "Bringha Anti Hair Fall Shampoo",
+      "variant": "200 ml",
+      "sku": "indulekha_bringha_anti_hair_fall_shampoo_200_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 461,
+      "brand": "Jabsons",
+      "product_name": "Chilly Garlic Roasted Peanuts",
+      "variant": "140 gms",
+      "sku": "jabsons_chilly_garlic_roasted_peanuts_140_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 462,
+      "brand": "Jabsons",
+      "product_name": "Hing Jeera Roasted Chana",
+      "variant": "150 gms",
+      "sku": "jabsons_hing_jeera_roasted_chana_150_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 464,
+      "brand": "Jabsons",
+      "product_name": "Sattoo Chana",
+      "variant": "250 gms",
+      "sku": "jabsons_sattoo_chana_250_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 466,
+      "brand": "Jeeru",
+      "product_name": "Jeera Masala",
+      "variant": "300 ml",
+      "sku": "jeeru_jeera_masala_300_ml",
+      "category": "Staples"
+    },
+    {
+      "class_id": 468,
+      "brand": "Johnsons",
+      "product_name": "Natural Baby Powder",
+      "variant": "100 gms",
+      "sku": "johnsons_natural_baby_powder_100_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 469,
+      "brand": "Jordan",
+      "product_name": "Kids Toothbrush Soft",
+      "variant": "",
+      "sku": "jordan_kids_toothbrush_soft",
+      "category": "General"
+    },
+    {
+      "class_id": 473,
+      "brand": "Kanaiya",
+      "product_name": "Kurmura",
+      "variant": "500 gms",
+      "sku": "kanaiya_kurmura_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 476,
+      "brand": "Kelloggs",
+      "product_name": "Chocos",
+      "variant": "385 gms",
+      "sku": "kelloggs_chocos_385_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 478,
+      "brand": "Kelloggs",
+      "product_name": "Corn Flakes Original",
+      "variant": "",
+      "sku": "kelloggs_corn_flakes_original",
+      "category": "General"
+    },
+    {
+      "class_id": 479,
+      "brand": "Kelloggs",
+      "product_name": "Corn Flakes With Real Honey",
+      "variant": "",
+      "sku": "kelloggs_corn_flakes_with_real_honey",
+      "category": "General"
+    },
+    {
+      "class_id": 480,
+      "brand": "Kelloggs",
+      "product_name": "Muesli 21 Fruit And Nut",
+      "variant": "500 gms",
+      "sku": "kelloggs_muesli_21_fruit_and_nut_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 483,
+      "brand": "Kellogs",
+      "product_name": "Coco Pops",
+      "variant": "",
+      "sku": "kellogs_coco_pops",
+      "category": "General"
+    },
+    {
+      "class_id": 484,
+      "brand": "Kellogs",
+      "product_name": "Crunchy Nuts",
+      "variant": "",
+      "sku": "kellogs_crunchy_nuts",
+      "category": "General"
+    },
+    {
+      "class_id": 485,
+      "brand": "Kellogs",
+      "product_name": "Fruit Loops",
+      "variant": "",
+      "sku": "kellogs_fruit_loops",
+      "category": "General"
+    },
+    {
+      "class_id": 486,
+      "brand": "Kellogs",
+      "product_name": "Rice Krispies",
+      "variant": "",
+      "sku": "kellogs_rice_krispies",
+      "category": "Staples"
+    },
+    {
+      "class_id": 489,
+      "brand": "Keya",
+      "product_name": "Cinimon Powder",
+      "variant": "",
+      "sku": "keya_cinimon_powder",
+      "category": "General"
+    },
+    {
+      "class_id": 490,
+      "brand": "Keya",
+      "product_name": "Piri Piri Powder",
+      "variant": "",
+      "sku": "keya_piri_piri_powder",
+      "category": "General"
+    },
+    {
+      "class_id": 492,
+      "brand": "Keya",
+      "product_name": "Rosemarry Powder",
+      "variant": "",
+      "sku": "keya_rosemarry_powder",
+      "category": "General"
+    },
+    {
+      "class_id": 493,
+      "brand": "Keylogs",
+      "product_name": "Frosties",
+      "variant": "",
+      "sku": "keylogs_frosties",
+      "category": "General"
+    },
+    {
+      "class_id": 494,
+      "brand": "Kinder",
+      "product_name": "Joy",
+      "variant": "20 gms",
+      "sku": "kinder_joy_20_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 495,
+      "brand": "Kinley",
+      "product_name": "Club Soda Bottle",
+      "variant": "750 ml",
+      "sku": "kinley_club_soda_bottle_750_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 496,
+      "brand": "Kissan",
+      "product_name": "Fresh Tomato Ketchup Bottle",
+      "variant": "1 kg",
+      "sku": "kissan_fresh_tomato_ketchup_bottle_1_kg",
+      "category": "General"
+    },
+    {
+      "class_id": 498,
+      "brand": "Kissan",
+      "product_name": "Mixed Fruit Jam",
+      "variant": "90 gms",
+      "sku": "kissan_mixed_fruit_jam_90_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 500,
+      "brand": "Kissan",
+      "product_name": "Sweet Spicy Ketchup Bottle",
+      "variant": "1 kg",
+      "sku": "kissan_sweet_spicy_ketchup_bottle_1_kg",
+      "category": "General"
+    },
+    {
+      "class_id": 501,
+      "brand": "Knorr",
+      "product_name": "Classic Chicken Delite Soup Pouch",
+      "variant": "44 gms",
+      "sku": "knorr_classic_chicken_delite_soup_pouch_44_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 503,
+      "brand": "Ks",
+      "product_name": "Spark Deo",
+      "variant": "",
+      "sku": "ks_spark_deo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 504,
+      "brand": "Kwality",
+      "product_name": "Walls Feast Chocolate Ice Cream",
+      "variant": "65 ml",
+      "sku": "kwality_walls_feast_chocolate_ice_cream_65_ml",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 506,
+      "brand": "Kwality",
+      "product_name": "Walls Orange Mahabar Ice Cream",
+      "variant": "65 gms",
+      "sku": "kwality_walls_orange_mahabar_ice_cream_65_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 507,
+      "brand": "Kwality",
+      "product_name": "Walls Shahi Kulfi",
+      "variant": "50 ml",
+      "sku": "kwality_walls_shahi_kulfi_50_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 508,
+      "brand": "Kwality",
+      "product_name": "Walls Shikanji Chuski",
+      "variant": "60 ml",
+      "sku": "kwality_walls_shikanji_chuski_60_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 509,
+      "brand": "Kwality",
+      "product_name": "Walls So Alphonso Mango Ice Cream",
+      "variant": "700 ml",
+      "sku": "kwality_walls_so_alphonso_mango_ice_cream_700_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 510,
+      "brand": "Lavazza",
+      "product_name": "Qualita Rossa Coffee",
+      "variant": "250 gms",
+      "sku": "lavazza_qualita_rossa_coffee_250_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 511,
+      "brand": "Lays",
+      "product_name": "Classic Salted Potato Chips",
+      "variant": "90 gms",
+      "sku": "lays_classic_salted_potato_chips_90_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 512,
+      "brand": "Lays",
+      "product_name": "Indias Magic Masala Potato Chips",
+      "variant": "",
+      "sku": "lays_indias_magic_masala_potato_chips",
+      "category": "Staples"
+    },
+    {
+      "class_id": 513,
+      "brand": "Lays",
+      "product_name": "Sizzlin Hot Potato Chips",
+      "variant": "48 gms",
+      "sku": "lays_sizzlin_hot_potato_chips_48_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 514,
+      "brand": "Lays",
+      "product_name": "Wafer Style Sundried Chilli Flavour Potato Chips",
+      "variant": "52 gms",
+      "sku": "lays_wafer_style_sundried_chilli_flavour_potato_chips_52_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 515,
+      "brand": "Liberty",
+      "product_name": "Sunday Sunflower Oil",
+      "variant": "1 ltr",
+      "sku": "liberty_sunday_sunflower_oil_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 517,
+      "brand": "Limca",
+      "product_name": "Pet",
+      "variant": "250 ml",
+      "sku": "limca_pet_250_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 518,
+      "brand": "Lipton",
+      "product_name": "Darjeeling Tea",
+      "variant": "250 gms",
+      "sku": "lipton_darjeeling_tea_250_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 519,
+      "brand": "Lipton",
+      "product_name": "Green Tea Tulsi Natural",
+      "variant": "25 bags",
+      "sku": "lipton_green_tea_tulsi_natural_25_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 520,
+      "brand": "Lipton",
+      "product_name": "Honey Lemon Green Tea",
+      "variant": "25 bags",
+      "sku": "lipton_honey_lemon_green_tea_25_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 521,
+      "brand": "Lipton",
+      "product_name": "Yellow Label Tea",
+      "variant": "250 gms",
+      "sku": "lipton_yellow_label_tea_250_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 522,
+      "brand": "Liril",
+      "product_name": "Lemon Tea Tree Oil Soap Carton",
+      "variant": "125 gms",
+      "sku": "liril_lemon_tea_tree_oil_soap_carton_125_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 524,
+      "brand": "Lizol",
+      "product_name": "Disinfectant Surface Cleaner Citrus",
+      "variant": "500 ml",
+      "sku": "lizol_disinfectant_surface_cleaner_citrus_500_ml",
+      "category": "Household"
+    },
+    {
+      "class_id": 525,
+      "brand": "Loreal",
+      "product_name": "Paris 6 Oil Nourish Conditioner 180Ml",
+      "variant": "",
+      "sku": "loreal_paris_6_oil_nourish_conditioner_180ml",
+      "category": "Staples"
+    },
+    {
+      "class_id": 527,
+      "brand": "Loreal",
+      "product_name": "Paris Color Protect Conditioner",
+      "variant": "175 ml",
+      "sku": "loreal_paris_color_protect_conditioner_175_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 528,
+      "brand": "Loreal",
+      "product_name": "Paris Color Protect Shampoo",
+      "variant": "175 ml",
+      "sku": "loreal_paris_color_protect_shampoo_175_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 529,
+      "brand": "Lotte",
+      "product_name": "Choco Pie",
+      "variant": "6 unit",
+      "sku": "lotte_choco_pie_6_unit",
+      "category": "General"
+    },
+    {
+      "class_id": 531,
+      "brand": "Maaza",
+      "product_name": "Mango Drink Bottle",
+      "variant": "600 ml",
+      "sku": "maaza_mango_drink_bottle_600_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 532,
+      "brand": "Madhur",
+      "product_name": "Pure Hygienic Sugar",
+      "variant": "1 kg",
+      "sku": "madhur_pure_hygienic_sugar_1_kg",
+      "category": "General"
+    },
+    {
+      "class_id": 533,
+      "brand": "Madhur",
+      "product_name": "Sugar Pouch",
+      "variant": "5 kg",
+      "sku": "madhur_sugar_pouch_5_kg",
+      "category": "General"
+    },
+    {
+      "class_id": 534,
+      "brand": "Maggi",
+      "product_name": "2Minute Masala Instant Noodles",
+      "variant": "140 gms",
+      "sku": "maggi_2minute_masala_instant_noodles_140_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 535,
+      "brand": "Maggi",
+      "product_name": "Hot Sweet Tomato Chilli Sauce Bottle",
+      "variant": "1 kg",
+      "sku": "maggi_hot_sweet_tomato_chilli_sauce_bottle_1_kg",
+      "category": "General"
+    },
+    {
+      "class_id": 536,
+      "brand": "Maggi",
+      "product_name": "Korean Bbq Instant Veg Noodles Pouch",
+      "variant": "90 gms",
+      "sku": "maggi_korean_bbq_instant_veg_noodles_pouch_90_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 537,
+      "brand": "Maggi",
+      "product_name": "Masala A Magic Shahi Gravy Masala",
+      "variant": "10 gms",
+      "sku": "maggi_masala_a_magic_shahi_gravy_masala_10_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 538,
+      "brand": "Maggi",
+      "product_name": "Pichkoo Rich Tomato Ketchup",
+      "variant": "90 gms",
+      "sku": "maggi_pichkoo_rich_tomato_ketchup_90_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 539,
+      "brand": "Maggi",
+      "product_name": "Rich Tomato Ketchup",
+      "variant": "500 gms",
+      "sku": "maggi_rich_tomato_ketchup_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 540,
+      "brand": "Maggi",
+      "product_name": "Tomato Ketchup Pichkoo",
+      "variant": "120 gms",
+      "sku": "maggi_tomato_ketchup_pichkoo_120_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 556,
+      "brand": "Mapro",
+      "product_name": "Rose Sharbat",
+      "variant": "700 ml",
+      "sku": "mapro_rose_sharbat_700_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 559,
+      "brand": "Mars",
+      "product_name": "Mars",
+      "variant": "50 gms",
+      "sku": "mars_50_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 560,
+      "brand": "Mars",
+      "product_name": "Miniatures Bars",
+      "variant": "150 gms",
+      "sku": "mars_miniatures_bars_150_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 561,
+      "brand": "Mccain",
+      "product_name": "French Fries",
+      "variant": "525 gms",
+      "sku": "mccain_french_fries_525_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 562,
+      "brand": "Mccain",
+      "product_name": "Veggie Fingers Veggie Delight With Corn Carrot Peas",
+      "variant": "400 gms",
+      "sku": "mccain_veggie_fingers_veggie_delight_with_corn_carrot_peas_400_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 563,
+      "brand": "Mdh",
+      "product_name": "Channa Masala",
+      "variant": "",
+      "sku": "mdh_channa_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 564,
+      "brand": "Mdh",
+      "product_name": "Dal Makhani Mix",
+      "variant": "",
+      "sku": "mdh_dal_makhani_mix",
+      "category": "Staples"
+    },
+    {
+      "class_id": 565,
+      "brand": "Mdh",
+      "product_name": "Kastoori Methi",
+      "variant": "",
+      "sku": "mdh_kastoori_methi",
+      "category": "General"
+    },
+    {
+      "class_id": 566,
+      "brand": "Mentos",
+      "product_name": "Mint Candy",
+      "variant": "29 gms",
+      "sku": "mentos_mint_candy_29_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 567,
+      "brand": "Milka",
+      "product_name": "Erdbeer Strawberry Chocolate",
+      "variant": "100 gms",
+      "sku": "milka_erdbeer_strawberry_chocolate_100_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 572,
+      "brand": "Monaco",
+      "product_name": "Parle Classic Biscuit",
+      "variant": "200 gms",
+      "sku": "monaco_parle_classic_biscuit_200_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 582,
+      "brand": "Mooz",
+      "product_name": "Sour Cream",
+      "variant": "150 gms",
+      "sku": "mooz_sour_cream_150_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 583,
+      "brand": "Morde",
+      "product_name": "Dark Compound",
+      "variant": "400 gms",
+      "sku": "morde_dark_compound_400_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 584,
+      "brand": "Motas",
+      "product_name": "Premium Salted Chips",
+      "variant": "200 gms",
+      "sku": "motas_premium_salted_chips_200_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 585,
+      "brand": "Mother",
+      "product_name": "Dairy Cow Milk",
+      "variant": "500 ml",
+      "sku": "mother_dairy_cow_milk_500_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 586,
+      "brand": "Mother",
+      "product_name": "Dairy Curd Pouch",
+      "variant": "1 kg",
+      "sku": "mother_dairy_curd_pouch_1_kg",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 587,
+      "brand": "Mother",
+      "product_name": "Dairy Fresh Paneer 200 Gms Pouch",
+      "variant": "200 gms",
+      "sku": "mother_dairy_fresh_paneer_200_gms_pouch_200_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 588,
+      "brand": "Mother",
+      "product_name": "Dairy Masala Chaach With Green Chillies Ginger Jeera Source Of Calcium Carton",
+      "variant": "200 ml",
+      "sku": "mother_dairy_masala_chaach_with_green_chillies_ginger_jeera_source_of_calcium_carton_200_ml",
+      "category": "Staples"
+    },
+    {
+      "class_id": 589,
+      "brand": "Mother",
+      "product_name": "Dairy Premium Milk",
+      "variant": "500 ml",
+      "sku": "mother_dairy_premium_milk_500_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 590,
+      "brand": "Mother",
+      "product_name": "Dairy Tadaka Buttermilk",
+      "variant": "250 ml",
+      "sku": "mother_dairy_tadaka_buttermilk_250_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 591,
+      "brand": "Mothers",
+      "product_name": "Recipe Ginger Garlic Paste Pouch",
+      "variant": "200 gms",
+      "sku": "mothers_recipe_ginger_garlic_paste_pouch_200_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 592,
+      "brand": "Mothers",
+      "product_name": "Recipe Mixed Pickle Pouch",
+      "variant": "200 gms",
+      "sku": "mothers_recipe_mixed_pickle_pouch_200_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 593,
+      "brand": "Mr",
+      "product_name": "Makhana Cream Onion",
+      "variant": "65 gms",
+      "sku": "mr_makhana_cream_onion_65_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 594,
+      "brand": "Myfitness",
+      "product_name": "Chocolate Smooth Peanut Butter",
+      "variant": "227 gms",
+      "sku": "myfitness_chocolate_smooth_peanut_butter_227_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 596,
+      "brand": "Mysore",
+      "product_name": "Sandal Soap Premium Pack Of 3",
+      "variant": "150 gms",
+      "sku": "mysore_sandal_soap_premium_pack_of_3_150_gms",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 597,
+      "brand": "Nandini",
+      "product_name": "Special Toned Milk",
+      "variant": "500 ml",
+      "sku": "nandini_special_toned_milk_500_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 599,
+      "brand": "Nature",
+      "product_name": "Fresh Sampoorna Chakki Atta",
+      "variant": "10 kg",
+      "sku": "nature_fresh_sampoorna_chakki_atta_10_kg",
+      "category": "Staples"
+    },
+    {
+      "class_id": 601,
+      "brand": "Nescafe",
+      "product_name": "Classic Coffee Jar",
+      "variant": "100 gms",
+      "sku": "nescafe_classic_coffee_jar_100_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 602,
+      "brand": "Nescafe",
+      "product_name": "Classic Coffee Jar",
+      "variant": "50 gms",
+      "sku": "nescafe_classic_coffee_jar_50_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 603,
+      "brand": "Nescafe",
+      "product_name": "Classic Instant Coffee Powder",
+      "variant": "100 gms",
+      "sku": "nescafe_classic_instant_coffee_powder_100_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 604,
+      "brand": "Nescafe",
+      "product_name": "Ready To Drink Coffee Flavoured Milk Intense",
+      "variant": "180 ml",
+      "sku": "nescafe_ready_to_drink_coffee_flavoured_milk_intense_180_ml",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 605,
+      "brand": "Nescafe",
+      "product_name": "Sunrise Instant Coffee",
+      "variant": "10 gms",
+      "sku": "nescafe_sunrise_instant_coffee_10_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 606,
+      "brand": "Nestle",
+      "product_name": "A Nourish Dahi Cup",
+      "variant": "200 gms",
+      "sku": "nestle_a_nourish_dahi_cup_200_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 607,
+      "brand": "Nestle",
+      "product_name": "A Plus Slim Milk",
+      "variant": "1 ltr",
+      "sku": "nestle_a_plus_slim_milk_1_ltr",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 608,
+      "brand": "Nestle",
+      "product_name": "A Slim Dahi",
+      "variant": "400 gms",
+      "sku": "nestle_a_slim_dahi_400_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 609,
+      "brand": "Nestle",
+      "product_name": "Cerelac Baby Cereal With Milk Multigrain Dal Veg From 12 To 24 Months Box",
+      "variant": "300 gms",
+      "sku": "nestle_cerelac_baby_cereal_with_milk_multigrain_dal_veg_from_12_to_24_months_box_300_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 610,
+      "brand": "Nestle",
+      "product_name": "Everyday Dairy Whitener Milk Powder",
+      "variant": "15 gms",
+      "sku": "nestle_everyday_dairy_whitener_milk_powder_15_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 612,
+      "brand": "Nestle",
+      "product_name": "Kitkat Chocolate Coated Wafer Bar",
+      "variant": "8 gms",
+      "sku": "nestle_kitkat_chocolate_coated_wafer_bar_8_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 613,
+      "brand": "Nestle",
+      "product_name": "Maggi 2Minute Masala Instant Noodles",
+      "variant": "280 gms",
+      "sku": "nestle_maggi_2minute_masala_instant_noodles_280_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 615,
+      "brand": "Nestle",
+      "product_name": "Maggie",
+      "variant": "",
+      "sku": "nestle_maggie",
+      "category": "General"
+    },
+    {
+      "class_id": 616,
+      "brand": "Nestle",
+      "product_name": "Milkybar Creamy Mould Milk Chocolate Bar",
+      "variant": "25 gms",
+      "sku": "nestle_milkybar_creamy_mould_milk_chocolate_bar_25_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 617,
+      "brand": "Nestle",
+      "product_name": "Milkybar Creamy Texture",
+      "variant": "12 gms",
+      "sku": "nestle_milkybar_creamy_texture_12_gms",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 618,
+      "brand": "Nestle",
+      "product_name": "Nescafe Gold Blend",
+      "variant": "",
+      "sku": "nestle_nescafe_gold_blend",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 619,
+      "brand": "Nestle",
+      "product_name": "Nesquik Complementing Milk Chocolate Flavour",
+      "variant": "500 gms",
+      "sku": "nestle_nesquik_complementing_milk_chocolate_flavour_500_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 620,
+      "brand": "Nestly",
+      "product_name": "A Plus Toned Milk",
+      "variant": "1 ltr",
+      "sku": "nestly_a_plus_toned_milk_1_ltr",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 633,
+      "brand": "Nivea",
+      "product_name": "Natural Glow Smooth Skin Lotion",
+      "variant": "",
+      "sku": "nivea_natural_glow_smooth_skin_lotion",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 634,
+      "brand": "Nivea",
+      "product_name": "Pearl Beauty Roll On",
+      "variant": "50 ml",
+      "sku": "nivea_pearl_beauty_roll_on_50_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 635,
+      "brand": "Nutella",
+      "product_name": "Nutella",
+      "variant": "",
+      "sku": "nutella",
+      "category": "General"
+    },
+    {
+      "class_id": 636,
+      "brand": "Nutella",
+      "product_name": "Hazelnut Spread With Cocoa",
+      "variant": "180 gms",
+      "sku": "nutella_hazelnut_spread_with_cocoa_180_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 637,
+      "brand": "Nutella",
+      "product_name": "Hazelnut Spread With Cocoa Jar",
+      "variant": "350 gms",
+      "sku": "nutella_hazelnut_spread_with_cocoa_jar_350_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 638,
+      "brand": "Nutrela",
+      "product_name": "Soya Chunks",
+      "variant": "",
+      "sku": "nutrela_soya_chunks",
+      "category": "General"
+    },
+    {
+      "class_id": 639,
+      "brand": "Nutrela",
+      "product_name": "Soya Granules",
+      "variant": "",
+      "sku": "nutrela_soya_granules",
+      "category": "General"
+    },
+    {
+      "class_id": 640,
+      "brand": "Nutrela",
+      "product_name": "Soya Mini Chunks",
+      "variant": "",
+      "sku": "nutrela_soya_mini_chunks",
+      "category": "General"
+    },
+    {
+      "class_id": 644,
+      "brand": "Odonil",
+      "product_name": "Lavender Meadow Bathroom Air Freshener Blocks",
+      "variant": "48 gms",
+      "sku": "odonil_lavender_meadow_bathroom_air_freshener_blocks_48_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 645,
+      "brand": "Ogx",
+      "product_name": "Renewing Argan Oil Of Morocco Shampoo",
+      "variant": "385 ml",
+      "sku": "ogx_renewing_argan_oil_of_morocco_shampoo_385_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 646,
+      "brand": "Old",
+      "product_name": "Spice Lion Pride Deo",
+      "variant": "",
+      "sku": "old_spice_lion_pride_deo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 651,
+      "brand": "Organic",
+      "product_name": "Tattva Rajma Masala",
+      "variant": "",
+      "sku": "organic_tattva_rajma_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 653,
+      "brand": "Organic",
+      "product_name": "Tatva Amchur Powder",
+      "variant": "",
+      "sku": "organic_tatva_amchur_powder",
+      "category": "General"
+    },
+    {
+      "class_id": 655,
+      "brand": "Organic",
+      "product_name": "Tatva Subzi Masala",
+      "variant": "",
+      "sku": "organic_tatva_subzi_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 656,
+      "brand": "Organic",
+      "product_name": "Tatva Tandoori Masala",
+      "variant": "",
+      "sku": "organic_tatva_tandoori_masala",
+      "category": "Staples"
+    },
+    {
+      "class_id": 657,
+      "brand": "Pantene",
+      "product_name": "2 In 1 Hairfall Control Shampoo Conditioner",
+      "variant": "",
+      "sku": "pantene_2_in_1_hairfall_control_shampoo_conditioner",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 658,
+      "brand": "Pantene",
+      "product_name": "2 In 1 Hairfall Control Shampoo Conditioner",
+      "variant": "180 ml",
+      "sku": "pantene_2_in_1_hairfall_control_shampoo_conditioner_180_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 659,
+      "brand": "Pantene",
+      "product_name": "Lively Clean Shampoo",
+      "variant": "90 ml",
+      "sku": "pantene_lively_clean_shampoo_90_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 660,
+      "brand": "Pantene",
+      "product_name": "Silky Smooth Care Shampoo",
+      "variant": "75 ml",
+      "sku": "pantene_silky_smooth_care_shampoo_75_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 661,
+      "brand": "Paper",
+      "product_name": "Boat Aamras Mango Fruit Juice Pouch",
+      "variant": "180 ml",
+      "sku": "paper_boat_aamras_mango_fruit_juice_pouch_180_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 662,
+      "brand": "Paper",
+      "product_name": "Boat Anar Fruit Juice",
+      "variant": "180 ml",
+      "sku": "paper_boat_anar_fruit_juice_180_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 665,
+      "brand": "Parachute",
+      "product_name": "100 Pure Coconut Hair Oil Bottle",
+      "variant": "500 ml",
+      "sku": "parachute_100_pure_coconut_hair_oil_bottle_500_ml",
+      "category": "Staples"
+    },
+    {
+      "class_id": 666,
+      "brand": "Parle",
+      "product_name": "Fab Bourbon Chocolate Sandwich Biscuits",
+      "variant": "60 gms",
+      "sku": "parle_fab_bourbon_chocolate_sandwich_biscuits_60_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 667,
+      "brand": "Parle",
+      "product_name": "Fab Jamin Cream Biscuits Pouch",
+      "variant": "55 gms",
+      "sku": "parle_fab_jamin_cream_biscuits_pouch_55_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 668,
+      "brand": "Parle",
+      "product_name": "Hide Seek Choco Sandwich Creme Chocolate",
+      "variant": "100 gms",
+      "sku": "parle_hide_seek_choco_sandwich_creme_chocolate_100_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 670,
+      "brand": "Parle",
+      "product_name": "Krackjack Sweet Salty Biscuits",
+      "variant": "63 gms",
+      "sku": "parle_krackjack_sweet_salty_biscuits_63_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 672,
+      "brand": "Parlegms",
+      "product_name": "Gold Biscuits",
+      "variant": "200 gms",
+      "sku": "parlegms_gold_biscuits_200_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 673,
+      "brand": "Patanjali",
+      "product_name": "Kesh Kanti Protein Hair Conditioner",
+      "variant": "100 gms",
+      "sku": "patanjali_kesh_kanti_protein_hair_conditioner_100_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 674,
+      "brand": "Patanjali",
+      "product_name": "Kesh Kanti Reetha Hair Cleanser Shampoo",
+      "variant": "",
+      "sku": "patanjali_kesh_kanti_reetha_hair_cleanser_shampoo",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 675,
+      "brand": "Patanjali",
+      "product_name": "Poha",
+      "variant": "500 gms",
+      "sku": "patanjali_poha_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 678,
+      "brand": "Patanjali",
+      "product_name": "Super Dishwash Bar",
+      "variant": "145 gms",
+      "sku": "patanjali_super_dishwash_bar_145_gms",
+      "category": "Household"
+    },
+    {
+      "class_id": 679,
+      "brand": "Pediasure",
+      "product_name": "Nutritional Drink Powder",
+      "variant": "",
+      "sku": "pediasure_nutritional_drink_powder",
+      "category": "General"
+    },
+    {
+      "class_id": 681,
+      "brand": "Pepsi",
+      "product_name": "Soft Drink Bottle",
+      "variant": "1500 ml",
+      "sku": "pepsi_soft_drink_bottle_1500_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 682,
+      "brand": "Pepsi",
+      "product_name": "Tin",
+      "variant": "",
+      "sku": "pepsi_tin",
+      "category": "General"
+    },
+    {
+      "class_id": 684,
+      "brand": "Pickwick",
+      "product_name": "Strawberry Creamy Wafer Biscuits",
+      "variant": "60 gms",
+      "sku": "pickwick_strawberry_creamy_wafer_biscuits_60_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 685,
+      "brand": "Pidilite",
+      "product_name": "Fevi Kwik Adhesive Glue",
+      "variant": "1 gms",
+      "sku": "pidilite_fevi_kwik_adhesive_glue_1_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 690,
+      "brand": "Pril",
+      "product_name": "Lime Perfect Dishwash Liquid Bottle",
+      "variant": "500 ml",
+      "sku": "pril_lime_perfect_dishwash_liquid_bottle_500_ml",
+      "category": "Household"
+    },
+    {
+      "class_id": 691,
+      "brand": "Pringles",
+      "product_name": "Bbq Chips",
+      "variant": "40 gms",
+      "sku": "pringles_bbq_chips_40_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 692,
+      "brand": "Pringles",
+      "product_name": "Original Flavour Potato Chips",
+      "variant": "110 gms",
+      "sku": "pringles_original_flavour_potato_chips_110_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 693,
+      "brand": "Protinex",
+      "product_name": "Original Nutrition Drink",
+      "variant": "400 gms",
+      "sku": "protinex_original_nutrition_drink_400_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 698,
+      "brand": "Ragu",
+      "product_name": "Homemade Style Pizza Sauce",
+      "variant": "396 gms",
+      "sku": "ragu_homemade_style_pizza_sauce_396_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 699,
+      "brand": "Rasna",
+      "product_name": "Orange Instant Drink Powder",
+      "variant": "500 gms",
+      "sku": "rasna_orange_instant_drink_powder_500_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 700,
+      "brand": "Raw",
+      "product_name": "Coconut Water",
+      "variant": "200 ml",
+      "sku": "raw_coconut_water_200_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 701,
+      "brand": "Raw",
+      "product_name": "Pressery Almond Beverage Cacao",
+      "variant": "1 ltr",
+      "sku": "raw_pressery_almond_beverage_cacao_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 702,
+      "brand": "Raw",
+      "product_name": "Pressery Cold Extracted Juice Mango",
+      "variant": "200 ml",
+      "sku": "raw_pressery_cold_extracted_juice_mango_200_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 703,
+      "brand": "Real",
+      "product_name": "Act Alphonso Mango Nectar",
+      "variant": "1 ltr",
+      "sku": "real_act_alphonso_mango_nectar_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 704,
+      "brand": "Real",
+      "product_name": "Activ 100 Mix Fruit Juice",
+      "variant": "1 ltr",
+      "sku": "real_activ_100_mix_fruit_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 705,
+      "brand": "Real",
+      "product_name": "Active Fibre Plus Multi Fruit",
+      "variant": "1 ltr",
+      "sku": "real_active_fibre_plus_multi_fruit_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 706,
+      "brand": "Real",
+      "product_name": "Fruit Juice Tomato",
+      "variant": "1 ltr",
+      "sku": "real_fruit_juice_tomato_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 707,
+      "brand": "Real",
+      "product_name": "Fruit Orange Juice",
+      "variant": "1 ltr",
+      "sku": "real_fruit_orange_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 709,
+      "brand": "Real",
+      "product_name": "Fruit Power Cranberry Juice",
+      "variant": "1 ltr",
+      "sku": "real_fruit_power_cranberry_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 711,
+      "brand": "Real",
+      "product_name": "Fruit Power Pomegranate Juice",
+      "variant": "1 ltr",
+      "sku": "real_fruit_power_pomegranate_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 712,
+      "brand": "Real",
+      "product_name": "Guava Juice",
+      "variant": "1 ltr",
+      "sku": "real_guava_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 713,
+      "brand": "Real",
+      "product_name": "Mango Juice",
+      "variant": "1 ltr",
+      "sku": "real_mango_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 714,
+      "brand": "Real",
+      "product_name": "Mixed Fruit Juice",
+      "variant": "1 ltr",
+      "sku": "real_mixed_fruit_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 715,
+      "brand": "Real",
+      "product_name": "Mosambi Juice",
+      "variant": "1 ltr",
+      "sku": "real_mosambi_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 716,
+      "brand": "Real",
+      "product_name": "Thai Pad Thai Noodles",
+      "variant": "375 gms",
+      "sku": "real_thai_pad_thai_noodles_375_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 717,
+      "brand": "Real",
+      "product_name": "Thai Sriracha Extra Hot Chilli Sauce",
+      "variant": "",
+      "sku": "real_thai_sriracha_extra_hot_chilli_sauce",
+      "category": "General"
+    },
+    {
+      "class_id": 718,
+      "brand": "Real",
+      "product_name": "Wellnezz Jamun Fruit Juice",
+      "variant": "1 ltr",
+      "sku": "real_wellnezz_jamun_fruit_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 719,
+      "brand": "Red",
+      "product_name": "Bull Energy Drink",
+      "variant": "250 ml",
+      "sku": "red_bull_energy_drink_250_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 720,
+      "brand": "Red",
+      "product_name": "Bull Sugar Free Drink",
+      "variant": "250 ml",
+      "sku": "red_bull_sugar_free_drink_250_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 722,
+      "brand": "Rite",
+      "product_name": "Bite Max Protein Ultimate Choco Berry",
+      "variant": "30 gms",
+      "sku": "rite_bite_max_protein_ultimate_choco_berry_30_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 723,
+      "brand": "Ritebite",
+      "product_name": "Classic Choco Max Protein Daily Bar",
+      "variant": "50 gms",
+      "sku": "ritebite_classic_choco_max_protein_daily_bar_50_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 724,
+      "brand": "Ritebite",
+      "product_name": "Max Protein Daily Choco Berry Bar",
+      "variant": "50 gms",
+      "sku": "ritebite_max_protein_daily_choco_berry_bar_50_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 725,
+      "brand": "Ritebite",
+      "product_name": "Max Protein Daily Choco Classic Nutrition Bar",
+      "variant": "50 gms",
+      "sku": "ritebite_max_protein_daily_choco_classic_nutrition_bar_50_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 726,
+      "brand": "Ritebite",
+      "product_name": "Max Protein Professional Choco Almond Bar",
+      "variant": "100 gms",
+      "sku": "ritebite_max_protein_professional_choco_almond_bar_100_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 727,
+      "brand": "Saffola",
+      "product_name": "Gold Refined Cooking Oil",
+      "variant": "1 ltr",
+      "sku": "saffola_gold_refined_cooking_oil_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 728,
+      "brand": "Saffola",
+      "product_name": "Veggie Twist Masala Oats",
+      "variant": "38 gms",
+      "sku": "saffola_veggie_twist_masala_oats_38_gms",
+      "category": "Staples"
+    },
+    {
+      "class_id": 729,
+      "brand": "Schweppes",
+      "product_name": "Ginger Ale Drink",
+      "variant": "300 ml",
+      "sku": "schweppes_ginger_ale_drink_300_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 730,
+      "brand": "Schweppes",
+      "product_name": "Soda Water",
+      "variant": "300 ml",
+      "sku": "schweppes_soda_water_300_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 731,
+      "brand": "Schweppes",
+      "product_name": "Tonic Water Tin",
+      "variant": "300 ml",
+      "sku": "schweppes_tonic_water_tin_300_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 732,
+      "brand": "Scotch",
+      "product_name": "Brite Large Scrub Sponge",
+      "variant": "3 unit",
+      "sku": "scotch_brite_large_scrub_sponge_3_unit",
+      "category": "General"
+    },
+    {
+      "class_id": 734,
+      "brand": "Sensodyne",
+      "product_name": "Deep Clean Paste",
+      "variant": "",
+      "sku": "sensodyne_deep_clean_paste",
+      "category": "General"
+    },
+    {
+      "class_id": 735,
+      "brand": "Sensodyne",
+      "product_name": "Fresh Mint Toothpaste",
+      "variant": "",
+      "sku": "sensodyne_fresh_mint_toothpaste",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 736,
+      "brand": "Sensodyne",
+      "product_name": "Rapid Relief Toothpaste",
+      "variant": "",
+      "sku": "sensodyne_rapid_relief_toothpaste",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 738,
+      "brand": "Shan",
+      "product_name": "Haleem Mized Masala Poweder",
+      "variant": "",
+      "sku": "shan_haleem_mized_masala_poweder",
+      "category": "Staples"
+    },
+    {
+      "class_id": 739,
+      "brand": "Shan",
+      "product_name": "Korma Mixed Masala Powder",
+      "variant": "",
+      "sku": "shan_korma_mixed_masala_powder",
+      "category": "Staples"
+    },
+    {
+      "class_id": 740,
+      "brand": "Shan",
+      "product_name": "Malay Chicken Biryani Mixed Masala Poweder",
+      "variant": "",
+      "sku": "shan_malay_chicken_biryani_mixed_masala_poweder",
+      "category": "Staples"
+    },
+    {
+      "class_id": 741,
+      "brand": "Shan",
+      "product_name": "Paya Mixed Masala Powder",
+      "variant": "",
+      "sku": "shan_paya_mixed_masala_powder",
+      "category": "Staples"
+    },
+    {
+      "class_id": 742,
+      "brand": "Shan",
+      "product_name": "Pilau Biryani",
+      "variant": "",
+      "sku": "shan_pilau_biryani",
+      "category": "General"
+    },
+    {
+      "class_id": 743,
+      "brand": "Shan",
+      "product_name": "Sindhi Biryani Mixed Masala Powder",
+      "variant": "",
+      "sku": "shan_sindhi_biryani_mixed_masala_powder",
+      "category": "Staples"
+    },
+    {
+      "class_id": 745,
+      "brand": "Skittles",
+      "product_name": "Fruits",
+      "variant": "",
+      "sku": "skittles_fruits",
+      "category": "General"
+    },
+    {
+      "class_id": 746,
+      "brand": "Skittles",
+      "product_name": "Sours",
+      "variant": "",
+      "sku": "skittles_sours",
+      "category": "General"
+    },
+    {
+      "class_id": 747,
+      "brand": "Slurrp",
+      "product_name": "Farm Millet Crunch Chocolate Stars And Moons Cereal",
+      "variant": "400 gms",
+      "sku": "slurrp_farm_millet_crunch_chocolate_stars_and_moons_cereal_400_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 748,
+      "brand": "Smith",
+      "product_name": "Jones Ginger Garlic Paste",
+      "variant": "200 gms",
+      "sku": "smith_jones_ginger_garlic_paste_200_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 749,
+      "brand": "Snickers",
+      "product_name": "Snickers",
+      "variant": "50 gms",
+      "sku": "snickers_50_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 750,
+      "brand": "Snickers",
+      "product_name": "Miniatures Bars",
+      "variant": "150 gms",
+      "sku": "snickers_miniatures_bars_150_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 751,
+      "brand": "Society",
+      "product_name": "Leaf Tea",
+      "variant": "",
+      "sku": "society_leaf_tea",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 752,
+      "brand": "Society",
+      "product_name": "Leaf Tea Pouch",
+      "variant": "250 gms",
+      "sku": "society_leaf_tea_pouch_250_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 753,
+      "brand": "Society",
+      "product_name": "Leaf Tea Pouch",
+      "variant": "500 gms",
+      "sku": "society_leaf_tea_pouch_500_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 754,
+      "brand": "Society",
+      "product_name": "Masala Tea",
+      "variant": "250 gms",
+      "sku": "society_masala_tea_250_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 755,
+      "brand": "Society",
+      "product_name": "Tea Pouch",
+      "variant": "250 gms",
+      "sku": "society_tea_pouch_250_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 756,
+      "brand": "Sofit",
+      "product_name": "Soya Milk Choclate",
+      "variant": "200 ml",
+      "sku": "sofit_soya_milk_choclate_200_ml",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 757,
+      "brand": "Sofit",
+      "product_name": "Soya Milk Natural",
+      "variant": "1 ltr",
+      "sku": "sofit_soya_milk_natural_1_ltr",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 758,
+      "brand": "Sofit",
+      "product_name": "Soya Milk Natural Sugar Free",
+      "variant": "1 ltr",
+      "sku": "sofit_soya_milk_natural_sugar_free_1_ltr",
+      "category": "Dairy"
+    },
+    {
+      "class_id": 759,
+      "brand": "Sofit",
+      "product_name": "Soya Vanilla Flavour Drink Tetra Pack",
+      "variant": "200 ml",
+      "sku": "sofit_soya_vanilla_flavour_drink_tetra_pack_200_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 763,
+      "brand": "Sprite",
+      "product_name": "Zero Sugar Tin",
+      "variant": "",
+      "sku": "sprite_zero_sugar_tin",
+      "category": "General"
+    },
+    {
+      "class_id": 767,
+      "brand": "Sugar",
+      "product_name": "Free Gold",
+      "variant": "100 gms",
+      "sku": "sugar_free_gold_100_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 768,
+      "brand": "Sugar",
+      "product_name": "Free Natura Powder Concentrate",
+      "variant": "100 gms",
+      "sku": "sugar_free_natura_powder_concentrate_100_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 769,
+      "brand": "Sundrop",
+      "product_name": "Peanut Butter Creamy Bottle",
+      "variant": "462 gms",
+      "sku": "sundrop_peanut_butter_creamy_bottle_462_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 773,
+      "brand": "Sunfeast",
+      "product_name": "Dark Fantasy Choco Fills Cookie",
+      "variant": "75 gms",
+      "sku": "sunfeast_dark_fantasy_choco_fills_cookie_75_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 774,
+      "brand": "Sunny",
+      "product_name": "Sunlite Refined Sunflower Oil",
+      "variant": "1 ltr",
+      "sku": "sunny_sunlite_refined_sunflower_oil_1_ltr",
+      "category": "Staples"
+    },
+    {
+      "class_id": 775,
+      "brand": "Sunsilk",
+      "product_name": "Nourishing Soft Smooth Shampoo With Egg Protein Almond Oil Vitamin C For 2X Smoother Softer Hair 180 Ml",
+      "variant": "180 ml",
+      "sku": "sunsilk_nourishing_soft_smooth_shampoo_with_egg_protein_almond_oil_vitamin_c_for_2x_smoother_softer_hair_180_ml_180_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 776,
+      "brand": "Surf",
+      "product_name": "Excel Easy Wash Detergent Powder",
+      "variant": "1 kg",
+      "sku": "surf_excel_easy_wash_detergent_powder_1_kg",
+      "category": "Household"
+    },
+    {
+      "class_id": 777,
+      "brand": "Surf",
+      "product_name": "Excel Matic Front Load Detergent Powder",
+      "variant": "1 kg",
+      "sku": "surf_excel_matic_front_load_detergent_powder_1_kg",
+      "category": "Household"
+    },
+    {
+      "class_id": 778,
+      "brand": "Surf",
+      "product_name": "Excel Matic Front Load Liquid Detergent",
+      "variant": "500 ml",
+      "sku": "surf_excel_matic_front_load_liquid_detergent_500_ml",
+      "category": "Household"
+    },
+    {
+      "class_id": 780,
+      "brand": "Taj",
+      "product_name": "Mahal",
+      "variant": "",
+      "sku": "taj_mahal",
+      "category": "General"
+    },
+    {
+      "class_id": 781,
+      "brand": "Taj",
+      "product_name": "Mahal 100",
+      "variant": "tea bags",
+      "sku": "taj_mahal_100_tea_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 782,
+      "brand": "Tata",
+      "product_name": "Agni Leaf Tea",
+      "variant": "250 gms",
+      "sku": "tata_agni_leaf_tea_250_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 783,
+      "brand": "Tata",
+      "product_name": "Gold Tea",
+      "variant": "500 gms",
+      "sku": "tata_gold_tea_500_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 784,
+      "brand": "Tata",
+      "product_name": "Iodised Salt",
+      "variant": "1 kg",
+      "sku": "tata_iodised_salt_1_kg",
+      "category": "General"
+    },
+    {
+      "class_id": 785,
+      "brand": "Tata",
+      "product_name": "Premium Tea",
+      "variant": "250 gms",
+      "sku": "tata_premium_tea_250_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 786,
+      "brand": "Tata",
+      "product_name": "Sampann Organic Toor Dal",
+      "variant": "1 kg",
+      "sku": "tata_sampann_organic_toor_dal_1_kg",
+      "category": "Staples"
+    },
+    {
+      "class_id": 788,
+      "brand": "Tata",
+      "product_name": "Tea Agni",
+      "variant": "",
+      "sku": "tata_tea_agni",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 789,
+      "brand": "Tata",
+      "product_name": "Tea Gold",
+      "variant": "",
+      "sku": "tata_tea_gold",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 790,
+      "brand": "Tata",
+      "product_name": "Tea Gold",
+      "variant": "250 gms",
+      "sku": "tata_tea_gold_250_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 791,
+      "brand": "Tata",
+      "product_name": "Tea Premium",
+      "variant": "",
+      "sku": "tata_tea_premium",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 793,
+      "brand": "Tetley",
+      "product_name": "Elaichi Tea Bags",
+      "variant": "50 bags",
+      "sku": "tetley_elaichi_tea_bags_50_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 794,
+      "brand": "Tetley",
+      "product_name": "Ginger Mint Lemon Green Tea",
+      "variant": "25 bags",
+      "sku": "tetley_ginger_mint_lemon_green_tea_25_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 795,
+      "brand": "Tetley",
+      "product_name": "Green Tea Regular",
+      "variant": "25 bags",
+      "sku": "tetley_green_tea_regular_25_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 796,
+      "brand": "Tetley",
+      "product_name": "Masala Chai",
+      "variant": "20 bags",
+      "sku": "tetley_masala_chai_20_bags",
+      "category": "Staples"
+    },
+    {
+      "class_id": 797,
+      "brand": "Tez",
+      "product_name": "Mustard Oil Bottle",
+      "variant": "500 ml",
+      "sku": "tez_mustard_oil_bottle_500_ml",
+      "category": "Staples"
+    },
+    {
+      "class_id": 798,
+      "brand": "The",
+      "product_name": "Whole Truth Cranberry Protein Bar",
+      "variant": "52 gms",
+      "sku": "the_whole_truth_cranberry_protein_bar_52_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 800,
+      "brand": "Thums",
+      "product_name": "Up Energy Soft Drink",
+      "variant": "600 ml",
+      "sku": "thums_up_energy_soft_drink_600_ml",
+      "category": "General"
+    },
+    {
+      "class_id": 801,
+      "brand": "Thums",
+      "product_name": "Up Soft Drink",
+      "variant": "1 ltr",
+      "sku": "thums_up_soft_drink_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 802,
+      "brand": "Tify",
+      "product_name": "Jalapeno Slices",
+      "variant": "360 gms",
+      "sku": "tify_jalapeno_slices_360_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 803,
+      "brand": "Toblerone",
+      "product_name": "Dark Chocolate With Honey Almond Nougat",
+      "variant": "100 gms",
+      "sku": "toblerone_dark_chocolate_with_honey_almond_nougat_100_gms",
+      "category": "Snacks"
+    },
+    {
+      "class_id": 804,
+      "brand": "Tresemme",
+      "product_name": "Keratin Smooth Shampoo",
+      "variant": "185 ml",
+      "sku": "tresemme_keratin_smooth_shampoo_185_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 805,
+      "brand": "Tresemme",
+      "product_name": "Smooth Shine Shampoo",
+      "variant": "180 ml",
+      "sku": "tresemme_smooth_shine_shampoo_180_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 806,
+      "brand": "Trident",
+      "product_name": "Gum Sugar Free Strawberry",
+      "variant": "1 pcs",
+      "sku": "trident_gum_sugar_free_strawberry_1_pcs",
+      "category": "General"
+    },
+    {
+      "class_id": 807,
+      "brand": "Tropicana",
+      "product_name": "Apple 100 Juice",
+      "variant": "1 ltr",
+      "sku": "tropicana_apple_100_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 808,
+      "brand": "Tropicana",
+      "product_name": "Apple Delight",
+      "variant": "1 ltr",
+      "sku": "tropicana_apple_delight_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 809,
+      "brand": "Tropicana",
+      "product_name": "Cranberry Delight Fruit Juice",
+      "variant": "1 ltr",
+      "sku": "tropicana_cranberry_delight_fruit_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 810,
+      "brand": "Tropicana",
+      "product_name": "Delight Guava Fruit Juice",
+      "variant": "1 ltr",
+      "sku": "tropicana_delight_guava_fruit_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 812,
+      "brand": "Tropicana",
+      "product_name": "Litchi",
+      "variant": "1 ltr",
+      "sku": "tropicana_litchi_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 813,
+      "brand": "Tropicana",
+      "product_name": "Mango Delight Juice",
+      "variant": "1 ltr",
+      "sku": "tropicana_mango_delight_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 814,
+      "brand": "Tropicana",
+      "product_name": "Orange Delight Juice",
+      "variant": "1 ltr",
+      "sku": "tropicana_orange_delight_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 815,
+      "brand": "Tropicana",
+      "product_name": "Orange Juice",
+      "variant": "1 ltr",
+      "sku": "tropicana_orange_juice_1_ltr",
+      "category": "General"
+    },
+    {
+      "class_id": 816,
+      "brand": "Twinings",
+      "product_name": "Earl Grey Green Tea",
+      "variant": "25 bags",
+      "sku": "twinings_earl_grey_green_tea_25_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 817,
+      "brand": "Twinings",
+      "product_name": "Green Tea And Mint",
+      "variant": "25 bags",
+      "sku": "twinings_green_tea_and_mint_25_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 818,
+      "brand": "Twinings",
+      "product_name": "Green Tea Lemon And Honey",
+      "variant": "25 bags",
+      "sku": "twinings_green_tea_lemon_and_honey_25_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 819,
+      "brand": "Twinings",
+      "product_name": "Greens Tea And Lemon",
+      "variant": "25 bags",
+      "sku": "twinings_greens_tea_and_lemon_25_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 820,
+      "brand": "Twinings",
+      "product_name": "Jasmine And Green Tea",
+      "variant": "25 bags",
+      "sku": "twinings_jasmine_and_green_tea_25_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 821,
+      "brand": "Twinings",
+      "product_name": "Pure Camomile",
+      "variant": "25 bags",
+      "sku": "twinings_pure_camomile_25_bags",
+      "category": "General"
+    },
+    {
+      "class_id": 822,
+      "brand": "Twinings",
+      "product_name": "Pure Green Tea",
+      "variant": "25 bags",
+      "sku": "twinings_pure_green_tea_25_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 827,
+      "brand": "Typhoo",
+      "product_name": "Green Tea Lemon Honey 25",
+      "variant": "tea bags",
+      "sku": "typhoo_green_tea_lemon_honey_25_tea_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 828,
+      "brand": "Typhoo",
+      "product_name": "Green Tea Traditional Tulsi",
+      "variant": "20 bags",
+      "sku": "typhoo_green_tea_traditional_tulsi_20_bags",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 829,
+      "brand": "Unibic",
+      "product_name": "Cashew Cookies",
+      "variant": "75 gms",
+      "sku": "unibic_cashew_cookies_75_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 835,
+      "brand": "Veeba",
+      "product_name": "Pasta Pizza Sauce",
+      "variant": "280 gms",
+      "sku": "veeba_pasta_pizza_sauce_280_gms",
+      "category": "General"
+    },
+    {
+      "class_id": 836,
+      "brand": "Veer",
+      "product_name": "Jee Veg Rusk Box",
+      "variant": "400 gms",
+      "sku": "veer_jee_veg_rusk_box_400_gms",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 837,
+      "brand": "Vim",
+      "product_name": "Lemon Dishwash Bar Tub",
+      "variant": "500 gms",
+      "sku": "vim_lemon_dishwash_bar_tub_500_gms",
+      "category": "Household"
+    },
+    {
+      "class_id": 839,
+      "brand": "Vim",
+      "product_name": "Lemon Dishwash Liquid Gel Bottle",
+      "variant": "750 gms",
+      "sku": "vim_lemon_dishwash_liquid_gel_bottle_750_gms",
+      "category": "Household"
+    },
+    {
+      "class_id": 840,
+      "brand": "Vita",
+      "product_name": "Marie Gold",
+      "variant": "",
+      "sku": "vita_marie_gold",
+      "category": "Bakery & Biscuits"
+    },
+    {
+      "class_id": 841,
+      "brand": "Wagh",
+      "product_name": "Bakri Premium Assam Tea",
+      "variant": "200 gms",
+      "sku": "wagh_bakri_premium_assam_tea_200_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 842,
+      "brand": "Wagh",
+      "product_name": "Bakri Premium Leaf Tea",
+      "variant": "",
+      "sku": "wagh_bakri_premium_leaf_tea",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 843,
+      "brand": "Wagh",
+      "product_name": "Bakri Premium Leaf Tea",
+      "variant": "250 gms",
+      "sku": "wagh_bakri_premium_leaf_tea_250_gms",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 844,
+      "brand": "Wagh",
+      "product_name": "Bakri Premium Leaf Tea Jar",
+      "variant": "1 kg",
+      "sku": "wagh_bakri_premium_leaf_tea_jar_1_kg",
+      "category": "Beverages"
+    },
+    {
+      "class_id": 845,
+      "brand": "Weetabix",
+      "product_name": "Britains Favorite High In Fibre Breakfast Cereal",
+      "variant": "12 unit",
+      "sku": "weetabix_britains_favorite_high_in_fibre_breakfast_cereal_12_unit",
+      "category": "General"
+    },
+    {
+      "class_id": 846,
+      "brand": "Weetabix",
+      "product_name": "Crispy Mini",
+      "variant": "",
+      "sku": "weetabix_crispy_mini",
+      "category": "General"
+    },
+    {
+      "class_id": 853,
+      "brand": "Yardley",
+      "product_name": "London Deodorant English Rose Deodorant For Women",
+      "variant": "150 ml",
+      "sku": "yardley_london_deodorant_english_rose_deodorant_for_women_150_ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 855,
+      "brand": "Yardley",
+      "product_name": "London Morning Dew Refreshing Deo",
+      "variant": "150 ml",
+      "sku": "yardley_london_morning_dew_refreshing_deo_150_ml",
+      "category": "Personal Care"
+    }
+  ]
+}
