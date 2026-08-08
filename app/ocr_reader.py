@@ -9,13 +9,14 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from app.brand_dictionary import match_brand_in_text, match_product_for_brand
+from app.brand_dictionary import match_from_text
 
 _reader: Any | None = None
 _reader_failed = False
 
 OCR_MIN_CONFIDENCE = float(os.getenv("OCR_MIN_CONFIDENCE", "0.6"))
 OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() in {"1", "true", "yes"}
+OCR_UPSCALE_MIN = int(os.getenv("OCR_UPSCALE_MIN", "160"))
 
 
 def _get_reader():
@@ -37,11 +38,23 @@ def _get_reader():
         return None
 
 
+def _prepare_for_ocr(image: Image.Image) -> Image.Image:
+    """Upscale small YOLO crops so pack text is readable."""
+    width, height = image.size
+    longest = max(width, height)
+    if longest >= OCR_UPSCALE_MIN:
+        return image
+    scale = OCR_UPSCALE_MIN / float(longest)
+    new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+    return image.resize(new_size, Image.Resampling.LANCZOS)
+
+
 def read_text_from_pil(image: Image.Image) -> str:
     reader = _get_reader()
     if reader is None:
         return ""
-    arr = np.asarray(image.convert("RGB"))
+    prepared = _prepare_for_ocr(image)
+    arr = np.asarray(prepared.convert("RGB"))
     try:
         lines = reader.readtext(arr, detail=0, paragraph=True)
         if isinstance(lines, list):
@@ -57,24 +70,19 @@ def _clean_ocr_text(text: str) -> str:
     return text
 
 
-def classify_with_ocr(image: Image.Image) -> dict | None:
+def classify_with_ocr(image: Image.Image, raw_text: str | None = None) -> dict | None:
     """Try to identify product from packaging text. Returns None if OCR fails or is unclear."""
     if not OCR_ENABLED:
         return None
-    raw = _clean_ocr_text(read_text_from_pil(image))
+    raw = _clean_ocr_text(raw_text if raw_text is not None else read_text_from_pil(image))
     if len(raw) < 3:
         return None
 
-    brand_match = match_brand_in_text(raw)
-    if not brand_match:
-        return None
-
-    brand, brand_conf = brand_match
-    product = match_product_for_brand(brand, raw)
+    product = match_from_text(raw)
     if not product:
         return None
 
-    confidence = float(product.get("confidence") or brand_conf)
+    confidence = float(product.get("confidence") or 0)
     if confidence < OCR_MIN_CONFIDENCE:
         return None
 
@@ -82,3 +90,10 @@ def classify_with_ocr(image: Image.Image) -> dict | None:
     product["confidence"] = confidence
     product["recognition_source"] = "ocr"
     return product
+
+
+def read_packaging_text(image: Image.Image) -> str:
+    """Always read visible text, even when brand matching fails."""
+    if not OCR_ENABLED:
+        return ""
+    return _clean_ocr_text(read_text_from_pil(image))

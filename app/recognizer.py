@@ -11,11 +11,11 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from PIL import Image
 
-from app.brand_dictionary import category_allows_brand
+from app.brand_dictionary import category_allows_brand, reconcile_label_with_text
 from app.clip_embeddings import embed_pil_images
 from app.faiss_matcher import is_ready, match_embeddings_batch
 from app.learned_catalog import learn_sku, metadata_to_sku
-from app.ocr_reader import classify_with_ocr
+from app.ocr_reader import classify_with_ocr, read_packaging_text
 
 load_dotenv()
 
@@ -53,10 +53,13 @@ Return ONLY valid JSON:
 }
 
 Rules:
-- brand = manufacturer shown on pack (e.g. Lipton, Tetley, Mars)
-- product_name = product type (e.g. Green Tea, Tea Bags, Chocolate Bar)
+- brand = manufacturer shown on pack (e.g. Lipton, Tetley, Tata Tea, Mars)
+- product_name = product type or sub-brand (e.g. Green Tea, Tea Agni, Tea Bags)
 - variant = flavor/size if visible (e.g. 25 bags, 200g)
 - confidence = 0.0 to 1.0 based on label readability
+- Read the logo on THIS pack only — do not guess from shelf neighbors
+- Yellow Lipton boxes are Lipton, not Tata
+- Tata Tea Agni pouches say "AGNI" — use brand Tata and product_name Tea Agni
 - Use "Unknown" / "Unidentified SKU" ONLY if the pack is unreadable
 
 No markdown or extra text.
@@ -88,6 +91,8 @@ def classify_with_gpt(image: Image.Image, ocr_hint: str = "") -> dict:
         result["recognition_source"] = "gpt"
         result["category"] = result.get("category") or "General"
         result["confidence"] = float(result.get("confidence") or 0.75)
+        if ocr_hint:
+            result = reconcile_label_with_text(result, ocr_hint)
         if not result.get("sku"):
             result["sku"] = metadata_to_sku(
                 result.get("brand") or "",
@@ -169,17 +174,19 @@ def classify_records_v2(
     gpt_queue: list[tuple[int, str]] = []
     faiss_queue: list[int] = []
     learned_new = 0
+    ocr_texts: list[str] = [""] * len(records)
 
     for index, (record, image) in enumerate(zip(records, images)):
-        ocr_label = classify_with_ocr(image)
+        pack_text = read_packaging_text(image)
+        ocr_texts[index] = pack_text
+        ocr_label = classify_with_ocr(image, raw_text=pack_text)
         if ocr_label and _is_valid_label(ocr_label):
             classified[index] = _merge_label(record, ocr_label)
             stats["ocr"] += 1
             if _should_learn(ocr_label) and learn_sku(embeddings[index], ocr_label, scan_id=scan_id):
                 learned_new += 1
             continue
-        ocr_hint = (ocr_label or {}).get("visible_text", "") if ocr_label else ""
-        gpt_queue.append((index, ocr_hint))
+        gpt_queue.append((index, pack_text))
 
     gpt_cap = _smart_gpt_cap(len(gpt_queue))
     gpt_used = 0
@@ -204,6 +211,7 @@ def classify_records_v2(
             if match and _accept_faiss_match(match, scan_category):
                 merged = {**records[global_idx], **match}
                 merged["confidence"] = float(match.get("confidence") or score)
+                merged = reconcile_label_with_text(merged, ocr_texts[global_idx])
                 source = match.get("recognition_source") or "faiss"
                 stats["learned" if source == "learned" else "faiss"] += 1
                 classified[global_idx] = merged
