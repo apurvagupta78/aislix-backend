@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.idea/
+product_*.jpg
+aislix_crops_*/
+audit_report.pdf
+*.log
+test_scan_output.json
+build_faiss.log
+.git/

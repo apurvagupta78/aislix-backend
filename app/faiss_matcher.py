@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
-import faiss
 import numpy as np
 from PIL import Image
 
@@ -16,11 +16,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INDEX_PATH = BASE_DIR / "data" / "faiss.index"
 DEFAULT_THRESHOLD = float(os.getenv("FAISS_SIMILARITY_THRESHOLD", "0.85"))
 
-_index: faiss.Index | None = None
+_index: Any | None = None
 _catalog: list[dict] | None = None
 
 
-def _load() -> tuple[faiss.Index, list[dict]]:
+def _load() -> tuple[Any, list[dict]]:
     global _index, _catalog
     if _index is not None and _catalog is not None:
         return _index, _catalog
@@ -28,6 +28,8 @@ def _load() -> tuple[faiss.Index, list[dict]]:
         raise FileNotFoundError(
             "FAISS index or catalog missing. Run scripts/build_faiss_index.py first."
         )
+    import faiss
+
     _index = faiss.read_index(str(INDEX_PATH))
     _catalog = load_catalog()
     return _index, _catalog
@@ -43,6 +45,8 @@ def match_embedding(
 ) -> tuple[dict | None, float]:
     index, catalog = _load()
     vec = np.asarray(embedding, dtype=np.float32).reshape(1, -1)
+    import faiss
+
     faiss.normalize_L2(vec)
     scores, ids = index.search(vec, 1)
     if ids[0][0] < 0:

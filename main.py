@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
 
 DEFAULT_ORIGINS = [
     "https://aislix.lovable.app",
@@ -29,6 +33,12 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def on_startup():
+    port = os.getenv("PORT", "8080")
+    print(f"Aislix API starting on 0.0.0.0:{port}")
+
+
 @app.get("/")
 def home():
     return {"message": "Aislix Backend is running", "version": "1.0.0"}
@@ -36,11 +46,9 @@ def home():
 
 @app.get("/health")
 def health():
-    from app.faiss_matcher import is_ready
-
     return {
         "status": "ok",
-        "faiss_ready": is_ready(),
+        "faiss_ready": (DATA_DIR / "faiss.index").exists() and (DATA_DIR / "catalog.json").exists(),
     }
 
 
