@@ -67,6 +67,13 @@ def learned_catalog_stats():
     return {"learned_skus": count_learned()}
 
 
+@app.get("/categories")
+def list_categories():
+    from app.scan_context import load_aislix_categories
+
+    return {"categories": load_aislix_categories()}
+
+
 @app.get("/scan/{scan_id}")
 def scan_status(scan_id: str):
     from app.jobs import get_job
@@ -102,11 +109,30 @@ async def scan(request: Request):
         scan_id = body.get("scan_id")
         if not scan_id:
             raise HTTPException(status_code=400, detail="scan_id is required.")
+
         metadata = {
+            "store_id": body.get("store_id"),
+            "aisle": body.get("aisle"),
+            "rack": body.get("rack"),
+            "bin": body.get("bin"),
             "shelf_label": body.get("shelf_label"),
             "category": body.get("category"),
             "notes": body.get("notes"),
         }
+
+        from app.scan_context import build_shelf_label, validate_scan_metadata
+
+        validation_errors = validate_scan_metadata(metadata)
+        if validation_errors:
+            raise HTTPException(status_code=400, detail="; ".join(validation_errors))
+
+        if not metadata.get("shelf_label"):
+            metadata["shelf_label"] = build_shelf_label(
+                aisle=metadata.get("aisle"),
+                rack=metadata.get("rack"),
+                bin_label=metadata.get("bin"),
+            ) or None
+
         image_urls = body.get("image_urls") or []
         if not image_urls and body.get("images"):
             image_urls = [item.get("url") for item in body["images"] if item.get("url")]

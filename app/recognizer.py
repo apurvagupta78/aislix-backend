@@ -16,6 +16,7 @@ from app.clip_embeddings import embed_pil_images
 from app.faiss_matcher import is_ready, match_embeddings_batch
 from app.learned_catalog import learn_sku, metadata_to_sku
 from app.ocr_reader import classify_with_ocr, read_packaging_text
+from app.scan_context import gpt_context_prompt
 
 load_dotenv()
 
@@ -66,10 +67,15 @@ No markdown or extra text.
 """
 
 
-def classify_with_gpt(image: Image.Image, ocr_hint: str = "") -> dict:
+def classify_with_gpt(
+    image: Image.Image,
+    ocr_hint: str = "",
+    scan_context: dict | None = None,
+) -> dict:
     buffer = BytesIO()
     image.save(buffer, format="JPEG", quality=85)
     image_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+    context_block = gpt_context_prompt(scan_context)
     hint = f"\nOCR hint (may be partial): {ocr_hint}" if ocr_hint else ""
     try:
         response = get_client().responses.create(
@@ -78,7 +84,7 @@ def classify_with_gpt(image: Image.Image, ocr_hint: str = "") -> dict:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "input_text", "text": GPT_PROMPT + hint},
+                        {"type": "input_text", "text": GPT_PROMPT + context_block + hint},
                         {
                             "type": "input_image",
                             "image_url": f"data:image/jpeg;base64,{image_b64}",
@@ -93,6 +99,14 @@ def classify_with_gpt(image: Image.Image, ocr_hint: str = "") -> dict:
         result["confidence"] = float(result.get("confidence") or 0.75)
         if ocr_hint:
             result = reconcile_label_with_text(result, ocr_hint)
+        if scan_context and not category_allows_brand(
+            None,
+            result.get("brand") or "",
+            result.get("sku") or "",
+            result.get("category") or "",
+            scan_context=scan_context,
+        ):
+            return _unknown_label(confidence=0.4)
         if not result.get("sku"):
             result["sku"] = metadata_to_sku(
                 result.get("brand") or "",
@@ -152,16 +166,40 @@ def _merge_label(record: dict, label: dict) -> dict:
     return merged
 
 
-def _accept_faiss_match(match: dict, scan_category: str | None) -> bool:
+def _accept_faiss_match(
+    match: dict,
+    scan_category: str | None,
+    scan_context: dict | None = None,
+) -> bool:
     brand = match.get("brand") or ""
     sku = match.get("sku") or ""
-    return category_allows_brand(scan_category, brand, sku)
+    entry_category = match.get("category") or ""
+    return category_allows_brand(
+        scan_category,
+        brand,
+        sku,
+        entry_category=entry_category,
+        scan_context=scan_context,
+    )
+
+
+def _accept_ocr_label(label: dict, scan_context: dict | None) -> bool:
+    if not scan_context:
+        return True
+    return category_allows_brand(
+        None,
+        label.get("brand") or "",
+        label.get("sku") or "",
+        label.get("category") or "",
+        scan_context=scan_context,
+    )
 
 
 def classify_records_v2(
     records: list[dict],
     scan_id: str | None = None,
     scan_category: str | None = None,
+    scan_context: dict | None = None,
 ) -> tuple[list[dict], dict]:
     """OCR → GPT → learned/base FAISS → unknown."""
     if not records:
@@ -180,7 +218,7 @@ def classify_records_v2(
         pack_text = read_packaging_text(image)
         ocr_texts[index] = pack_text
         ocr_label = classify_with_ocr(image, raw_text=pack_text)
-        if ocr_label and _is_valid_label(ocr_label):
+        if ocr_label and _is_valid_label(ocr_label) and _accept_ocr_label(ocr_label, scan_context):
             classified[index] = _merge_label(record, ocr_label)
             stats["ocr"] += 1
             if _should_learn(ocr_label) and learn_sku(embeddings[index], ocr_label, scan_id=scan_id):
@@ -192,7 +230,7 @@ def classify_records_v2(
     gpt_used = 0
     for index, ocr_hint in gpt_queue:
         if gpt_used < gpt_cap:
-            label = classify_with_gpt(images[index], ocr_hint=ocr_hint)
+            label = classify_with_gpt(images[index], ocr_hint=ocr_hint, scan_context=scan_context)
             gpt_used += 1
             if _is_valid_label(label):
                 classified[index] = _merge_label(records[index], label)
@@ -208,7 +246,7 @@ def classify_records_v2(
         still_unknown: list[int] = []
         for local_idx, (match, score) in enumerate(matches):
             global_idx = faiss_queue[local_idx]
-            if match and _accept_faiss_match(match, scan_category):
+            if match and _accept_faiss_match(match, scan_category, scan_context=scan_context):
                 merged = {**records[global_idx], **match}
                 merged["confidence"] = float(match.get("confidence") or score)
                 merged = reconcile_label_with_text(merged, ocr_texts[global_idx])
@@ -279,9 +317,15 @@ def classify_records(
     records: list[dict],
     scan_id: str | None = None,
     scan_category: str | None = None,
+    scan_context: dict | None = None,
 ) -> list[dict]:
     if RECOGNITION_V2:
-        classified, stats = classify_records_v2(records, scan_id=scan_id, scan_category=scan_category)
+        classified, stats = classify_records_v2(
+            records,
+            scan_id=scan_id,
+            scan_category=scan_category,
+            scan_context=scan_context,
+        )
         print(
             "Recognition v2:",
             f"ocr={stats.get('ocr', 0)}",

@@ -31,6 +31,7 @@ from app.metrics import (
 )
 from app.recognizer import classify_records
 from app.report_generator import generate_annotated_image, generate_csv_bytes, generate_pdf_bytes
+from app.scan_context import resolve_scan_context
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 LOGO_PATH = BASE_DIR / "assets" / "aislix_logo.png"
@@ -67,8 +68,14 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             raise ValueError("No products detected in this shelf image.")
 
         records, work_dir = crop_products(image, boxes)
-        scan_category = metadata.get("category") or metadata.get("shelf_label")
-        classified = classify_records(records, scan_id=scan_id, scan_category=scan_category)
+        scan_context = resolve_scan_context(metadata)
+        scan_category = scan_context.get("aislix_category") or metadata.get("category") or metadata.get("shelf_label")
+        classified = classify_records(
+            records,
+            scan_id=scan_id,
+            scan_category=scan_category,
+            scan_context=scan_context,
+        )
         inventory = aggregate_inventory(classified)
         products = inventory_to_api_products(inventory)
         processing_ms = int((time.time() - started) * 1000)
@@ -123,8 +130,15 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             "learned_updates": learned_updates,
             "learned_catalog_size": count_learned(),
             "learned_new_this_scan": len(learned_updates),
-            "shelf_label": metadata.get("shelf_label"),
-            "category": metadata.get("category"),
+            "store_id": scan_context.get("store_id"),
+            "shelf_label": scan_context.get("shelf_label") or metadata.get("shelf_label"),
+            "category": scan_context.get("aislix_category") or metadata.get("category"),
+            "scan_context": {
+                "aislix_category": scan_context.get("aislix_category"),
+                "aislix_category_id": scan_context.get("aislix_category_id"),
+                "shelf_label": scan_context.get("shelf_label"),
+                "store_id": scan_context.get("store_id"),
+            },
         }
     finally:
         if work_dir and work_dir.exists():

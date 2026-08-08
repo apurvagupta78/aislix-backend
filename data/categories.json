@@ -1,0 +1,52 @@
+[
+  {
+    "id": "beverages",
+    "name": "Beverages",
+    "examples": "Water, soft drinks, juices, energy drinks, tea, coffee, sports drinks"
+  },
+  {
+    "id": "fresh_food",
+    "name": "Fresh Food",
+    "examples": "Fruits, vegetables, fresh meat, fish, eggs"
+  },
+  {
+    "id": "dairy_chilled",
+    "name": "Dairy & Chilled",
+    "examples": "Milk, curd, paneer, cheese, butter, yogurt"
+  },
+  {
+    "id": "grocery_staples",
+    "name": "Grocery & Staples",
+    "examples": "Rice, atta, dal, pulses, oil, sugar, salt, spices"
+  },
+  {
+    "id": "packaged_food_snacks",
+    "name": "Packaged Food & Snacks",
+    "examples": "Biscuits, chips, namkeen, noodles, pasta, cereals, chocolates, confectionery, sauces"
+  },
+  {
+    "id": "frozen_ice_cream",
+    "name": "Frozen Foods & Ice Cream",
+    "examples": "Ice cream, frozen vegetables, frozen snacks, frozen meals"
+  },
+  {
+    "id": "personal_care",
+    "name": "Personal Care",
+    "examples": "Shampoo, soap, toothpaste, deodorant, skincare, cosmetics, shaving"
+  },
+  {
+    "id": "home_care",
+    "name": "Home Care",
+    "examples": "Detergent, dishwash, floor cleaner, toilet cleaner, disinfectants, air fresheners, insecticides"
+  },
+  {
+    "id": "health_wellness",
+    "name": "Health & Wellness",
+    "examples": "OTC products, vitamins, supplements, first aid, health foods"
+  },
+  {
+    "id": "baby_pet_care",
+    "name": "Baby & Pet Care",
+    "examples": "Baby food, diapers, wipes, pet food, pet hygiene"
+  }
+]

@@ -243,10 +243,26 @@ def match_product_for_brand(brand: str, text: str) -> dict | None:
     }
 
 
-def category_allows_brand(scan_category: str | None, brand: str, sku: str = "") -> bool:
+def category_allows_brand(
+    scan_category: str | None,
+    brand: str,
+    sku: str = "",
+    entry_category: str = "",
+    scan_context: dict | None = None,
+) -> bool:
     """Reject obvious cross-aisle FAISS false positives when scan category is set."""
+    from app.scan_context import resolve_scan_context, sku_allowed_in_context
+
+    if scan_context:
+        return sku_allowed_in_context(brand, sku=sku, entry_category=entry_category, context=scan_context)
+
     if not scan_category or not brand:
         return True
+
+    ctx = resolve_scan_context({"category": scan_category})
+    if ctx.get("aislix_category"):
+        return sku_allowed_in_context(brand, sku=sku, entry_category=entry_category, context=ctx)
+
     cat = scan_category.lower()
     brand_l = brand.lower()
     sku_cat = infer_category(sku or brand_l).lower()
