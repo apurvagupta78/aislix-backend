@@ -69,6 +69,8 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             inventory=inventory,
             shares=shares,
             recommendations=recommendations,
+            alerts=alerts,
+            executive_summary=summary_text,
             logo_path=LOGO_PATH if LOGO_PATH.exists() else None,
         )
         csv_b64 = base64.b64encode(generate_csv_bytes(inventory)).decode("utf-8")

@@ -60,6 +60,45 @@ def match_embedding(
     return entry, score
 
 
+def match_embeddings_batch(
+    embeddings: np.ndarray,
+    threshold: float = DEFAULT_THRESHOLD,
+) -> list[tuple[dict | None, float]]:
+    if len(embeddings) == 0:
+        return []
+    index, catalog = _load()
+    vecs = np.asarray(embeddings, dtype=np.float32)
+    import faiss
+
+    faiss.normalize_L2(vecs)
+    scores, ids = index.search(vecs, 1)
+    results: list[tuple[dict | None, float]] = []
+    for row in range(len(vecs)):
+        idx = int(ids[row][0])
+        if idx < 0:
+            results.append((None, 0.0))
+            continue
+        score = float(scores[row][0])
+        if score < threshold:
+            results.append((None, score))
+            continue
+        entry = dict(catalog[idx])
+        entry["confidence"] = round(min(0.99, score), 4)
+        entry["recognition_source"] = "faiss"
+        results.append((entry, score))
+    return results
+
+
+def match_pil_images(
+    images: list[Image.Image],
+    threshold: float = DEFAULT_THRESHOLD,
+) -> list[tuple[dict | None, float]]:
+    if not images:
+        return []
+    embeddings = embed_pil_images(images)
+    return match_embeddings_batch(embeddings, threshold=threshold)
+
+
 def match_pil_image(image: Image.Image, threshold: float = DEFAULT_THRESHOLD) -> tuple[dict | None, float]:
     embedding = embed_pil_images([image])[0]
     return match_embedding(embedding, threshold=threshold)

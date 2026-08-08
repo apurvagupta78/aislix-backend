@@ -11,13 +11,14 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from PIL import Image
 
-from app.faiss_matcher import is_ready, match_pil_image
-from app.grouping import group_similar_products
+from app.clip_embeddings import embed_pil_images
+from app.faiss_matcher import is_ready, match_embeddings_batch
 
 load_dotenv()
 
 _client: OpenAI | None = None
 GPT_MODEL = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini")
+GPT_MAX_FALLBACKS = int(os.getenv("GPT_MAX_FALLBACKS", "12"))
 
 
 def get_client() -> OpenAI:
@@ -71,47 +72,57 @@ def classify_with_gpt(image: Image.Image) -> dict:
         return result
     except Exception:
         return {
-            "brand": "",
-            "product_name": "Unknown Product",
+            "brand": "Unknown",
+            "product_name": "Unidentified SKU",
             "variant": "",
-            "confidence": 0.0,
+            "confidence": 0.35,
             "category": "General",
             "recognition_source": "gpt",
         }
 
 
-def classify_group(representative: dict) -> dict:
-    image = Image.open(representative["image_path"]).convert("RGB")
-    if is_ready():
-        try:
-            match, _score = match_pil_image(image)
-            if match:
-                return match
-        except Exception:
-            pass
-    return classify_with_gpt(image)
-
-
-def _confidence_for_crop(item: dict, group_label: dict) -> float:
-    image = Image.open(item["image_path"]).convert("RGB")
-    if is_ready():
-        try:
-            match, score = match_pil_image(image, threshold=0.0)
-            if match:
-                return float(match.get("confidence") or score)
-            return round(float(score), 4)
-        except Exception:
-            pass
-    return float(group_label.get("confidence") or 0.0)
+def _unknown_label(confidence: float = 0.35) -> dict:
+    return {
+        "brand": "Unknown",
+        "product_name": "Unidentified SKU",
+        "variant": "",
+        "confidence": confidence,
+        "category": "General",
+        "recognition_source": "none",
+    }
 
 
 def classify_records(records: list[dict]) -> list[dict]:
-    groups = group_similar_products(records)
-    classified: list[dict] = []
-    for group in groups:
-        label = classify_group(group[0])
-        for item in group:
-            merged = {**item, **label}
-            merged["confidence"] = _confidence_for_crop(item, label)
-            classified.append(merged)
-    return classified
+    """Classify each detected crop individually for accurate SKU + qty aggregation."""
+    if not records:
+        return []
+
+    images = [Image.open(record["image_path"]).convert("RGB") for record in records]
+    embeddings = embed_pil_images(images)
+    classified: list[dict | None] = [None] * len(records)
+    gpt_queue: list[int] = []
+
+    if is_ready():
+        matches = match_embeddings_batch(embeddings)
+        for index, (item, (match, score)) in enumerate(zip(records, matches)):
+            if match:
+                merged = {**item, **match}
+                merged["confidence"] = float(match.get("confidence") or score)
+                classified[index] = merged
+            else:
+                gpt_queue.append(index)
+    else:
+        gpt_queue = list(range(len(records)))
+
+    gpt_used = 0
+    for index in gpt_queue:
+        if gpt_used < GPT_MAX_FALLBACKS:
+            label = classify_with_gpt(images[index])
+            gpt_used += 1
+        else:
+            label = _unknown_label()
+        merged = {**records[index], **label}
+        merged["confidence"] = float(label.get("confidence") or 0.35)
+        classified[index] = merged
+
+    return [row for row in classified if row is not None]

@@ -14,7 +14,8 @@ def aggregate_inventory(classified: list[dict]) -> list[dict]:
         brand = (item.get("brand") or "Unknown").strip()
         product = (item.get("product_name") or "Unknown").strip()
         variant = (item.get("variant") or "").strip()
-        key = (brand.lower(), product.lower(), variant.lower())
+        sku = (item.get("sku") or "").strip()
+        key = (brand.lower(), product.lower(), variant.lower(), sku.lower())
         bucket = buckets[key]
         bucket["brand"] = brand
         bucket["product_name"] = product
