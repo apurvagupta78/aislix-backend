@@ -57,6 +57,27 @@ def aggregate_inventory(classified: list[dict]) -> list[dict]:
     return inventory
 
 
+def inventory_to_api_products(inventory: list[dict]) -> list[dict]:
+    """Aggregated SKU rows for the frontend (one row per brand/product/variant)."""
+    products = []
+    for row in inventory:
+        products.append(
+            {
+                "brand": row["brand"],
+                "product_name": row["product_name"],
+                "name": row["product_name"],
+                "variant": row.get("variant") or "",
+                "category": row.get("category") or "General",
+                "sku": row.get("sku") or "",
+                "quantity": row["quantity"],
+                "facings": row["facings"],
+                "confidence": row["confidence"],
+                "stock_status": row.get("stock_status") or "in_stock",
+            }
+        )
+    return products
+
+
 def expand_to_products(inventory: list[dict], classified: list[dict]) -> list[dict]:
     """One row per facing for Supabase detected_products normalization."""
     products = []

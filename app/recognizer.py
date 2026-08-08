@@ -92,6 +92,19 @@ def classify_group(representative: dict) -> dict:
     return classify_with_gpt(image)
 
 
+def _confidence_for_crop(item: dict, group_label: dict) -> float:
+    image = Image.open(item["image_path"]).convert("RGB")
+    if is_ready():
+        try:
+            match, score = match_pil_image(image, threshold=0.0)
+            if match:
+                return float(match.get("confidence") or score)
+            return round(float(score), 4)
+        except Exception:
+            pass
+    return float(group_label.get("confidence") or 0.0)
+
+
 def classify_records(records: list[dict]) -> list[dict]:
     groups = group_similar_products(records)
     classified: list[dict] = []
@@ -99,5 +112,6 @@ def classify_records(records: list[dict]) -> list[dict]:
         label = classify_group(group[0])
         for item in group:
             merged = {**item, **label}
+            merged["confidence"] = _confidence_for_crop(item, label)
             classified.append(merged)
     return classified

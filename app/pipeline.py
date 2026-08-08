@@ -20,7 +20,7 @@ from app.detector import (
     load_image_bytes,
     load_image_from_url,
 )
-from app.inventory import aggregate_inventory, expand_to_products
+from app.inventory import aggregate_inventory, inventory_to_api_products
 from app.metrics import (
     brand_share,
     build_alerts,
@@ -50,7 +50,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         records, work_dir = crop_products(image, boxes)
         classified = classify_records(records)
         inventory = aggregate_inventory(classified)
-        products = expand_to_products(inventory, classified)
+        products = inventory_to_api_products(inventory)
         processing_ms = int((time.time() - started) * 1000)
         metrics = compute_metrics(inventory, classified, image.shape, processing_ms)
         shares = brand_share(inventory)
