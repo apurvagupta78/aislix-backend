@@ -26,9 +26,12 @@ uvicorn main:app --reload --port 8000
 
 - `OPENAI_API_KEY`
 - `CORS_ORIGINS=https://aislix.lovable.app,https://id-preview--449a1800-6064-43d4-9afe-f713a920d0d4.lovable.app`
-- `FAISS_SIMILARITY_THRESHOLD=0.85` (optional)
-- `OPENAI_VISION_MODEL=gpt-4o-mini` (optional)
-- `GPT_MAX_FALLBACKS=12` (optional — max GPT calls per scan)
+- `FAISS_SIMILARITY_THRESHOLD=0.92` (default in v2 — was 0.85)
+- `GPT_MAX_FALLBACKS=80` (smart cap in v2 — was 12)
+- `RECOGNITION_V2=true` (OCR-first pipeline; set `false` to revert to v1)
+- `OCR_ENABLED=true` / `OCR_LANGUAGES=en`
+- `OCR_MIN_CONFIDENCE=0.6`
+- `LEARN_MIN_CONFIDENCE=0.7` (only OCR/GPT labels above this are learned)
 - `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (required for persistent learned SKU catalog)
 - `LEARNED_CATALOG_BUCKET=catalog-data` (optional — Supabase storage bucket name)
 

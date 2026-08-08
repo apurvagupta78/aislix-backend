@@ -14,7 +14,7 @@ from app.clip_embeddings import embed_pil_images
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INDEX_PATH = BASE_DIR / "data" / "faiss.index"
-DEFAULT_THRESHOLD = float(os.getenv("FAISS_SIMILARITY_THRESHOLD", "0.85"))
+DEFAULT_THRESHOLD = float(os.getenv("FAISS_SIMILARITY_THRESHOLD", "0.92"))
 
 _index: Any | None = None
 _catalog: list[dict] | None = None

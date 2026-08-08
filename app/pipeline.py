@@ -36,6 +36,25 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 LOGO_PATH = BASE_DIR / "assets" / "aislix_logo.png"
 
 
+def _recognition_stats(classified: list[dict]) -> dict:
+    counts = {"ocr": 0, "gpt": 0, "faiss": 0, "learned": 0, "none": 0}
+    for item in classified:
+        source = (item.get("recognition_source") or "none").lower()
+        if source in counts:
+            counts[source] += 1
+        elif source == "none":
+            counts["none"] += 1
+        else:
+            counts["faiss"] += 1
+    return {
+        "recognition_ocr": counts["ocr"],
+        "recognition_gpt": counts["gpt"],
+        "recognition_faiss": counts["faiss"],
+        "recognition_learned": counts["learned"],
+        "recognition_unknown": counts["none"],
+    }
+
+
 def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata: dict | None = None) -> dict:
     started = time.time()
     scan_id = scan_id or uuid.uuid4().hex[:8]
@@ -48,11 +67,14 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             raise ValueError("No products detected in this shelf image.")
 
         records, work_dir = crop_products(image, boxes)
-        classified = classify_records(records, scan_id=scan_id)
+        scan_category = metadata.get("category") or metadata.get("shelf_label")
+        classified = classify_records(records, scan_id=scan_id, scan_category=scan_category)
         inventory = aggregate_inventory(classified)
         products = inventory_to_api_products(inventory)
         processing_ms = int((time.time() - started) * 1000)
         metrics = compute_metrics(inventory, classified, image.shape, processing_ms)
+        recognition_stats = _recognition_stats(classified)
+        metrics.update(recognition_stats)
         shares = brand_share(inventory)
         categories = category_breakdown(inventory)
         alerts = build_alerts(metrics)
@@ -82,7 +104,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
 
         return {
             "scan_id": scan_id,
-            "model_version": "yolov8+faiss+clip+gpt",
+            "model_version": "yolov8+ocr+faiss+clip+gpt-v2",
             "executive_summary": summary_text,
             "summary_text": summary_text,
             "metrics": metrics,

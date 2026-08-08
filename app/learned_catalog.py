@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import uuid
@@ -37,7 +38,10 @@ def metadata_to_sku(brand: str, product_name: str, variant: str = "") -> str:
 
 
 def is_learnable(label: dict) -> bool:
-    if label.get("recognition_source") != "gpt":
+    source = label.get("recognition_source")
+    if source not in {"gpt", "ocr"}:
+        return False
+    if float(label.get("confidence") or 0) < float(os.getenv("LEARN_MIN_CONFIDENCE", "0.7")):
         return False
     brand = (label.get("brand") or "").strip()
     product = (label.get("product_name") or "").strip()
