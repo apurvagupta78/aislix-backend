@@ -1,4 +1,4 @@
-"""Product recognition: FAISS catalog first, GPT Vision fallback."""
+"""Product recognition: FAISS catalog first, GPT Vision fallback, learn new SKUs."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from PIL import Image
 
 from app.clip_embeddings import embed_pil_images
 from app.faiss_matcher import is_ready, match_embeddings_batch
+from app.learned_catalog import learn_sku
 
 load_dotenv()
 
@@ -92,8 +93,8 @@ def _unknown_label(confidence: float = 0.35) -> dict:
     }
 
 
-def classify_records(records: list[dict]) -> list[dict]:
-    """Classify each detected crop individually for accurate SKU + qty aggregation."""
+def classify_records(records: list[dict], scan_id: str | None = None) -> list[dict]:
+    """Classify each crop with FAISS/learned catalog first; GPT only for remaining misses."""
     if not records:
         return []
 
@@ -101,6 +102,7 @@ def classify_records(records: list[dict]) -> list[dict]:
     embeddings = embed_pil_images(images)
     classified: list[dict | None] = [None] * len(records)
     gpt_queue: list[int] = []
+    learned_new = 0
 
     if is_ready():
         matches = match_embeddings_batch(embeddings)
@@ -119,10 +121,15 @@ def classify_records(records: list[dict]) -> list[dict]:
         if gpt_used < GPT_MAX_FALLBACKS:
             label = classify_with_gpt(images[index])
             gpt_used += 1
+            if learn_sku(embeddings[index], label, scan_id=scan_id):
+                learned_new += 1
         else:
             label = _unknown_label()
         merged = {**records[index], **label}
         merged["confidence"] = float(label.get("confidence") or 0.35)
         classified[index] = merged
+
+    if learned_new:
+        print(f"Learned {learned_new} new SKU(s) from GPT (scan={scan_id})")
 
     return [row for row in classified if row is not None]

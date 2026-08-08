@@ -37,7 +37,10 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     port = os.getenv("PORT", "8080")
-    print(f"Aislix API starting on 0.0.0.0:{port}")
+    from app.learned_catalog import load_learned
+
+    learned = load_learned()
+    print(f"Aislix API starting on 0.0.0.0:{port} (learned SKUs: {learned})")
 
 
 @app.get("/")
@@ -47,10 +50,21 @@ def home():
 
 @app.get("/health")
 def health():
+    from app.learned_catalog import count_learned
+
     return {
         "status": "ok",
         "faiss_ready": (DATA_DIR / "faiss.index").exists() and (DATA_DIR / "catalog.json").exists(),
+        "learned_skus": count_learned(),
     }
+
+
+@app.get("/catalog/learned")
+def learned_catalog_stats():
+    from app.learned_catalog import count_learned, load_learned
+
+    load_learned()
+    return {"learned_skus": count_learned()}
 
 
 @app.get("/scan/{scan_id}")

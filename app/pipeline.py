@@ -48,7 +48,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             raise ValueError("No products detected in this shelf image.")
 
         records, work_dir = crop_products(image, boxes)
-        classified = classify_records(records)
+        classified = classify_records(records, scan_id=scan_id)
         inventory = aggregate_inventory(classified)
         products = inventory_to_api_products(inventory)
         processing_ms = int((time.time() - started) * 1000)
@@ -58,6 +58,10 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         alerts = build_alerts(metrics)
         recommendations = build_recommendations(metrics, inventory)
         summary_text = executive_summary(metrics)
+
+        from app.learned_catalog import flush_learned
+
+        flush_learned()
 
         annotated = generate_annotated_image(image, classified)
         _, encoded = cv2.imencode(".jpg", annotated)

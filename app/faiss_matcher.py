@@ -39,6 +39,15 @@ def is_ready() -> bool:
     return INDEX_PATH.exists() and CATALOG_PATH.exists()
 
 
+def _match_with_learned(
+    embedding: np.ndarray,
+    threshold: float,
+) -> tuple[dict | None, float]:
+    from app.learned_catalog import search_learned
+
+    return search_learned(embedding, threshold=threshold)
+
+
 def match_embedding(
     embedding: np.ndarray,
     threshold: float = DEFAULT_THRESHOLD,
@@ -49,15 +58,24 @@ def match_embedding(
 
     faiss.normalize_L2(vec)
     scores, ids = index.search(vec, 1)
+    if ids[0][0] >= 0:
+        score = float(scores[0][0])
+        if score >= threshold:
+            entry = dict(catalog[int(ids[0][0])])
+            entry["confidence"] = round(min(0.99, score), 4)
+            entry["recognition_source"] = "faiss"
+            return entry, score
+
+    learned_match, learned_score = _match_with_learned(
+        np.asarray(embedding, dtype=np.float32).reshape(-1),
+        threshold=threshold,
+    )
+    if learned_match:
+        return learned_match, learned_score
+
     if ids[0][0] < 0:
         return None, 0.0
-    score = float(scores[0][0])
-    if score < threshold:
-        return None, score
-    entry = dict(catalog[int(ids[0][0])])
-    entry["confidence"] = round(min(0.99, score), 4)
-    entry["recognition_source"] = "faiss"
-    return entry, score
+    return None, float(scores[0][0])
 
 
 def match_embeddings_batch(
@@ -75,17 +93,21 @@ def match_embeddings_batch(
     results: list[tuple[dict | None, float]] = []
     for row in range(len(vecs)):
         idx = int(ids[row][0])
-        if idx < 0:
+        score = float(scores[row][0]) if idx >= 0 else 0.0
+        if idx >= 0 and score >= threshold:
+            entry = dict(catalog[idx])
+            entry["confidence"] = round(min(0.99, score), 4)
+            entry["recognition_source"] = "faiss"
+            results.append((entry, score))
+            continue
+
+        learned_match, learned_score = _match_with_learned(vecs[row], threshold=threshold)
+        if learned_match:
+            results.append((learned_match, learned_score))
+        elif idx < 0:
             results.append((None, 0.0))
-            continue
-        score = float(scores[row][0])
-        if score < threshold:
+        else:
             results.append((None, score))
-            continue
-        entry = dict(catalog[idx])
-        entry["confidence"] = round(min(0.99, score), 4)
-        entry["recognition_source"] = "faiss"
-        results.append((entry, score))
     return results
 
 
