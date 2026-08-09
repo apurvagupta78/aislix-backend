@@ -11,6 +11,8 @@ import requests
 LEARNED_BUCKET = os.getenv("LEARNED_CATALOG_BUCKET", "catalog-data")
 LEARNED_CATALOG_OBJECT = "learned_catalog.json"
 LEARNED_INDEX_OBJECT = "learned.index"
+RETAILKLIP_OBJECT = "retailklip_vitb32.pt"
+RETAILKLIP_META_OBJECT = "retailklip_vitb32.json"
 
 
 def _headers(content_type: str | None = "application/json") -> dict[str, str]:
@@ -127,3 +129,48 @@ def upload_learned_files(catalog_path, index_path) -> None:
             ).raise_for_status()
         except Exception as exc:
             print(f"learned file upload skipped ({obj}): {exc}")
+
+
+def download_retailklip_checkpoint(checkpoint_path, meta_path) -> bool:
+    if not is_configured():
+        return False
+    base = os.getenv("SUPABASE_URL", "").rstrip("/")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+    ok = False
+    for obj, dest in ((RETAILKLIP_OBJECT, checkpoint_path), (RETAILKLIP_META_OBJECT, meta_path)):
+        url = f"{base}/storage/v1/object/{LEARNED_BUCKET}/{obj}"
+        try:
+            response = requests.get(url, headers=headers, timeout=180)
+            if response.status_code == 200 and response.content:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(response.content)
+                ok = True
+        except Exception as exc:
+            print(f"RetailKLIP download skipped ({obj}): {exc}")
+    return ok
+
+
+def upload_retailklip_checkpoint(checkpoint_path, meta_path) -> None:
+    if not is_configured():
+        return
+    if not checkpoint_path.exists():
+        return
+    base = os.getenv("SUPABASE_URL", "").rstrip("/")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+    uploads = [(RETAILKLIP_OBJECT, checkpoint_path, "application/octet-stream")]
+    if meta_path.exists():
+        uploads.append((RETAILKLIP_META_OBJECT, meta_path, "application/json"))
+    for obj, path, content_type in uploads:
+        url = f"{base}/storage/v1/object/{LEARNED_BUCKET}/{obj}"
+        try:
+            requests.post(
+                url,
+                headers={**headers, "Content-Type": content_type, "x-upsert": "true"},
+                data=path.read_bytes(),
+                timeout=300,
+            ).raise_for_status()
+            print(f"Uploaded {obj} to Supabase storage")
+        except Exception as exc:
+            print(f"RetailKLIP upload skipped ({obj}): {exc}")

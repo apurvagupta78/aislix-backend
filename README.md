@@ -55,6 +55,17 @@ To merge learned SKUs into the base catalog offline:
 python scripts/merge_learned_into_base.py
 ```
 
+### RetailKLIP fine-tuning (Phase 3)
+
+Fine-tune OpenCLIP ViT-B-32 with ArcFace on your YOLO crop dataset:
+
+```bash
+python scripts/train_retailklip.py --dataset "D:\combinedDataset.v3-dataset_master_file.yolov8" --epochs 4
+python scripts/build_faiss_index.py
+```
+
+Set `USE_RETAILKLIP=false` to revert to base OpenCLIP embeddings.
+
 ## Endpoints
 
 - `GET /health`

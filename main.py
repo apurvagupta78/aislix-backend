@@ -38,9 +38,12 @@ app.add_middleware(
 def on_startup():
     port = os.getenv("PORT", "8080")
     from app.learned_catalog import load_learned
+    from app.retailklip import ensure_checkpoint, is_available
 
     learned = load_learned()
-    print(f"Aislix API starting on 0.0.0.0:{port} (learned SKUs: {learned})")
+    ensure_checkpoint()
+    rk = "yes" if is_available() else "no"
+    print(f"Aislix API starting on 0.0.0.0:{port} (learned SKUs: {learned}, RetailKLIP: {rk})")
 
 
 @app.get("/")
@@ -57,7 +60,14 @@ def health():
         "faiss_ready": (DATA_DIR / "faiss.index").exists() and (DATA_DIR / "catalog.json").exists(),
         "learned_skus": count_learned(),
         "ocr_engine": _ocr_engine_status(),
+        "retailklip": _retailklip_status(),
     }
+
+
+def _retailklip_status() -> bool:
+    from app.retailklip import is_available
+
+    return is_available()
 
 
 def _ocr_engine_status() -> str:

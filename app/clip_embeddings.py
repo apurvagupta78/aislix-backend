@@ -1,17 +1,22 @@
-"""Lazy-loaded CLIP embeddings."""
+"""Lazy-loaded CLIP / RetailKLIP embeddings."""
 
 from __future__ import annotations
+
+import os
 
 import numpy as np
 from PIL import Image
 
+from app.retailklip import CLIP_MODEL_NAME, CLIP_PRETRAINED, apply_checkpoint, is_available
+
 _model = None
 _preprocess = None
 _device = None
+_using_retailklip = False
 
 
 def _load_clip():
-    global _model, _preprocess, _device
+    global _model, _preprocess, _device, _using_retailklip
     if _model is not None:
         return _model, _preprocess, _device
     import open_clip
@@ -19,12 +24,20 @@ def _load_clip():
 
     _device = "cuda" if torch.cuda.is_available() else "cpu"
     _model, _, _preprocess = open_clip.create_model_and_transforms(
-        "ViT-B-32",
-        pretrained="laion2b_s34b_b79k",
+        CLIP_MODEL_NAME,
+        pretrained=CLIP_PRETRAINED,
     )
+    _using_retailklip = apply_checkpoint(_model)
+    if not _using_retailklip:
+        print(f"Using base OpenCLIP ({CLIP_MODEL_NAME}, {CLIP_PRETRAINED})")
     _model.to(_device)
     _model.eval()
     return _model, _preprocess, _device
+
+
+def using_retailklip() -> bool:
+    _load_clip()
+    return _using_retailklip
 
 
 def embed_pil_images(images: list[Image.Image]) -> np.ndarray:

@@ -1,0 +1,9 @@
+{
+  "model_name": "ViT-B-32",
+  "pretrained": "laion2b_s34b_b79k",
+  "num_classes": 110,
+  "epoch": 2,
+  "samples": 838,
+  "max_per_class": 8,
+  "method": "ArcFace (RetailKLIP-style)"
+}
