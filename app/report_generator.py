@@ -18,6 +18,11 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image as RLImage
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from app.scan_context import COMPLIANCE_ALERT_INTERPRETATION, COMPLIANCE_ALERT_TITLE
+
+MISMATCH_BOX_COLOR = (0, 0, 220)
+OK_BOX_COLOR = (0, 210, 0)
+
 
 def _annotation_label(item: dict, img_w: int | None = None) -> str:
     brand = (item.get("brand") or "?").strip()
@@ -26,6 +31,10 @@ def _annotation_label(item: dict, img_w: int | None = None) -> str:
     box_w = int(item.get("x2", 0)) - int(item.get("x1", 0))
     near_edge = img_w is not None and int(item.get("x2", 0)) >= img_w - 12
     max_len = 22 if (box_w < 90 or near_edge) else 40
+    if item.get("subcategory_match") is False:
+        prefix = "WRONG: "
+        budget = max_len - len(prefix)
+        return f"{prefix}{brand[:max(budget, 8)]}"
     if product and not skip_product:
         label = f"{brand} - {product}"
         if len(label) > max_len:
@@ -47,7 +56,9 @@ def generate_annotated_image(image: np.ndarray, classified: list[dict]) -> np.nd
         thickness = max(1, int(round(font_scale * 2.2)))
         line_w = max(2, thickness)
 
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 210, 0), line_w)
+        is_mismatch = item.get("subcategory_match") is False
+        box_color = MISMATCH_BOX_COLOR if is_mismatch else OK_BOX_COLOR
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), box_color, line_w)
 
         (text_w, text_h), baseline = cv2.getTextSize(
             label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness
@@ -82,7 +93,17 @@ def generate_csv_bytes(inventory: list[dict]) -> bytes:
     buffer = io.StringIO()
     writer = csv.DictWriter(
         buffer,
-        fieldnames=["brand", "product_name", "variant", "quantity", "confidence", "category", "stock_status"],
+        fieldnames=[
+            "brand",
+            "product_name",
+            "variant",
+            "quantity",
+            "confidence",
+            "category",
+            "stock_status",
+            "compliance_status",
+            "compliance_interpretation",
+        ],
     )
     writer.writeheader()
     for row in inventory:
@@ -95,6 +116,8 @@ def generate_csv_bytes(inventory: list[dict]) -> bytes:
                 "confidence": row.get("confidence", 0),
                 "category": row.get("category", ""),
                 "stock_status": row.get("stock_status", ""),
+                "compliance_status": row.get("compliance_status", "ok"),
+                "compliance_interpretation": row.get("compliance_interpretation", ""),
             }
         )
     return buffer.getvalue().encode("utf-8")
@@ -116,6 +139,8 @@ def generate_pdf_bytes(
     shares: list[dict],
     recommendations: list[dict],
     alerts: list[dict] | None = None,
+    compliance_alerts: list[dict] | None = None,
+    subcategory_mismatches: list[dict] | None = None,
     executive_summary: str | None = None,
     logo_path=None,
 ) -> str:
@@ -124,6 +149,8 @@ def generate_pdf_bytes(
     styles = getSampleStyleSheet()
     story = []
     alerts = alerts or []
+    compliance_alerts = compliance_alerts or []
+    subcategory_mismatches = subcategory_mismatches or []
 
     if logo_path and logo_path.exists():
         story.append(_logo_flowable(logo_path))
@@ -147,6 +174,7 @@ def generate_pdf_bytes(
         ["Unique SKUs", metrics.get("unique_skus", 0)],
         ["Unique Brands", metrics.get("unique_brands", 0)],
         ["Low Stock SKUs", metrics.get("low_stock_products", 0)],
+        ["Misplaced / Wrong Sub-category", metrics.get("misplaced_products", 0)],
         ["Shelf Utilization %", metrics.get("shelf_utilization_percent", metrics.get("share_of_shelf_percent", 0))],
         ["On-Shelf Availability %", metrics.get("osa_percent", 0)],
         ["Average Confidence", f"{metrics.get('average_confidence', 0) * 100:.1f}%"],
@@ -166,7 +194,55 @@ def generate_pdf_bytes(
     story.append(table)
     story.append(Spacer(1, 0.2 * inch))
 
-    if alerts:
+    if compliance_alerts:
+        story.append(Paragraph(f"<b>{COMPLIANCE_ALERT_TITLE}</b>", styles["Heading3"]))
+        story.append(
+            Paragraph(
+                f"<i>{COMPLIANCE_ALERT_INTERPRETATION}</i>",
+                styles["Normal"],
+            )
+        )
+        story.append(Spacer(1, 0.08 * inch))
+        for alert in compliance_alerts[:8]:
+            severity = (alert.get("severity") or "medium").upper()
+            detail = alert.get("detail") or ""
+            line = f"<b>[{severity}]</b> {alert.get('title') or COMPLIANCE_ALERT_TITLE}"
+            if detail:
+                line += f" — {detail}"
+            story.append(Paragraph(line, styles["Normal"]))
+        if subcategory_mismatches:
+            story.append(Spacer(1, 0.1 * inch))
+            mismatch_rows = [["Brand", "Product", "Detected", "Expected", "Qty"]] + [
+                [
+                    row.get("brand", ""),
+                    (row.get("product_name") or "")[:24],
+                    row.get("detected_sub_category_label", ""),
+                    row.get("expected_sub_category_label", ""),
+                    str(row.get("quantity", 0)),
+                ]
+                for row in subcategory_mismatches[:12]
+            ]
+            mismatch_table = Table(
+                mismatch_rows,
+                colWidths=[0.85 * inch, 1.35 * inch, 0.85 * inch, 0.85 * inch, 0.4 * inch],
+            )
+            mismatch_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.grey)]))
+            story.append(mismatch_table)
+        story.append(Spacer(1, 0.2 * inch))
+
+    other_alerts = [a for a in alerts if a.get("category") != "compliance"]
+    if other_alerts:
+        story.append(Paragraph("<b>Critical Alerts</b>", styles["Heading3"]))
+        for alert in other_alerts[:8]:
+            severity = (alert.get("severity") or "medium").upper()
+            title = alert.get("title") or "Alert"
+            detail = alert.get("detail") or ""
+            line = f"<b>[{severity}]</b> {title}"
+            if detail:
+                line += f" — {detail}"
+            story.append(Paragraph(line, styles["Normal"]))
+        story.append(Spacer(1, 0.2 * inch))
+    elif alerts and not compliance_alerts:
         story.append(Paragraph("<b>Critical Alerts</b>", styles["Heading3"]))
         for alert in alerts[:8]:
             severity = (alert.get("severity") or "medium").upper()
@@ -189,18 +265,22 @@ def generate_pdf_bytes(
         story.append(Spacer(1, 0.2 * inch))
 
     story.append(Paragraph("<b>Complete Inventory</b>", styles["Heading3"]))
-    inv_rows = [["Brand", "Product", "Variant", "Qty", "Conf.", "Stock"]] + [
+    inv_rows = [["Brand", "Product", "Variant", "Qty", "Conf.", "Compliance"]] + [
         [
             row.get("brand", ""),
             row.get("product_name", "")[:28],
             row.get("variant", "")[:18] or "—",
             str(row.get("quantity", 0)),
             f"{float(row.get('confidence', 0)) * 100:.0f}%",
-            (row.get("stock_status") or "in_stock").replace("_", " "),
+            (
+                COMPLIANCE_ALERT_TITLE
+                if row.get("compliance_status") == "category_mismatch"
+                else "OK"
+            ),
         ]
         for row in inventory
     ]
-    inv_table = Table(inv_rows, colWidths=[0.95 * inch, 1.45 * inch, 0.95 * inch, 0.45 * inch, 0.55 * inch, 0.75 * inch])
+    inv_table = Table(inv_rows, colWidths=[0.85 * inch, 1.35 * inch, 0.85 * inch, 0.45 * inch, 0.55 * inch, 1.0 * inch])
     inv_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.grey)]))
     story.append(inv_table)
 

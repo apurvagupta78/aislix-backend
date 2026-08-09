@@ -131,6 +131,47 @@ SUB_CATEGORY_BRAND_HINTS: dict[str, dict[str, set[str]]] = {
     },
 }
 
+# Product-type keywords for sub-category inference (compliance / mismatch detection).
+SUB_CATEGORY_PRODUCT_KEYWORDS: dict[str, list[str]] = {
+    "shampoo": ["shampoo", "conditioner", "hair fall", "anti dandruff", "hair care", "keratin"],
+    "soap": ["soap", "handwash", "hand wash", "bathing bar", "bath bar", "antiseptic liquid"],
+    "toothpaste": ["toothpaste", "toothbrush", "tooth brush", "dental", "oral care", "mouthwash"],
+    "deodorant": ["deodorant", "deo", "body spray", "antiperspirant"],
+    "skincare": ["face wash", "facewash", "moistur", "lotion", "cream", "serum", "sunscreen", "spf"],
+    "cosmetics": ["lipstick", "kajal", "mascara", "foundation", "compact", "nail polish"],
+    "shaving": ["razor", "shaving", "aftershave", "shave gel", "shave foam"],
+    "tea": ["tea", "chai", "green tea", "tea bags", "tea bag", "premix"],
+    "coffee": ["coffee", "nescafe", "instant coffee", "filter coffee"],
+    "soft_drinks": ["cola", "coke", "pepsi", "sprite", "fanta", "mirinda", "soft drink", "soda"],
+    "juices": ["juice", "mango drink", "fruit drink", "nectar"],
+    "water": ["mineral water", "packaged water", "drinking water"],
+    "energy_drinks": ["energy drink", "red bull", "monster"],
+    "sports_drinks": ["sports drink", "electrolyte", "isotonic"],
+    "detergent": ["detergent", "washing powder", "laundry"],
+    "dishwash": ["dishwash", "dish wash", "utensil cleaner"],
+    "floor_cleaner": ["floor cleaner", "floor mop"],
+    "toilet_cleaner": ["toilet cleaner", "harpic"],
+    "disinfectants": ["disinfect", "sanitizer", "antiseptic"],
+    "air_fresheners": ["air freshener", "room freshener", "odonil"],
+    "insecticides": ["mosquito", "insecticide", "repellent", "good knight", "all out"],
+    "biscuits": ["biscuit", "cookie", "cracker", "marie"],
+    "chips": ["chips", "crisps", "wafers"],
+    "namkeen": ["namkeen", "bhujia", "mixture"],
+    "noodles": ["noodles", "maggi", "instant noodles"],
+    "chocolates": ["chocolate", "cocoa"],
+    "milk": ["milk", "toned milk", "full cream milk"],
+    "curd": ["curd", "yogurt", "dahi"],
+    "paneer": ["paneer"],
+    "rice": ["rice", "basmati"],
+    "atta": ["atta", "flour", "whole wheat"],
+    "dal": ["dal", "lentil", "pulse"],
+    "oil": ["cooking oil", "mustard oil", "sunflower oil", "refined oil"],
+}
+
+# Primary compliance messaging (dashboard, PDF, API).
+COMPLIANCE_ALERT_TITLE = "Category Mismatch Detected"
+COMPLIANCE_ALERT_INTERPRETATION = "Likely Putaway / Shelf Placement Violation"
+
 _categories: list[dict] | None = None
 _name_index: dict[str, dict] | None = None
 

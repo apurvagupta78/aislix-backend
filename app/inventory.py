@@ -74,6 +74,8 @@ def inventory_to_api_products(inventory: list[dict]) -> list[dict]:
                 "facings": row["facings"],
                 "confidence": row["confidence"],
                 "stock_status": row.get("stock_status") or "in_stock",
+                "compliance_status": row.get("compliance_status") or "ok",
+                "compliance_interpretation": row.get("compliance_interpretation") or "",
             }
         )
     return products

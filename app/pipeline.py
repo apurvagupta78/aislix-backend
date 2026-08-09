@@ -32,6 +32,10 @@ from app.metrics import (
 from app.recognizer import classify_records
 from app.report_generator import generate_annotated_image, generate_csv_bytes, generate_pdf_bytes
 from app.scan_context import resolve_scan_context
+from app.subcategory_compliance import (
+    analyze_subcategory_compliance,
+    apply_compliance_to_inventory,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 LOGO_PATH = BASE_DIR / "assets" / "aislix_logo.png"
@@ -85,18 +89,31 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             scan_category=scan_category,
             scan_context=scan_context,
         )
+        compliance = analyze_subcategory_compliance(classified, scan_context)
+        classified = compliance["classified"]
+        subcategory_mismatches = compliance["subcategory_mismatches"]
+        compliance_alerts = compliance["compliance_alerts"]
+        misplaced_facings = compliance["misplaced_facings"]
+
         inventory = aggregate_inventory(classified)
+        inventory = apply_compliance_to_inventory(inventory, subcategory_mismatches)
         products = inventory_to_api_products(inventory)
         processing_ms = int((time.time() - started) * 1000)
-        metrics = compute_metrics(inventory, classified, image.shape, processing_ms)
+        metrics = compute_metrics(
+            inventory,
+            classified,
+            image.shape,
+            processing_ms,
+            misplaced_facings=misplaced_facings,
+        )
         recognition_stats = _recognition_stats(classified)
         metrics.update(recognition_stats)
         metrics["gpt_vision_calls"] = int(recognition_engine_stats.get("gpt_calls") or 0)
         shares = brand_share(inventory)
         categories = category_breakdown(inventory)
-        alerts = build_alerts(metrics)
-        recommendations = build_recommendations(metrics, inventory)
-        summary_text = executive_summary(metrics)
+        alerts = build_alerts(metrics, compliance_alerts=compliance_alerts)
+        recommendations = build_recommendations(metrics, inventory, compliance_alerts=compliance_alerts)
+        summary_text = executive_summary(metrics, compliance_alerts=compliance_alerts)
 
         from app.learned_catalog import count_learned, flush_learned, pop_learned_updates
 
@@ -114,6 +131,8 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             shares=shares,
             recommendations=recommendations,
             alerts=alerts,
+            compliance_alerts=compliance_alerts,
+            subcategory_mismatches=subcategory_mismatches,
             executive_summary=summary_text,
             logo_path=LOGO_PATH if LOGO_PATH.exists() else None,
         )
@@ -133,6 +152,8 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             "top_brands": shares[:10],
             "category_breakdown": categories,
             "alerts": alerts,
+            "compliance_alerts": compliance_alerts,
+            "subcategory_mismatches": subcategory_mismatches,
             "recommendations": recommendations,
             "annotated_image_base64": annotated_b64,
             "pdf_base64": pdf_b64,

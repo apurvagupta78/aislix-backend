@@ -1,0 +1,84 @@
+"""Tests for sub-category compliance / category mismatch detection."""
+
+from __future__ import annotations
+
+import pytest
+
+from app.scan_context import COMPLIANCE_ALERT_INTERPRETATION, COMPLIANCE_ALERT_TITLE
+from app.subcategory_compliance import analyze_subcategory_compliance, infer_detected_subcategory
+
+
+def _soap_context() -> dict:
+    return {
+        "aislix_category": "Personal Care",
+        "sub_category": "soap",
+        "sub_category_label": "Soap",
+    }
+
+
+def _facing(brand: str, product: str, **extra) -> dict:
+    return {
+        "brand": brand,
+        "product_name": product,
+        "variant": "",
+        "confidence": 0.92,
+        "x1": 10,
+        "y1": 10,
+        "x2": 50,
+        "y2": 50,
+        **extra,
+    }
+
+
+def test_dettol_soap_is_compliant_on_soap_audit():
+    item = _facing("Dettol", "Original Soap")
+    detected = infer_detected_subcategory(item, _soap_context())
+    assert detected == "soap"
+
+
+def test_tresemme_shampoo_mismatch_on_soap_audit():
+    classified = [_facing("Tresemme", "Keratin Smooth Shampoo")]
+    result = analyze_subcategory_compliance(classified, _soap_context())
+    assert result["misplaced_facings"] == 1
+    assert classified[0]["subcategory_match"] is False
+    assert classified[0]["detected_sub_category"] == "shampoo"
+
+
+def test_dove_soap_not_mismatch():
+    classified = [_facing("Dove", "Beauty Soap Bar")]
+    result = analyze_subcategory_compliance(classified, _soap_context())
+    assert result["misplaced_facings"] == 0
+    assert classified[0]["subcategory_match"] is True
+
+
+def test_dove_shampoo_is_mismatch_on_soap_audit():
+    classified = [_facing("Dove", "Intense Repair Shampoo")]
+    result = analyze_subcategory_compliance(classified, _soap_context())
+    assert result["misplaced_facings"] == 1
+
+
+def test_no_subcategory_skips_compliance():
+    classified = [_facing("Tresemme", "Keratin Smooth Shampoo")]
+    result = analyze_subcategory_compliance(classified, {"aislix_category": "Personal Care"})
+    assert result["misplaced_facings"] == 0
+    assert result["compliance_alerts"] == []
+
+
+def test_compliance_alert_uses_standard_messaging():
+    classified = [_facing("Colgate", "MaxFresh Toothpaste")]
+    result = analyze_subcategory_compliance(classified, _soap_context())
+    assert len(result["compliance_alerts"]) == 1
+    alert = result["compliance_alerts"][0]
+    assert alert["title"] == COMPLIANCE_ALERT_TITLE
+    assert alert["interpretation"] == COMPLIANCE_ALERT_INTERPRETATION
+
+
+def test_tea_audit_flags_cola():
+    ctx = {
+        "aislix_category": "Beverages",
+        "sub_category": "tea",
+        "sub_category_label": "Tea",
+    }
+    classified = [_facing("Coca", "Coke")]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 1

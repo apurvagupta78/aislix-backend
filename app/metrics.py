@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.scan_context import COMPLIANCE_ALERT_INTERPRETATION, COMPLIANCE_ALERT_TITLE
+
 LOW_STOCK_THRESHOLD = 2
 
 
@@ -15,7 +17,14 @@ def shelf_utilization(classified: list[dict], image_shape: tuple[int, int, int])
     return round(min(100.0, (box_area / image_area) * 100), 2)
 
 
-def compute_metrics(inventory: list[dict], classified: list[dict], image_shape, processing_ms: int) -> dict:
+def compute_metrics(
+    inventory: list[dict],
+    classified: list[dict],
+    image_shape,
+    processing_ms: int,
+    *,
+    misplaced_facings: int = 0,
+) -> dict:
     total_facings = len(classified)
     unique_skus = len(inventory)
     brands = {row["brand"] for row in inventory if row.get("brand")}
@@ -25,6 +34,11 @@ def compute_metrics(inventory: list[dict], classified: list[dict], image_shape, 
     utilization = shelf_utilization(classified, image_shape)
     osa = round(((total_facings - 0) / max(total_facings, 1)) * 100, 2)
     health = round(osa * 0.6 + utilization * 0.25 + avg_conf * 100 * 0.15, 2)
+    if misplaced_facings > 0 and total_facings > 0:
+        penalty = min(10.0, (misplaced_facings / total_facings) * 100 * 0.1)
+        health = round(max(0.0, health - penalty), 2)
+
+    mismatch_skus = sum(1 for row in inventory if row.get("compliance_status") == "category_mismatch")
 
     return {
         "total_products": sum(row["quantity"] for row in inventory),
@@ -33,7 +47,8 @@ def compute_metrics(inventory: list[dict], classified: list[dict], image_shape, 
         "unique_brands": len(brands),
         "low_stock_products": low_stock,
         "out_of_stock_products": 0,
-        "misplaced_products": 0,
+        "misplaced_products": misplaced_facings,
+        "subcategory_mismatch_skus": mismatch_skus,
         "average_confidence": round(avg_conf, 4),
         "osa_percent": osa,
         "share_of_shelf_percent": utilization,
@@ -69,8 +84,16 @@ def category_breakdown(inventory: list[dict]) -> list[dict]:
     ]
 
 
-def build_alerts(metrics: dict) -> list[dict]:
-    alerts = []
+def build_alerts(
+    metrics: dict,
+    compliance_alerts: list[dict] | None = None,
+) -> list[dict]:
+    alerts: list[dict] = []
+    compliance_alerts = compliance_alerts or []
+
+    for alert in compliance_alerts:
+        alerts.append({**alert})
+
     if metrics["low_stock_products"] > 0:
         alerts.append(
             {
@@ -92,8 +115,29 @@ def build_alerts(metrics: dict) -> list[dict]:
     return alerts
 
 
-def build_recommendations(metrics: dict, inventory: list[dict]) -> list[dict]:
+def build_recommendations(
+    metrics: dict,
+    inventory: list[dict],
+    compliance_alerts: list[dict] | None = None,
+) -> list[dict]:
     recs = []
+    compliance_alerts = compliance_alerts or []
+
+    if compliance_alerts:
+        primary = compliance_alerts[0]
+        recs.append(
+            {
+                "id": "putaway-violation",
+                "title": COMPLIANCE_ALERT_TITLE,
+                "detail": (
+                    f"{COMPLIANCE_ALERT_INTERPRETATION}. "
+                    f"{primary.get('detail') or 'Review shelf placement and correct misplaced facings.'}"
+                ),
+                "category": "Compliance",
+                "impact": "high",
+            }
+        )
+
     if metrics["low_stock_products"] > 0:
         recs.append(
             {
@@ -118,10 +162,16 @@ def build_recommendations(metrics: dict, inventory: list[dict]) -> list[dict]:
     return recs
 
 
-def executive_summary(metrics: dict) -> str:
-    return (
+def executive_summary(metrics: dict, compliance_alerts: list[dict] | None = None) -> str:
+    base = (
         f"This shelf audit detected {metrics['total_products']} product facings across "
         f"{metrics['unique_skus']} unique SKUs and {metrics['unique_brands']} brands. "
         f"Shelf utilization is {metrics['share_of_shelf_percent']:.1f}% with an average "
         f"AI confidence of {metrics['average_confidence'] * 100:.1f}%."
     )
+    if metrics.get("misplaced_products", 0) > 0:
+        base += (
+            f" {COMPLIANCE_ALERT_TITLE}: {metrics['misplaced_products']} facing(s) — "
+            f"{COMPLIANCE_ALERT_INTERPRETATION}."
+        )
+    return base
