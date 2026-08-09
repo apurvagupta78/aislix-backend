@@ -44,6 +44,11 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bcoca[\-\s]?cola\b", "Coca", "Coke"),
     (r"\bpepsi\b", "Pepsi", ""),
     (r"\bfanta\b", "Fanta", ""),
+    (r"\bdettol\b", "Dettol", ""),
+    (r"\bindulekha\b", "Indulekha", ""),
+    (r"\bhimalaya\b", "Himalaya", ""),
+    (r"\btresemme\b", "Tresemme", ""),
+    (r"\btresemm[eé]\b", "Tresemme", ""),
 ]
 
 TEA_OCR_MARKERS = (
@@ -65,6 +70,23 @@ def label_conflicts_with_tea_pack(label: dict, text: str) -> bool:
         return False
     brand_l = (label.get("brand") or "").strip().lower()
     return brand_l in NON_TEA_BEVERAGE_BRANDS
+
+
+def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
+    """True when OCR clearly names a different brand than the proposed label."""
+    if not text or len(text.strip()) < 3:
+        return False
+    corrected = match_from_text(text)
+    if not corrected:
+        return False
+    label_brand = (label.get("brand") or "").strip().lower()
+    text_brand = (corrected.get("brand") or "").strip().lower()
+    if not label_brand or not text_brand or label_brand == text_brand:
+        return False
+    text_l = _normalize(text)
+    if any(token in text_l for token in _brand_tokens(label.get("brand") or "")):
+        return False
+    return True
 
 
 def _brand_tokens(brand: str) -> set[str]:

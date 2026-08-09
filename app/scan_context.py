@@ -286,9 +286,11 @@ def sub_category_blocks_brand(context: dict | None, brand: str, ocr_text: str = 
     if brand_l in blocklist:
         return True
 
+    # Narrow sub-category hints are enforced strictly for beverages (tea vs cola),
+    # but personal care shelves are often mixed (soap + shampoo on one photo).
     aislix_key = _normalize_key(context.get("aislix_category") or "")
     sub_hints = (SUB_CATEGORY_BRAND_HINTS.get(aislix_key) or {}).get(sub)
-    if sub_hints and sub != "others":
+    if sub_hints and sub != "others" and aislix_key == "beverages":
         general_hints = context.get("brand_hints") or set()
         if brand_l not in sub_hints and brand_l not in general_hints:
             return True

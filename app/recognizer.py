@@ -14,6 +14,7 @@ from PIL import Image
 
 from app.brand_dictionary import (
     category_allows_brand,
+    label_conflicts_with_pack_text,
     label_conflicts_with_tea_pack,
     match_from_text,
     ocr_agrees_with_label,
@@ -187,6 +188,38 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b))
 
 
+def _same_shelf_row(a: dict, b: dict) -> bool:
+    """True when two facings sit on the same shelf row (similar vertical center)."""
+    ay1, ay2 = float(a.get("y1", 0)), float(a.get("y2", 0))
+    by1, by2 = float(b.get("y1", 0)), float(b.get("y2", 0))
+    if ay2 <= ay1 or by2 <= by1:
+        return True
+    acy = (ay1 + ay2) / 2.0
+    bcy = (by1 + by2) / 2.0
+    row_tol = max(ay2 - ay1, by2 - by1) * 0.55
+    return abs(acy - bcy) <= row_tol
+
+
+def _try_ocr_override(
+    records: list[dict],
+    classified: list[dict | None],
+    embeddings: np.ndarray,
+    index: int,
+    pack_text: str,
+    scan_context: dict | None,
+    known: list[tuple[np.ndarray, dict]],
+) -> dict | None:
+    ocr_fix = match_from_text(pack_text)
+    if not ocr_fix or not _is_valid_label(ocr_fix) or not _accept_ocr_label(ocr_fix, scan_context):
+        return None
+    row = _merge_label(records[index], ocr_fix)
+    row["_index"] = index
+    row["recognition_source"] = "ocr+propagate"
+    classified[index] = row
+    known.append((embeddings[index], row))
+    return row
+
+
 def _propagate_shelf_labels(
     records: list[dict],
     classified: list[dict | None],
@@ -229,48 +262,36 @@ def _propagate_shelf_labels(
                 continue
 
         probe = embeddings[index]
+        probe_record = records[index]
         best_sim = 0.0
         best_label: dict | None = None
         for ref_emb, ref_label in known:
+            if not _same_shelf_row(probe_record, ref_label):
+                continue
             sim = _cosine_similarity(probe, ref_emb)
             if sim >= PROPAGATE_THRESHOLD and sim > best_sim:
                 best_sim = sim
                 best_label = ref_label
 
         if use_ocr and best_label and pack_text:
-            ref_brand = (best_label.get("brand") or "").lower()
-            text_l = pack_text.lower()
-            if "lipton" in text_l and ref_brand == "tata":
-                ocr_fix = match_from_text(pack_text)
-                if ocr_fix and _is_valid_label(ocr_fix) and _accept_ocr_label(ocr_fix, scan_context):
-                    row = _merge_label(records[index], ocr_fix)
-                    row["_index"] = index
-                    row["recognition_source"] = "ocr+propagate"
-                    classified[index] = row
-                    known.append((probe, row))
+            if label_conflicts_with_tea_pack(best_label, pack_text) or label_conflicts_with_pack_text(
+                best_label, pack_text
+            ):
+                if _try_ocr_override(
+                    records, classified, embeddings, index, pack_text, scan_context, known
+                ):
                     propagated += 1
                     continue
                 still_unknown.append(index)
                 continue
-            if "tata" in text_l and ref_brand == "lipton" and "tea" in text_l:
-                still_unknown.append(index)
-                continue
-            if label_conflicts_with_tea_pack(best_label, pack_text):
-                ocr_fix = match_from_text(pack_text)
-                if ocr_fix and _is_valid_label(ocr_fix) and _accept_ocr_label(ocr_fix, scan_context):
-                    row = _merge_label(records[index], ocr_fix)
-                    row["_index"] = index
-                    row["recognition_source"] = "ocr+propagate"
-                    classified[index] = row
-                    known.append((probe, row))
+            if not ocr_agrees_with_label(best_label, pack_text):
+                if _try_ocr_override(
+                    records, classified, embeddings, index, pack_text, scan_context, known
+                ):
                     propagated += 1
                     continue
                 still_unknown.append(index)
                 continue
-
-        if best_label and use_ocr and pack_text and label_conflicts_with_tea_pack(best_label, pack_text):
-            still_unknown.append(index)
-            continue
 
         if best_label:
             label = {

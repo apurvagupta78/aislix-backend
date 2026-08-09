@@ -19,13 +19,19 @@ from reportlab.platypus import Image as RLImage
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
-def _annotation_label(item: dict) -> str:
+def _annotation_label(item: dict, img_w: int | None = None) -> str:
     brand = (item.get("brand") or "?").strip()
     product = (item.get("product_name") or "").strip()
     skip_product = product.lower() in {"", "unknown", "unidentified sku", brand.lower()}
+    box_w = int(item.get("x2", 0)) - int(item.get("x1", 0))
+    near_edge = img_w is not None and int(item.get("x2", 0)) >= img_w - 12
+    max_len = 22 if (box_w < 90 or near_edge) else 40
     if product and not skip_product:
-        return f"{brand} - {product}"[:40]
-    return brand[:28]
+        label = f"{brand} - {product}"
+        if len(label) > max_len:
+            return brand[:max_len]
+        return label[:max_len]
+    return brand[:max_len]
 
 
 def generate_annotated_image(image: np.ndarray, classified: list[dict]) -> np.ndarray:
@@ -35,7 +41,7 @@ def generate_annotated_image(image: np.ndarray, classified: list[dict]) -> np.nd
 
     for item in classified:
         x1, y1, x2, y2 = int(item["x1"]), int(item["y1"]), int(item["x2"]), int(item["y2"])
-        label = _annotation_label(item)
+        label = _annotation_label(item, img_w=img_w)
         box_h = max(y2 - y1, 1)
         font_scale = max(0.45, min(0.9, base_scale * (box_h / 70.0)))
         thickness = max(1, int(round(font_scale * 2.2)))
