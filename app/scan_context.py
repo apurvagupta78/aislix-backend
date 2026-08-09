@@ -84,6 +84,8 @@ AISLE_BRAND_BLOCKLIST: dict[str, set[str]] = {
     | {
         "lipton", "tetley", "coca cola", "pepsi", "sprite", "fanta", "mirinda", "real",
         "surf excel", "ariel", "rin", "tide", "vim", "harpic",
+        "ragu", "davidoff", "twinings", "twinning", "schweppes", "girnar", "ritebite",
+        "rite bite", "trident", "american garden", "blue bird", "shan", "knorr",
     },
     "home care": FOOD_SNACK_BRANDS | {"lipton", "tetley", "coca cola", "pepsi", "dove", "colgate"},
     "health & wellness": FOOD_SNACK_BRANDS | {"lipton", "coca cola", "pepsi", "lays"},
@@ -166,6 +168,37 @@ SUB_CATEGORY_PRODUCT_KEYWORDS: dict[str, list[str]] = {
     "atta": ["atta", "flour", "whole wheat"],
     "dal": ["dal", "lentil", "pulse"],
     "oil": ["cooking oil", "mustard oil", "sunflower oil", "refined oil"],
+}
+
+# Cross-aisle product keywords for compliance (wrong putaway on a focused audit).
+AISLE_PRODUCT_KEYWORDS: dict[str, list[str]] = {
+    "beverages": [
+        "coffee", "espresso", "tea", "camomile", "chamomile", "cola", "coke", "pepsi",
+        "juice", "soda water", "schweppes", "kahwa", "nescafe", "soft drink", "energy drink",
+        "mineral water", "green tea",
+    ],
+    "packaged food & snacks": [
+        "pizza sauce", "pasta sauce", "tomato sauce", "namkeen", "biscuit", "cookie",
+        "protein bar", "choco berry", "chocolate", "jalapeno", "trident", "gum",
+        "caster sugar", "peanut", "olive", "snack", "chips", "maggi", "noodles",
+    ],
+    "grocery & staples": [
+        "caster sugar", "sugar", "atta", "flour", "rice", "dal", "lentil", "masala", "spice",
+    ],
+    "dairy & chilled": ["milk", "curd", "paneer", "cheese", "butter", "yogurt", "dahi"],
+    "home care": [
+        "detergent", "dishwash", "floor cleaner", "toilet cleaner", "harpic", "surf excel",
+        "lizol", "mosquito repellent",
+    ],
+}
+
+AISLE_DISPLAY_NAMES: dict[str, str] = {
+    "beverages": "Beverages",
+    "packaged food & snacks": "Packaged Food & Snacks",
+    "grocery & staples": "Grocery & Staples",
+    "dairy & chilled": "Dairy & Chilled",
+    "home care": "Home Care",
+    "personal care": "Personal Care",
 }
 
 # Primary compliance messaging (dashboard, PDF, API).

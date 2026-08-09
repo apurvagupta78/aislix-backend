@@ -8,25 +8,30 @@ from app.scan_context import COMPLIANCE_ALERT_INTERPRETATION, COMPLIANCE_ALERT_T
 from app.subcategory_compliance import analyze_subcategory_compliance, infer_detected_subcategory
 
 
-def _soap_context() -> dict:
-    return {
-        "aislix_category": "Personal Care",
-        "sub_category": "soap",
-        "sub_category_label": "Soap",
-    }
-
-
 def _facing(brand: str, product: str, **extra) -> dict:
     return {
         "brand": brand,
         "product_name": product,
         "variant": "",
         "confidence": 0.92,
+        "category": "General",
         "x1": 10,
         "y1": 10,
         "x2": 50,
         "y2": 50,
         **extra,
+    }
+
+
+def _soap_context() -> dict:
+    return {
+        "aislix_category": "Personal Care",
+        "sub_category": "soap",
+        "sub_category_label": "Soap",
+        "catalog_categories": ["personal care"],
+        "brand_hints": {
+            "dove", "lux", "dettol", "colgate", "tresemme", "indulekha", "himalaya",
+        },
     }
 
 
@@ -78,7 +83,25 @@ def test_tea_audit_flags_cola():
         "aislix_category": "Beverages",
         "sub_category": "tea",
         "sub_category_label": "Tea",
+        "catalog_categories": ["beverages"],
+        "brand_hints": set(),
     }
     classified = [_facing("Coca", "Coke")]
     result = analyze_subcategory_compliance(classified, ctx)
     assert result["misplaced_facings"] == 1
+
+
+def test_pizza_sauce_mismatch_on_soap_audit():
+    classified = [_facing("Ragu", "Homemade Style Pizza Sauce")]
+    result = analyze_subcategory_compliance(classified, _soap_context())
+    assert result["misplaced_facings"] == 1
+    assert classified[0]["detected_sub_category_label"] == "Packaged Food & Snacks"
+
+
+def test_espresso_mismatch_on_soap_audit():
+    classified = [_facing("Davidoff", "Espresso 57")]
+    result = analyze_subcategory_compliance(classified, _soap_context())
+    assert result["misplaced_facings"] == 1
+    assert classified[0]["detected_sub_category_label"] == "Beverages"
+
+
