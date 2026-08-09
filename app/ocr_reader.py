@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 from app.brand_dictionary import match_from_text
 
@@ -16,7 +16,7 @@ _reader_failed = False
 
 OCR_MIN_CONFIDENCE = float(os.getenv("OCR_MIN_CONFIDENCE", "0.6"))
 OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() in {"1", "true", "yes"}
-OCR_UPSCALE_MIN = int(os.getenv("OCR_UPSCALE_MIN", "160"))
+OCR_UPSCALE_MIN = int(os.getenv("OCR_UPSCALE_MIN", "320"))
 
 
 def _get_reader():
@@ -39,14 +39,14 @@ def _get_reader():
 
 
 def _prepare_for_ocr(image: Image.Image) -> Image.Image:
-    """Upscale small YOLO crops so pack text is readable."""
+    """Upscale small YOLO crops and boost contrast so pack text is readable."""
     width, height = image.size
     longest = max(width, height)
-    if longest >= OCR_UPSCALE_MIN:
-        return image
-    scale = OCR_UPSCALE_MIN / float(longest)
-    new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
-    return image.resize(new_size, Image.Resampling.LANCZOS)
+    if longest < OCR_UPSCALE_MIN:
+        scale = OCR_UPSCALE_MIN / float(longest)
+        new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+        image = image.resize(new_size, Image.Resampling.LANCZOS)
+    return ImageEnhance.Contrast(image.convert("RGB")).enhance(1.35)
 
 
 def read_text_from_pil(image: Image.Image) -> str:

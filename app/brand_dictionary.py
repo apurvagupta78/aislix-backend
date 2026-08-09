@@ -35,6 +35,15 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\btata\s+tea\s+gold\b", "Tata", "Tea Gold"),
     (r"\blipton\b", "Lipton", ""),
     (r"\btetley\b", "Tetley", ""),
+    (r"\bgreen\s+tea\b", "Lipton", "Green Tea"),
+    (r"\bbrooke\s+bond\b", "Brooke", ""),
+    (r"\bred\s+label\b", "Brooke", "Red Label"),
+    (r"\byellow\s+label\b", "Brooke", "Yellow Label"),
+    (r"\breal\b.*\bmango\b", "Real", "Mango Juice"),
+    (r"\bmango\s+juice\b", "Real", "Mango Juice"),
+    (r"\bcoca[\-\s]?cola\b", "Coca", "Coke"),
+    (r"\bpepsi\b", "Pepsi", ""),
+    (r"\bfanta\b", "Fanta", ""),
 ]
 
 TEA_OCR_MARKERS = (
@@ -56,6 +65,34 @@ def label_conflicts_with_tea_pack(label: dict, text: str) -> bool:
         return False
     brand_l = (label.get("brand") or "").strip().lower()
     return brand_l in NON_TEA_BEVERAGE_BRANDS
+
+
+def _brand_tokens(brand: str) -> set[str]:
+    brand_l = brand.lower().strip()
+    tokens = {brand_l, brand_l.replace("-", " ")}
+    if brand_l == "coca":
+        tokens.add("coca cola")
+        tokens.add("coca-cola")
+    return tokens
+
+
+def ocr_agrees_with_label(label: dict, text: str) -> bool:
+    """Return True when OCR text supports the proposed brand/product label."""
+    if not text or len(text.strip()) < 3:
+        return True
+    corrected = match_from_text(text)
+    if not corrected:
+        return False
+    label_brand = (label.get("brand") or "").strip().lower()
+    text_brand = (corrected.get("brand") or "").strip().lower()
+    if not label_brand or not text_brand:
+        return False
+    if label_brand == text_brand:
+        return True
+    if label_brand in text_brand or text_brand in label_brand:
+        return True
+    text_l = _normalize(text)
+    return any(token in text_l for token in _brand_tokens(label.get("brand") or ""))
 
 
 def _normalize(text: str) -> str:

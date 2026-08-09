@@ -73,6 +73,16 @@ AISLE_BRAND_BLOCKLIST: dict[str, set[str]] = {
     },
 }
 
+# When scan sub_category is set, block these brands unless OCR explicitly names them.
+BEVERAGES_SUB_BLOCKLIST: dict[str, set[str]] = {
+    "tea": {
+        "coca", "coca cola", "coca-cola", "pepsi", "fanta", "sprite", "real", "tropicana",
+        "maaza", "frooti", "paper boat", "minute maid", "sofit",
+    },
+    "juice": {"lipton", "tetley", "tata", "brooke", "brooke bond"},
+    "soft drinks": {"lipton", "tetley", "tata", "brooke bond", "brooke"},
+}
+
 _categories: list[dict] | None = None
 _name_index: dict[str, dict] | None = None
 
@@ -144,6 +154,7 @@ def resolve_scan_context(metadata: dict | None) -> dict:
 
     catalog_cats = AISLIX_TO_CATALOG.get(_normalize_key(aislix_name), [])
     brand_hints = AISLE_BRAND_HINTS.get(_normalize_key(aislix_name), set())
+    sub_category = _resolve_sub_category(metadata)
 
     return {
         "store_id": (metadata.get("store_id") or "").strip() or None,
@@ -153,9 +164,44 @@ def resolve_scan_context(metadata: dict | None) -> dict:
         "shelf_label": shelf_label or None,
         "location": (metadata.get("location") or shelf_label or "").strip() or None,
         "notes": (metadata.get("notes") or "").strip() or None,
+        "sub_category": sub_category,
         "catalog_categories": catalog_cats,
         "brand_hints": brand_hints,
     }
+
+
+def _resolve_sub_category(metadata: dict) -> str | None:
+    raw = metadata.get("sub_category") or metadata.get("beverage_type") or metadata.get("product_type")
+    if raw and str(raw).strip():
+        return _normalize_key(str(raw))
+    notes = (metadata.get("notes") or "").lower()
+    if "tea shelf" in notes or "tea aisle" in notes or notes.strip() == "tea":
+        return "tea"
+    if "juice" in notes:
+        return "juice"
+    if "soft drink" in notes or "cola" in notes:
+        return "soft drinks"
+    return None
+
+
+def sub_category_blocks_brand(context: dict | None, brand: str, ocr_text: str = "") -> bool:
+    """Return True when brand should be rejected for this scan sub_category."""
+    if not context or not brand:
+        return False
+    sub = context.get("sub_category")
+    if not sub:
+        return False
+    blocklist = BEVERAGES_SUB_BLOCKLIST.get(sub, set())
+    brand_l = brand.lower().strip()
+    if brand_l not in blocklist:
+        return False
+    if ocr_text:
+        text_l = ocr_text.lower()
+        if brand_l in text_l or brand_l.replace("-", " ") in text_l:
+            return False
+        if brand_l == "coca" and ("coca cola" in text_l or "coca-cola" in text_l):
+            return False
+    return True
 
 
 def gpt_context_prompt(context: dict | None) -> str:

@@ -16,13 +16,14 @@ from app.brand_dictionary import (
     category_allows_brand,
     label_conflicts_with_tea_pack,
     match_from_text,
+    ocr_agrees_with_label,
     reconcile_label_with_text,
 )
 from app.clip_embeddings import embed_pil_images
 from app.faiss_matcher import is_ready, match_embeddings_batch
 from app.learned_catalog import learn_sku, metadata_to_sku
 from app.ocr_reader import classify_with_ocr, read_packaging_text
-from app.scan_context import gpt_context_prompt
+from app.scan_context import gpt_context_prompt, sub_category_blocks_brand
 
 load_dotenv()
 
@@ -33,6 +34,7 @@ RECOGNITION_V2 = os.getenv("RECOGNITION_V2", "true").lower() in {"1", "true", "y
 FAISS_THRESHOLD = float(os.getenv("FAISS_SIMILARITY_THRESHOLD", "0.92"))
 FAISS_THRESHOLD_CONTEXT = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_CONTEXT", "0.88"))
 FAISS_THRESHOLD_RETRY = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_RETRY", "0.82"))
+FAISS_HIGH_CONFIDENCE = float(os.getenv("FAISS_HIGH_CONFIDENCE", "0.95"))
 PROPAGATE_THRESHOLD = float(os.getenv("PROPAGATE_SIMILARITY_THRESHOLD", "0.90"))
 LEARN_MIN_CONFIDENCE = float(os.getenv("LEARN_MIN_CONFIDENCE", "0.7"))
 
@@ -281,6 +283,9 @@ def _propagate_shelf_labels(
             ):
                 still_unknown.append(index)
                 continue
+            if sub_category_blocks_brand(scan_context, label.get("brand") or "", pack_text):
+                still_unknown.append(index)
+                continue
             label = {
                 **label,
                 "confidence": round(min(0.97, best_sim * 0.98), 4),
@@ -347,13 +352,34 @@ def _accept_ocr_label(label: dict, scan_context: dict | None) -> bool:
     )
 
 
+def _accept_faiss_fusion(
+    match: dict,
+    score: float,
+    ocr_text: str,
+    scan_category: str | None,
+    scan_context: dict | None = None,
+) -> bool:
+    """Accept FAISS only when aisle gates pass and OCR supports the match (or score is very high)."""
+    if not _accept_faiss_match(match, scan_category, scan_context=scan_context):
+        return False
+    brand = match.get("brand") or ""
+    if label_conflicts_with_tea_pack(match, ocr_text):
+        return False
+    if sub_category_blocks_brand(scan_context, brand, ocr_text):
+        return False
+    if ocr_text and len(ocr_text.strip()) >= 3:
+        if not ocr_agrees_with_label(match, ocr_text) and score < FAISS_HIGH_CONFIDENCE:
+            return False
+    return True
+
+
 def classify_records_v2(
     records: list[dict],
     scan_id: str | None = None,
     scan_category: str | None = None,
     scan_context: dict | None = None,
 ) -> tuple[list[dict], dict]:
-    """FAISS → retry → propagate → OCR → GPT → unknown (OCR/GPT only on hard crops)."""
+    """OCR → FAISS fusion → propagate → GPT → low FAISS → propagate → unknown."""
     if not records:
         return [], {}
 
@@ -361,12 +387,11 @@ def classify_records_v2(
     embeddings = embed_pil_images(images)
     classified: list[dict | None] = [None] * len(records)
     stats = {"ocr": 0, "gpt": 0, "faiss": 0, "learned": 0, "propagate": 0, "none": 0}
-    pending: list[int] = list(range(len(records)))
     learned_new = 0
     ocr_texts: list[str] = [""] * len(records)
     faiss_cutoff = _faiss_threshold(scan_context)
 
-    def _apply_faiss(indices: list[int], threshold: float) -> list[int]:
+    def _apply_faiss_fusion(indices: list[int], threshold: float) -> list[int]:
         nonlocal learned_new
         if not indices or not is_ready():
             return indices
@@ -374,10 +399,15 @@ def classify_records_v2(
         still: list[int] = []
         for local_idx, (match, score) in enumerate(matches):
             global_idx = indices[local_idx]
-            if match and _accept_faiss_match(match, scan_category, scan_context=scan_context):
+            ocr_text = ocr_texts[global_idx]
+            if match and _accept_faiss_fusion(
+                match, score, ocr_text, scan_category, scan_context=scan_context
+            ):
                 merged = {**records[global_idx], **match}
                 merged["confidence"] = float(match.get("confidence") or score)
                 merged["_index"] = global_idx
+                if ocr_text:
+                    merged = reconcile_label_with_text(merged, ocr_text)
                 source = match.get("recognition_source") or "faiss"
                 stats["learned" if source == "learned" else "faiss"] += 1
                 classified[global_idx] = merged
@@ -385,25 +415,16 @@ def classify_records_v2(
                 still.append(global_idx)
         return still
 
-    pending = _apply_faiss(pending, faiss_cutoff)
-    pending = _apply_faiss(pending, FAISS_THRESHOLD_RETRY)
-
-    # Fast visual-only propagation — no OCR (seeds from FAISS spread to identical facings).
-    for _ in range(3):
-        if not pending:
-            break
-        pending, round_prop = _propagate_shelf_labels(
-            records, classified, embeddings, images, pending,
-            scan_context=scan_context, use_ocr=False,
-        )
-        stats["propagate"] += round_prop
-
-    ocr_gpt_queue: list[int] = []
-    for index in pending:
+    # Step 1: OCR on every crop first.
+    pending: list[int] = []
+    for index in range(len(records)):
         pack_text = read_packaging_text(images[index])
         ocr_texts[index] = pack_text
         ocr_label = classify_with_ocr(images[index], raw_text=pack_text)
         if ocr_label and _is_valid_label(ocr_label) and _accept_ocr_label(ocr_label, scan_context):
+            if sub_category_blocks_brand(scan_context, ocr_label.get("brand") or "", pack_text):
+                pending.append(index)
+                continue
             row = _merge_label(records[index], ocr_label)
             row["_index"] = index
             classified[index] = row
@@ -411,12 +432,27 @@ def classify_records_v2(
             if _should_learn(ocr_label) and learn_sku(embeddings[index], ocr_label, scan_id=scan_id):
                 learned_new += 1
             continue
-        ocr_gpt_queue.append(index)
+        pending.append(index)
 
-    gpt_cap = _smart_gpt_cap(len(ocr_gpt_queue))
+    # Step 2: FAISS on OCR misses — must agree with OCR text or be very high confidence.
+    pending = _apply_faiss_fusion(pending, faiss_cutoff)
+    pending = _apply_faiss_fusion(pending, FAISS_THRESHOLD_RETRY)
+
+    # Step 3: Propagate from OCR/FAISS-verified seeds only.
+    for _ in range(2):
+        if not pending:
+            break
+        pending, round_prop = _propagate_shelf_labels(
+            records, classified, embeddings, images, pending,
+            scan_context=scan_context, ocr_texts=ocr_texts, use_ocr=True,
+        )
+        stats["propagate"] += round_prop
+
+    # Step 4: GPT on remaining hard crops.
+    gpt_cap = _smart_gpt_cap(len(pending))
     gpt_used = 0
     faiss_retry_queue: list[int] = []
-    for index in ocr_gpt_queue:
+    for index in pending:
         if gpt_used < gpt_cap:
             label = classify_with_gpt(
                 images[index],
@@ -434,7 +470,8 @@ def classify_records_v2(
                 continue
         faiss_retry_queue.append(index)
 
-    faiss_retry_queue = _apply_faiss(faiss_retry_queue, 0.78)
+    # Step 5: Low-threshold FAISS with same OCR fusion gate.
+    faiss_retry_queue = _apply_faiss_fusion(faiss_retry_queue, 0.78)
 
     for _ in range(2):
         if not faiss_retry_queue:

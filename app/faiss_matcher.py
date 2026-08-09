@@ -15,6 +15,7 @@ from app.clip_embeddings import embed_pil_images
 BASE_DIR = Path(__file__).resolve().parent.parent
 INDEX_PATH = BASE_DIR / "data" / "faiss.index"
 DEFAULT_THRESHOLD = float(os.getenv("FAISS_SIMILARITY_THRESHOLD", "0.92"))
+FAISS_SEARCH_K = int(os.getenv("FAISS_SEARCH_K", "5"))
 
 _index: Any | None = None
 _catalog: list[dict] | None = None
@@ -57,14 +58,22 @@ def match_embedding(
     import faiss
 
     faiss.normalize_L2(vec)
-    scores, ids = index.search(vec, 1)
-    if ids[0][0] >= 0:
-        score = float(scores[0][0])
-        if score >= threshold:
-            entry = dict(catalog[int(ids[0][0])])
-            entry["confidence"] = round(min(0.99, score), 4)
+    k = min(FAISS_SEARCH_K, index.ntotal)
+    scores, ids = index.search(vec, k)
+    best_entry: dict | None = None
+    best_score = 0.0
+    for idx, score in zip(ids[0], scores[0]):
+        if idx < 0:
+            continue
+        score_f = float(score)
+        if score_f >= threshold and score_f > best_score:
+            entry = dict(catalog[int(idx)])
+            entry["confidence"] = round(min(0.99, score_f), 4)
             entry["recognition_source"] = "faiss"
-            return entry, score
+            best_entry = entry
+            best_score = score_f
+    if best_entry:
+        return best_entry, best_score
 
     learned_match, learned_score = _match_with_learned(
         np.asarray(embedding, dtype=np.float32).reshape(-1),
@@ -89,25 +98,33 @@ def match_embeddings_batch(
     import faiss
 
     faiss.normalize_L2(vecs)
-    scores, ids = index.search(vecs, 1)
+    k = min(FAISS_SEARCH_K, index.ntotal)
+    scores, ids = index.search(vecs, k)
     results: list[tuple[dict | None, float]] = []
     for row in range(len(vecs)):
-        idx = int(ids[row][0])
-        score = float(scores[row][0]) if idx >= 0 else 0.0
-        if idx >= 0 and score >= threshold:
-            entry = dict(catalog[idx])
-            entry["confidence"] = round(min(0.99, score), 4)
-            entry["recognition_source"] = "faiss"
-            results.append((entry, score))
+        best_entry: dict | None = None
+        best_score = 0.0
+        for idx, score in zip(ids[row], scores[row]):
+            if idx < 0:
+                continue
+            score_f = float(score)
+            if score_f >= threshold and score_f > best_score:
+                entry = dict(catalog[int(idx)])
+                entry["confidence"] = round(min(0.99, score_f), 4)
+                entry["recognition_source"] = "faiss"
+                best_entry = entry
+                best_score = score_f
+        if best_entry:
+            results.append((best_entry, best_score))
             continue
 
         learned_match, learned_score = _match_with_learned(vecs[row], threshold=threshold)
         if learned_match:
             results.append((learned_match, learned_score))
-        elif idx < 0:
+        elif ids[row][0] < 0:
             results.append((None, 0.0))
         else:
-            results.append((None, score))
+            results.append((None, float(scores[row][0])))
     return results
 
 
