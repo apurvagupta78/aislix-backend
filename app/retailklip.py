@@ -34,10 +34,12 @@ def is_available() -> bool:
 
 
 def ensure_checkpoint() -> Path:
-    """Return checkpoint path, downloading from Supabase storage if missing locally."""
+    """Return checkpoint path; Supabase download is optional fallback after Docker bundle."""
     path = checkpoint_path()
     meta = path.with_suffix(".json")
     if _is_valid_checkpoint(path):
+        size_mb = path.stat().st_size / 1_000_000
+        print(f"RetailKLIP checkpoint ready: {path.name} ({size_mb:.0f} MB, bundled)")
         return path
     if path.exists() and not _is_valid_checkpoint(path):
         print(f"RetailKLIP checkpoint invalid or LFS pointer ({path.stat().st_size} bytes) — re-downloading")

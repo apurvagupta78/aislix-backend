@@ -1,7 +1,8 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
-buildCommand = "git lfs pull || true"
+# Materialize LFS before Docker build (Dockerfile also pulls LFS if .git is present).
+buildCommand = "git lfs install && git lfs pull"
 
 [deploy]
 startCommand = "python run.py"
@@ -11,3 +12,4 @@ restartPolicyMaxRetries = 10
 [deploy.env]
 OCR_ENGINE = "easyocr"
 EMBED_BATCH_SIZE = "16"
+USE_RETAILKLIP = "true"

@@ -9,4 +9,4 @@ audit_report.pdf
 *.log
 test_scan_output.json
 build_faiss.log
-.git/
+# .git/ intentionally NOT ignored — Dockerfile runs git lfs pull during build.

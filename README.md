@@ -33,8 +33,20 @@ uvicorn main:app --reload --port 8000
 - `OCR_ENGINE=easyocr` (default on Railway; PaddleOCR optional via `requirements-paddle.txt`)
 - `OCR_MIN_CONFIDENCE=0.6`
 - `LEARN_MIN_CONFIDENCE=0.7` (only OCR/GPT labels above this are learned)
-- `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (required for persistent learned SKU catalog)
+- `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (optional — for Supabase-backed learned SKU sync; Lovable can persist without these)
 - `LEARNED_CATALOG_BUCKET=catalog-data` (optional — Supabase storage bucket name)
+
+### RetailKLIP on Railway (bundled in Docker)
+
+The fine-tuned checkpoint `models/retailklip_vitb32.pt` (~335 MB) is stored in **Git LFS** and baked into the Docker image at build time. No Supabase keys required.
+
+1. Push to the branch Railway deploys from (Git LFS must be enabled on the repo).
+2. Railway runs `git lfs pull` (see `railway.toml`) then builds `Dockerfile`.
+3. Verify: `GET /health` → `"retailklip": true`
+
+If the build fails with “Git LFS pointer”, run `git lfs pull` locally and push, or enable **Git LFS** in Railway project settings.
+
+Set `USE_RETAILKLIP=false` to revert to base OpenCLIP embeddings.
 
 ## Learned SKU catalog (auto-learning)
 
@@ -62,6 +74,12 @@ Fine-tune OpenCLIP ViT-B-32 with ArcFace on your YOLO crop dataset:
 ```bash
 python scripts/train_retailklip.py --dataset "D:\combinedDataset.v3-dataset_master_file.yolov8" --epochs 4
 python scripts/build_faiss_index.py
+```
+
+Upload to Supabase storage (optional fallback if not using Docker bundle):
+
+```bash
+python scripts/upload_retailklip.py
 ```
 
 Set `USE_RETAILKLIP=false` to revert to base OpenCLIP embeddings.
