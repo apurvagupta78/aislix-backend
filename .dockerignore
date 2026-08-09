@@ -9,4 +9,6 @@ audit_report.pdf
 *.log
 test_scan_output.json
 build_faiss.log
-# .git/ intentionally NOT ignored — Dockerfile runs git lfs pull during build.
+# Exclude LFS pointer stub — Dockerfile fetches the real .pt via multi-stage git lfs pull.
+models/*.pt
+# .git/ is not available in Railway Docker context anyway.

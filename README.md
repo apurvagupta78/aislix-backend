@@ -38,13 +38,13 @@ uvicorn main:app --reload --port 8000
 
 ### RetailKLIP on Railway (bundled in Docker)
 
-The fine-tuned checkpoint `models/retailklip_vitb32.pt` (~335 MB) is stored in **Git LFS** and baked into the Docker image at build time. No Supabase keys required.
+The fine-tuned checkpoint `models/retailklip_vitb32.pt` (~335 MB) is stored in **Git LFS**. The Dockerfile uses a multi-stage build that `git clone`s the repo and runs `git lfs pull` (Railway’s Docker context does not include `.git`, so a plain `COPY` only gets the pointer stub).
 
-1. Push to the branch Railway deploys from (Git LFS must be enabled on the repo).
-2. Railway runs `git lfs pull` (see `railway.toml`) then builds `Dockerfile`.
+1. Push to the branch Railway deploys from.
+2. Railway builds `Dockerfile` — the `lfs-fetch` stage downloads the real checkpoint.
 3. Verify: `GET /health` → `"retailklip": true`
 
-If the build fails with “Git LFS pointer”, run `git lfs pull` locally and push, or enable **Git LFS** in Railway project settings.
+If the build fails on `git clone` (private repo), add a Railway build arg `GITHUB_TOKEN` with repo read access.
 
 Set `USE_RETAILKLIP=false` to revert to base OpenCLIP embeddings.
 

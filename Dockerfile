@@ -1,3 +1,24 @@
+FROM alpine:3.20 AS lfs-fetch
+
+RUN apk add --no-cache git git-lfs
+
+ARG GIT_REPO=https://github.com/apurvagupta78/aislix-backend.git
+ARG GIT_BRANCH=main
+ARG GITHUB_TOKEN=""
+
+# Railway Docker builds omit .git, so clone + LFS pull fetches the real checkpoint.
+RUN set -eux; \
+    REPO="${GIT_REPO}"; \
+    if [ -n "${GITHUB_TOKEN}" ]; then \
+      REPO="https://${GITHUB_TOKEN}@github.com/apurvagupta78/aislix-backend.git"; \
+    fi; \
+    git lfs install; \
+    git clone --depth 1 --branch "${GIT_BRANCH}" "${REPO}" /src; \
+    cd /src; \
+    git lfs pull; \
+    test "$(wc -c < models/retailklip_vitb32.pt)" -gt 1000000; \
+    echo "RetailKLIP LFS fetch OK: $(wc -c < models/retailklip_vitb32.pt) bytes"
+
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -6,24 +27,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libgomp1 \
-    git \
-    git-lfs \
-    && git lfs install \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source (.git included so we can materialize LFS objects during build).
 COPY . .
 
-# Pull Git LFS checkpoint into the image (Railway clone often leaves pointer stubs).
-RUN set -eux; \
-    if [ -d .git ]; then \
-      git lfs pull; \
-    fi; \
-    python scripts/verify_retailklip_checkpoint.py; \
-    rm -rf .git
+# Overwrite any Git LFS pointer stub with the full checkpoint from the fetch stage.
+COPY --from=lfs-fetch /src/models/retailklip_vitb32.pt models/retailklip_vitb32.pt
+
+RUN python scripts/verify_retailklip_checkpoint.py
 
 ENV USE_RETAILKLIP=true
 
