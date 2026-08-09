@@ -172,3 +172,32 @@ async def scan(request: Request):
         status_code=400,
         detail='Expected multipart file upload or JSON body with "image_urls".',
     )
+
+
+@app.post("/scan/export-assets")
+async def export_assets(request: Request):
+    """Regenerate PDF, annotated image, and CSV from a shelf image URL (sync)."""
+    from app.pipeline import run_scan_from_url
+
+    body = await request.json()
+    image_url = body.get("image_url")
+    if not image_url:
+        raise HTTPException(status_code=400, detail="image_url is required.")
+
+    metadata = {
+        "store_id": body.get("store_id"),
+        "location": body.get("location"),
+        "shelf_label": body.get("shelf_label"),
+        "category": body.get("category"),
+    }
+    scan_id = body.get("scan_id") or "export"
+    try:
+        result = run_scan_from_url(image_url, scan_id=scan_id, metadata=metadata)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {
+        "pdf_base64": result.get("pdf_base64"),
+        "annotated_image_base64": result.get("annotated_image_base64"),
+        "csv_base64": result.get("csv_base64"),
+    }
