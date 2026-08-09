@@ -31,7 +31,7 @@ AISLE_BRAND_HINTS: dict[str, set[str]] = {
     "beverages": {
         "lipton", "tetley", "tata", "brooke bond", "taj mahal", "red label", "yellow label",
         "nescafe", "bru", "coca cola", "pepsi", "frooti", "maaza", "real", "tropicana",
-        "boost", "horlicks", "complan", "sofit", "bournvita", "sprite", "coca cola",
+        "boost", "horlicks", "complan", "bournvita", "sprite", "coca cola",
         "pepsi", "fanta", "paper boat", "tang", "minute maid",
     },
     "packaged food & snacks": {
@@ -48,7 +48,7 @@ AISLE_BRAND_HINTS: dict[str, set[str]] = {
         "good knight", "all out", "odonil", "airwick",
     },
     "dairy & chilled": {
-        "amul", "mother dairy", "nestle", "britannia", "go", "epigamia", "yakult",
+        "amul", "mother dairy", "nestle", "britannia", "go", "epigamia", "yakult", "sofit",
     },
     "grocery & staples": {
         "india gate", "fortune", "saffola", "aashirvaad", "pillsbury", "mdh", "everest",
@@ -63,6 +63,7 @@ AISLE_BRAND_BLOCKLIST: dict[str, set[str]] = {
         "bounty", "haldiram", "haldiram's", "britannia", "parle", "bisk farm", "mtr",
         "maggi", "maggie", "lays", "lay's", "kurkure", "bingo", "sunfeast",
         "dove", "lux", "colgate", "pepsodent", "harpic", "vim", "surf excel",
+        "sofit",
     },
     "packaged food & snacks": {
         "lipton", "tetley", "coca cola", "pepsi", "sprite", "fanta", "tropicana",
@@ -202,7 +203,8 @@ def sku_allowed_in_context(
         if sku_cat == "general":
             pass
         else:
-            if brand_l in hints:
+            # Dairy/snacks catalog entries must not pass on a beverages aisle just via hints.
+            if brand_l in hints and sku_cat.lower() not in {"dairy", "snacks", "personal care", "household"}:
                 return True
             return False
 

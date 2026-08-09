@@ -37,6 +37,26 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\btetley\b", "Tetley", ""),
 ]
 
+TEA_OCR_MARKERS = (
+    "lipton", "tetley", "tata tea", "tea agni", "agni", "green tea", "red label",
+    "yellow label", "brooke bond", "taj mahal", "tea bags", "tea bag", "tea premix",
+)
+NON_TEA_BEVERAGE_BRANDS = {
+    "sofit", "coca cola", "coca-cola", "pepsi", "fanta", "sprite", "tropicana", "maaza",
+}
+
+
+def pack_text_indicates_tea(text: str) -> bool:
+    text_l = _normalize(text)
+    return any(marker in text_l for marker in TEA_OCR_MARKERS)
+
+
+def label_conflicts_with_tea_pack(label: dict, text: str) -> bool:
+    if not text or not pack_text_indicates_tea(text):
+        return False
+    brand_l = (label.get("brand") or "").strip().lower()
+    return brand_l in NON_TEA_BEVERAGE_BRANDS
+
 
 def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower().strip())
@@ -175,6 +195,20 @@ def reconcile_label_with_text(label: dict, text: str) -> dict:
     """Override GPT/FAISS labels when pack text clearly names a different brand or SKU."""
     if not text or len(text.strip()) < 3:
         return label
+    if label_conflicts_with_tea_pack(label, text):
+        corrected = match_from_text(text)
+        if corrected:
+            merged = {**label, **corrected}
+            merged["recognition_source"] = (label.get("recognition_source") or "faiss") + "+ocr_fix"
+            merged["confidence"] = float(corrected.get("confidence") or 0.88)
+            return merged
+        return {
+            **label,
+            "brand": "Unknown",
+            "product_name": "Unidentified SKU",
+            "confidence": 0.35,
+            "recognition_source": "ocr_reject",
+        }
     corrected = match_from_text(text)
     if not corrected:
         return label

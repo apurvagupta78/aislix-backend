@@ -19,20 +19,54 @@ from reportlab.platypus import Image as RLImage
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
+def _annotation_label(item: dict) -> str:
+    brand = (item.get("brand") or "?").strip()
+    product = (item.get("product_name") or "").strip()
+    skip_product = product.lower() in {"", "unknown", "unidentified sku", brand.lower()}
+    if product and not skip_product:
+        return f"{brand} · {product}"[:40]
+    return brand[:28]
+
+
 def generate_annotated_image(image: np.ndarray, classified: list[dict]) -> np.ndarray:
     annotated = image.copy()
+    img_h, img_w = annotated.shape[:2]
+    base_scale = max(0.5, min(img_h, img_w) / 1600.0 * 0.6)
+
     for item in classified:
-        x1, y1, x2, y2 = item["x1"], item["y1"], item["x2"], item["y2"]
-        label = (item.get("brand") or "?")[:18]
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 180, 0), 2)
+        x1, y1, x2, y2 = int(item["x1"]), int(item["y1"]), int(item["x2"]), int(item["y2"])
+        label = _annotation_label(item)
+        box_h = max(y2 - y1, 1)
+        font_scale = max(0.45, min(0.9, base_scale * (box_h / 70.0)))
+        thickness = max(1, int(round(font_scale * 2.2)))
+        line_w = max(2, thickness)
+
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 210, 0), line_w)
+
+        (text_w, text_h), baseline = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness
+        )
+        pad = 4
+        label_h = text_h + baseline + pad * 2
+
+        if y1 - label_h >= 0:
+            bg_y1, bg_y2 = y1 - label_h, y1
+            text_y = y1 - pad - baseline
+        else:
+            bg_y1, bg_y2 = y1, min(img_h - 1, y1 + label_h)
+            text_y = y1 + text_h + pad
+
+        bg_x1 = max(0, x1)
+        bg_x2 = min(img_w - 1, bg_x1 + text_w + pad * 2)
+        cv2.rectangle(annotated, (bg_x1, bg_y1), (bg_x2, bg_y2), (0, 0, 0), -1)
         cv2.putText(
             annotated,
             label,
-            (x1, max(y1 - 6, 12)),
+            (bg_x1 + pad, text_y),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.35,
-            (0, 180, 0),
-            1,
+            font_scale,
+            (255, 255, 255),
+            thickness,
             cv2.LINE_AA,
         )
     return annotated

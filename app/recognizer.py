@@ -12,7 +12,12 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from PIL import Image
 
-from app.brand_dictionary import category_allows_brand, match_from_text, reconcile_label_with_text
+from app.brand_dictionary import (
+    category_allows_brand,
+    label_conflicts_with_tea_pack,
+    match_from_text,
+    reconcile_label_with_text,
+)
 from app.clip_embeddings import embed_pil_images
 from app.faiss_matcher import is_ready, match_embeddings_batch
 from app.learned_catalog import learn_sku, metadata_to_sku
@@ -244,6 +249,22 @@ def _propagate_shelf_labels(
             if "tata" in text_l and ref_brand == "lipton" and "tea" in text_l:
                 still_unknown.append(index)
                 continue
+            if label_conflicts_with_tea_pack(best_label, pack_text):
+                ocr_fix = match_from_text(pack_text)
+                if ocr_fix and _is_valid_label(ocr_fix) and _accept_ocr_label(ocr_fix, scan_context):
+                    row = _merge_label(records[index], ocr_fix)
+                    row["_index"] = index
+                    row["recognition_source"] = "ocr+propagate"
+                    classified[index] = row
+                    known.append((probe, row))
+                    propagated += 1
+                    continue
+                still_unknown.append(index)
+                continue
+
+        if best_label and use_ocr and pack_text and label_conflicts_with_tea_pack(best_label, pack_text):
+            still_unknown.append(index)
+            continue
 
         if best_label:
             label = {
