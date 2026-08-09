@@ -30,7 +30,7 @@ uvicorn main:app --reload --port 8000
 - `GPT_MAX_FALLBACKS=80` (smart cap in v2 — was 12)
 - `RECOGNITION_V2=true` (OCR-first pipeline; set `false` to revert to v1)
 - `OCR_ENABLED=true` / `OCR_LANGUAGES=en`
-- `OCR_ENGINE=paddle` (default; falls back to `easyocr` if PaddleOCR unavailable)
+- `OCR_ENGINE=easyocr` (default on Railway; PaddleOCR optional via `requirements-paddle.txt`)
 - `OCR_MIN_CONFIDENCE=0.6`
 - `LEARN_MIN_CONFIDENCE=0.7` (only OCR/GPT labels above this are learned)
 - `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (required for persistent learned SKU catalog)

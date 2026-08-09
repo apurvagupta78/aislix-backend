@@ -109,10 +109,10 @@ def _resolve_engine() -> ActiveEngine:
 
     preference = OCR_ENGINE
     order: list[EngineName]
-    if preference == "easyocr":
-        order = ["easyocr", "paddle"]
-    else:
+    if preference == "paddle":
         order = ["paddle", "easyocr"]
+    else:
+        order = ["easyocr"]
 
     for engine in order:
         reader = _init_paddle() if engine == "paddle" else _init_easyocr()
