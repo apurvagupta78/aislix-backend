@@ -21,16 +21,27 @@ def checkpoint_path() -> Path:
     return Path(override) if override else DEFAULT_CHECKPOINT
 
 
+def _is_valid_checkpoint(path: Path) -> bool:
+    """Reject missing files and Git LFS pointer stubs (< 1 MB)."""
+    try:
+        return path.exists() and path.stat().st_size > 1_000_000
+    except OSError:
+        return False
+
+
 def is_available() -> bool:
-    return USE_RETAILKLIP and ensure_checkpoint().exists()
+    return USE_RETAILKLIP and _is_valid_checkpoint(ensure_checkpoint())
 
 
 def ensure_checkpoint() -> Path:
     """Return checkpoint path, downloading from Supabase storage if missing locally."""
     path = checkpoint_path()
     meta = path.with_suffix(".json")
-    if path.exists():
+    if _is_valid_checkpoint(path):
         return path
+    if path.exists() and not _is_valid_checkpoint(path):
+        print(f"RetailKLIP checkpoint invalid or LFS pointer ({path.stat().st_size} bytes) — re-downloading")
+        path.unlink(missing_ok=True)
     try:
         from app.catalog_sync import download_retailklip_checkpoint
 
@@ -54,11 +65,15 @@ def load_metadata() -> dict:
 def apply_checkpoint(model) -> bool:
     """Load fine-tuned visual weights into an open_clip model. Returns True on success."""
     path = ensure_checkpoint()
-    if not USE_RETAILKLIP or not path.exists():
+    if not USE_RETAILKLIP or not _is_valid_checkpoint(path):
         return False
     import torch
 
-    checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+    try:
+        checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+    except Exception as exc:
+        print(f"RetailKLIP torch.load failed ({path}): {exc}")
+        return False
     state = checkpoint.get("visual_state_dict") or checkpoint.get("state_dict")
     if not state:
         print(f"RetailKLIP checkpoint missing visual_state_dict: {path}")

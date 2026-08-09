@@ -1,8 +1,13 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+buildCommand = "git lfs pull || true"
 
 [deploy]
 startCommand = "python run.py"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
+
+[deploy.env]
+OCR_ENGINE = "easyocr"
+EMBED_BATCH_SIZE = "16"

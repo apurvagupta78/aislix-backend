@@ -25,6 +25,15 @@ allow_origins = [origin.strip() for origin in cors_origins.split(",") if origin.
 
 app = FastAPI(title="Aislix API", version="1.0.0")
 
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    print(f"Unhandled error on {request.url.path}: {exc}")
+    return JSONResponse(status_code=500, content={"detail": str(exc)[:500]})
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
@@ -65,17 +74,19 @@ def health():
 
 
 def _retailklip_status() -> bool:
-    from app.retailklip import is_available
+    from app.retailklip import _is_valid_checkpoint, checkpoint_path, ensure_checkpoint
 
-    return is_available()
+    path = ensure_checkpoint()
+    return _is_valid_checkpoint(path)
 
 
 def _ocr_engine_status() -> str:
-    from app.ocr_reader import OCR_ENABLED, active_ocr_engine
+    from app.ocr_reader import OCR_ENABLED
 
     if not OCR_ENABLED:
         return "disabled"
-    return active_ocr_engine() or "unavailable"
+    # Avoid heavy OCR init on every health ping — report configured engine.
+    return os.getenv("OCR_ENGINE", "easyocr")
 
 
 @app.get("/catalog/learned")

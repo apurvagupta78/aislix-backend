@@ -23,7 +23,7 @@ OCR_MIN_CONFIDENCE = float(os.getenv("OCR_MIN_CONFIDENCE", "0.6"))
 OCR_LINE_MIN_CONFIDENCE = float(os.getenv("OCR_LINE_MIN_CONFIDENCE", "0.45"))
 OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() in {"1", "true", "yes"}
 OCR_UPSCALE_MIN = int(os.getenv("OCR_UPSCALE_MIN", "320"))
-OCR_ENGINE = os.getenv("OCR_ENGINE", "paddle").strip().lower()
+OCR_ENGINE = os.getenv("OCR_ENGINE", "easyocr").strip().lower()
 
 SIZE_TOKEN_PATTERN = re.compile(
     r"\b(\d+(?:\.\d+)?)\s*(gms?|gm|g|kg|ml|ltr|l|unit|units|bags?|bag|pack|packs|pcs|pc)\b",

@@ -7,12 +7,13 @@ import os
 import numpy as np
 from PIL import Image
 
-from app.retailklip import CLIP_MODEL_NAME, CLIP_PRETRAINED, apply_checkpoint, is_available
+from app.retailklip import CLIP_MODEL_NAME, CLIP_PRETRAINED, apply_checkpoint
 
 _model = None
 _preprocess = None
 _device = None
 _using_retailklip = False
+EMBED_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "24"))
 
 
 def _load_clip():
@@ -46,11 +47,15 @@ def embed_pil_images(images: list[Image.Image]) -> np.ndarray:
     import torch
 
     model, preprocess, device = _load_clip()
-    batch = torch.stack([preprocess(img) for img in images]).to(device)
-    with torch.no_grad():
-        embeddings = model.encode_image(batch)
-    embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)
-    return embeddings.cpu().numpy().astype(np.float32)
+    chunks: list[np.ndarray] = []
+    for start in range(0, len(images), EMBED_BATCH_SIZE):
+        batch_imgs = images[start : start + EMBED_BATCH_SIZE]
+        batch = torch.stack([preprocess(img) for img in batch_imgs]).to(device)
+        with torch.no_grad():
+            embeddings = model.encode_image(batch)
+        embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)
+        chunks.append(embeddings.cpu().numpy().astype(np.float32))
+    return np.vstack(chunks)
 
 
 def get_embeddings(image_paths: list[str]) -> np.ndarray:
