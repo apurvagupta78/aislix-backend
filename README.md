@@ -87,6 +87,7 @@ Set `USE_RETAILKLIP=false` to revert to base OpenCLIP embeddings.
 ## Endpoints
 
 - `GET /health`
+- `GET /categories` — includes `subcategories[]` per aisle (with Others + custom text)
 - `GET /catalog/learned`
-- `POST /scan` — multipart file **or** JSON `{ "image_urls": ["..."], "scan_id": "..." }`
+- `POST /scan` — multipart file **or** JSON `{ "image_urls", "scan_id", "category", "sub_category", ... }`
 - `GET /scan/{scan_id}` — poll async scan status

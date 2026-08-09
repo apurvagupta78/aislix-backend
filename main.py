@@ -99,9 +99,9 @@ def learned_catalog_stats():
 
 @app.get("/categories")
 def list_categories():
-    from app.scan_context import load_aislix_categories
+    from app.scan_context import categories_for_api
 
-    return {"categories": load_aislix_categories()}
+    return {"categories": categories_for_api()}
 
 
 @app.get("/scan/{scan_id}")
@@ -146,10 +146,15 @@ async def scan(request: Request):
             "shelf_label": body.get("shelf_label"),
             "category": body.get("category"),
             "notes": body.get("notes"),
+            "sub_category": body.get("sub_category"),
+            "sub_category_label": body.get("sub_category_label"),
+            "sub_category_custom": body.get("sub_category_custom"),
             # legacy fields — still accepted if sent
             "aisle": body.get("aisle"),
             "rack": body.get("rack"),
             "bin": body.get("bin"),
+            "beverage_type": body.get("beverage_type"),
+            "product_type": body.get("product_type"),
         }
 
         from app.scan_context import build_shelf_label, validate_scan_metadata

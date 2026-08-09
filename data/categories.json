@@ -2,51 +2,152 @@
   {
     "id": "beverages",
     "name": "Beverages",
-    "examples": "Water, soft drinks, juices, energy drinks, tea, coffee, sports drinks"
+    "examples": "Water, soft drinks, juices, energy drinks, tea, coffee, sports drinks",
+    "subcategories": [
+      {"id": "water", "label": "Water"},
+      {"id": "soft_drinks", "label": "Soft drinks"},
+      {"id": "juices", "label": "Juices"},
+      {"id": "energy_drinks", "label": "Energy drinks"},
+      {"id": "tea", "label": "Tea"},
+      {"id": "coffee", "label": "Coffee"},
+      {"id": "sports_drinks", "label": "Sports drinks"},
+      {"id": "others", "label": "Others", "allow_custom": true}
+    ]
   },
   {
     "id": "fresh_food",
     "name": "Fresh Food",
-    "examples": "Fruits, vegetables, fresh meat, fish, eggs"
+    "examples": "Fruits, vegetables, fresh meat, fish, eggs",
+    "subcategories": [
+      {"id": "fruits", "label": "Fruits"},
+      {"id": "vegetables", "label": "Vegetables"},
+      {"id": "fresh_meat", "label": "Fresh meat"},
+      {"id": "fish", "label": "Fish"},
+      {"id": "eggs", "label": "Eggs"},
+      {"id": "others", "label": "Others", "allow_custom": true}
+    ]
   },
   {
     "id": "dairy_chilled",
     "name": "Dairy & Chilled",
-    "examples": "Milk, curd, paneer, cheese, butter, yogurt"
+    "examples": "Milk, curd, paneer, cheese, butter, yogurt",
+    "subcategories": [
+      {"id": "milk", "label": "Milk"},
+      {"id": "curd", "label": "Curd"},
+      {"id": "paneer", "label": "Paneer"},
+      {"id": "cheese", "label": "Cheese"},
+      {"id": "butter", "label": "Butter"},
+      {"id": "yogurt", "label": "Yogurt"},
+      {"id": "others", "label": "Others", "allow_custom": true}
+    ]
   },
   {
     "id": "grocery_staples",
     "name": "Grocery & Staples",
-    "examples": "Rice, atta, dal, pulses, oil, sugar, salt, spices"
+    "examples": "Rice, atta, dal, pulses, oil, sugar, salt, spices",
+    "subcategories": [
+      {"id": "rice", "label": "Rice"},
+      {"id": "atta", "label": "Atta"},
+      {"id": "dal", "label": "Dal"},
+      {"id": "pulses", "label": "Pulses"},
+      {"id": "oil", "label": "Oil"},
+      {"id": "sugar", "label": "Sugar"},
+      {"id": "salt", "label": "Salt"},
+      {"id": "spices", "label": "Spices"},
+      {"id": "others", "label": "Others", "allow_custom": true}
+    ]
   },
   {
     "id": "packaged_food_snacks",
     "name": "Packaged Food & Snacks",
-    "examples": "Biscuits, chips, namkeen, noodles, pasta, cereals, chocolates, confectionery, sauces"
+    "examples": "Biscuits, chips, namkeen, noodles, pasta, cereals, chocolates, confectionery, sauces",
+    "subcategories": [
+      {"id": "biscuits", "label": "Biscuits"},
+      {"id": "chips", "label": "Chips"},
+      {"id": "namkeen", "label": "Namkeen"},
+      {"id": "noodles", "label": "Noodles"},
+      {"id": "pasta", "label": "Pasta"},
+      {"id": "cereals", "label": "Cereals"},
+      {"id": "chocolates", "label": "Chocolates"},
+      {"id": "confectionery", "label": "Confectionery"},
+      {"id": "sauces", "label": "Sauces"},
+      {"id": "others", "label": "Others", "allow_custom": true}
+    ]
   },
   {
     "id": "frozen_ice_cream",
     "name": "Frozen Foods & Ice Cream",
-    "examples": "Ice cream, frozen vegetables, frozen snacks, frozen meals"
+    "examples": "Ice cream, frozen vegetables, frozen snacks, frozen meals",
+    "subcategories": [
+      {"id": "ice_cream", "label": "Ice cream"},
+      {"id": "frozen_vegetables", "label": "Frozen vegetables"},
+      {"id": "frozen_snacks", "label": "Frozen snacks"},
+      {"id": "frozen_meals", "label": "Frozen meals"},
+      {"id": "others", "label": "Others", "allow_custom": true}
+    ]
   },
   {
     "id": "personal_care",
     "name": "Personal Care",
-    "examples": "Shampoo, soap, toothpaste, deodorant, skincare, cosmetics, shaving"
+    "examples": "Shampoo, soap, toothpaste, deodorant, skincare, cosmetics, shaving",
+    "subcategories": [
+      {"id": "shampoo", "label": "Shampoo"},
+      {"id": "soap", "label": "Soap"},
+      {"id": "toothpaste", "label": "Toothpaste"},
+      {"id": "deodorant", "label": "Deodorant"},
+      {"id": "skincare", "label": "Skincare"},
+      {"id": "cosmetics", "label": "Cosmetics"},
+      {"id": "shaving", "label": "Shaving"},
+      {"id": "others", "label": "Others", "allow_custom": true}
+    ]
   },
   {
     "id": "home_care",
     "name": "Home Care",
-    "examples": "Detergent, dishwash, floor cleaner, toilet cleaner, disinfectants, air fresheners, insecticides"
+    "examples": "Detergent, dishwash, floor cleaner, toilet cleaner, disinfectants, air fresheners, insecticides",
+    "subcategories": [
+      {"id": "detergent", "label": "Detergent"},
+      {"id": "dishwash", "label": "Dishwash"},
+      {"id": "floor_cleaner", "label": "Floor cleaner"},
+      {"id": "toilet_cleaner", "label": "Toilet cleaner"},
+      {"id": "disinfectants", "label": "Disinfectants"},
+      {"id": "air_fresheners", "label": "Air fresheners"},
+      {"id": "insecticides", "label": "Insecticides"},
+      {"id": "others", "label": "Others", "allow_custom": true}
+    ]
   },
   {
     "id": "health_wellness",
     "name": "Health & Wellness",
-    "examples": "OTC products, vitamins, supplements, first aid, health foods"
+    "examples": "OTC products, vitamins, supplements, first aid, health foods",
+    "subcategories": [
+      {"id": "otc", "label": "OTC products"},
+      {"id": "vitamins", "label": "Vitamins"},
+      {"id": "supplements", "label": "Supplements"},
+      {"id": "first_aid", "label": "First aid"},
+      {"id": "health_foods", "label": "Health foods"},
+      {"id": "others", "label": "Others", "allow_custom": true}
+    ]
   },
   {
     "id": "baby_pet_care",
     "name": "Baby & Pet Care",
-    "examples": "Baby food, diapers, wipes, pet food, pet hygiene"
+    "examples": "Baby food, diapers, wipes, pet food, pet hygiene",
+    "subcategories": [
+      {"id": "baby_food", "label": "Baby food"},
+      {"id": "diapers", "label": "Diapers"},
+      {"id": "wipes", "label": "Wipes"},
+      {"id": "pet_food", "label": "Pet food"},
+      {"id": "pet_hygiene", "label": "Pet hygiene"},
+      {"id": "others", "label": "Others", "allow_custom": true}
+    ]
+  },
+  {
+    "id": "others",
+    "name": "Others",
+    "examples": "Custom shelf type",
+    "subcategories": [
+      {"id": "others", "label": "Others", "allow_custom": true}
+    ]
   }
 ]

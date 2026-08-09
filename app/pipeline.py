@@ -79,7 +79,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         records, work_dir = crop_products(image, boxes)
         scan_context = resolve_scan_context(metadata)
         scan_category = scan_context.get("aislix_category") or metadata.get("category") or metadata.get("shelf_label")
-        classified = classify_records(
+        classified, recognition_engine_stats = classify_records(
             records,
             scan_id=scan_id,
             scan_category=scan_category,
@@ -91,6 +91,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         metrics = compute_metrics(inventory, classified, image.shape, processing_ms)
         recognition_stats = _recognition_stats(classified)
         metrics.update(recognition_stats)
+        metrics["gpt_vision_calls"] = int(recognition_engine_stats.get("gpt_calls") or 0)
         shares = brand_share(inventory)
         categories = category_breakdown(inventory)
         alerts = build_alerts(metrics)
@@ -145,6 +146,9 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             "scan_context": {
                 "aislix_category": scan_context.get("aislix_category"),
                 "aislix_category_id": scan_context.get("aislix_category_id"),
+                "sub_category": scan_context.get("sub_category"),
+                "sub_category_label": scan_context.get("sub_category_label"),
+                "sub_category_custom": scan_context.get("sub_category_custom"),
                 "location": scan_context.get("location"),
                 "shelf_label": scan_context.get("shelf_label"),
                 "store_id": scan_context.get("store_id"),

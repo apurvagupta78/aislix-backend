@@ -554,7 +554,7 @@ def classify_records(
     scan_id: str | None = None,
     scan_category: str | None = None,
     scan_context: dict | None = None,
-) -> list[dict]:
+) -> tuple[list[dict], dict]:
     if RECOGNITION_V2:
         classified, stats = classify_records_v2(
             records,
@@ -572,5 +572,5 @@ def classify_records(
             f"unknown={stats.get('none', 0)}",
             f"gpt_calls={stats.get('gpt_calls', 0)}",
         )
-        return classified
-    return classify_records_v1(records, scan_id=scan_id)
+        return classified, stats
+    return classify_records_v1(records, scan_id=scan_id), {}

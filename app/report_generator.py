@@ -24,7 +24,7 @@ def _annotation_label(item: dict) -> str:
     product = (item.get("product_name") or "").strip()
     skip_product = product.lower() in {"", "unknown", "unidentified sku", brand.lower()}
     if product and not skip_product:
-        return f"{brand} · {product}"[:40]
+        return f"{brand} - {product}"[:40]
     return brand[:28]
 
 

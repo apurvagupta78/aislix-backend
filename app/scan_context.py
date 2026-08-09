@@ -24,6 +24,7 @@ AISLIX_TO_CATALOG: dict[str, list[str]] = {
     "home care": ["household"],
     "health & wellness": ["personal care", "general"],
     "baby & pet care": ["general", "dairy"],
+    "others": ["general"],
 }
 
 # Typical brands per aisle — used to reject obvious cross-aisle false positives.
@@ -31,17 +32,20 @@ AISLE_BRAND_HINTS: dict[str, set[str]] = {
     "beverages": {
         "lipton", "tetley", "tata", "brooke bond", "taj mahal", "red label", "yellow label",
         "nescafe", "bru", "coca cola", "pepsi", "frooti", "maaza", "real", "tropicana",
-        "boost", "horlicks", "complan", "bournvita", "sprite", "coca cola",
-        "pepsi", "fanta", "paper boat", "tang", "minute maid",
+        "boost", "horlicks", "complan", "bournvita", "sprite", "fanta", "paper boat", "tang",
+        "minute maid", "mirinda", "7up", "mountain dew",
     },
     "packaged food & snacks": {
         "haldiram", "haldiram's", "britannia", "parle", "bisk farm", "sunfeast", "mtr",
         "maggi", "maggie", "lays", "lay's", "kurkure", "bingo", "too yumm", "act ii",
-        "cadbury", "nestle", "amul", "itc", "priya gold",
+        "cadbury", "nestle", "amul", "itc", "priya gold", "snickers", "mars", "figaro",
     },
     "personal care": {
         "dove", "lux", "lifebuoy", "himalaya", "colgate", "pepsodent", "closeup",
-        "head & shoulders", "pantene", "sunsilk", "gillette", "nivea", "ponds",
+        "head & shoulders", "pantene", "sunsilk", "gillette", "nivea", "ponds", "pond's",
+        "dettol", "pears", "tresemme", "tresemmé", "sensodyne", "loreal", "l'oreal",
+        "lakme", "lakmé", "clinic plus", "indulekha", "mamaearth", "garnier", "joy",
+        "simple", "clear", "meera", "oral-b", "oral b", "tressemme",
     },
     "home care": {
         "surf excel", "ariel", "rin", "tide", "vim", "harpic", "lizol", "domex",
@@ -56,31 +60,75 @@ AISLE_BRAND_HINTS: dict[str, set[str]] = {
     },
 }
 
+# Food / snack brands that must not appear on personal care, home care, etc.
+FOOD_SNACK_BRANDS: set[str] = {
+    "snickers", "mars", "cadbury", "kitkat", "munch", "perk", "galaxy", "twix", "bounty",
+    "figaro", "haldiram", "haldiram's", "britannia", "parle", "lays", "lay's", "kurkure",
+    "bingo", "maggi", "maggie", "nutella", "american garden", "jabsons", "nutrela",
+    "blue bird", "shan", "homelite", "knorr", "kellogg's", "kelloggs", "quaker",
+}
+
 # Brands that must never appear when a specific aisle category is selected.
 AISLE_BRAND_BLOCKLIST: dict[str, set[str]] = {
     "beverages": {
         "mars", "cadbury", "snickers", "kitkat", "munch", "perk", "galaxy", "twix",
         "bounty", "haldiram", "haldiram's", "britannia", "parle", "bisk farm", "mtr",
         "maggi", "maggie", "lays", "lay's", "kurkure", "bingo", "sunfeast",
-        "dove", "lux", "colgate", "pepsodent", "harpic", "vim", "surf excel",
-        "sofit",
+        "dove", "lux", "colgate", "pepsodent", "harpic", "vim", "surf excel", "sofit",
+        "figaro",
     },
     "packaged food & snacks": {
-        "lipton", "tetley", "coca cola", "pepsi", "sprite", "fanta", "tropicana",
+        "lipton", "tetley", "coca cola", "pepsi", "sprite", "fanta", "tropicana", "mirinda",
     },
-    "personal care": {
-        "lipton", "tetley", "coca cola", "pepsi", "haldiram", "lays",
+    "personal care": FOOD_SNACK_BRANDS
+    | {
+        "lipton", "tetley", "coca cola", "pepsi", "sprite", "fanta", "mirinda", "real",
+        "surf excel", "ariel", "rin", "tide", "vim", "harpic",
     },
+    "home care": FOOD_SNACK_BRANDS | {"lipton", "tetley", "coca cola", "pepsi", "dove", "colgate"},
+    "health & wellness": FOOD_SNACK_BRANDS | {"lipton", "coca cola", "pepsi", "lays"},
+    "dairy & chilled": {"dove", "lux", "colgate", "harpic", "surf excel", "lipton", "lays"},
 }
 
-# When scan sub_category is set, block these brands unless OCR explicitly names them.
-BEVERAGES_SUB_BLOCKLIST: dict[str, set[str]] = {
+# Sub-category blocklists (cross-type within aisle). Keys are normalized sub_category ids.
+SUB_CATEGORY_BLOCKLIST: dict[str, set[str]] = {
     "tea": {
         "coca", "coca cola", "coca-cola", "pepsi", "fanta", "sprite", "real", "tropicana",
-        "maaza", "frooti", "paper boat", "minute maid", "sofit",
+        "maaza", "frooti", "paper boat", "minute maid", "sofit", "mirinda", "7up",
     },
-    "juice": {"lipton", "tetley", "tata", "brooke", "brooke bond"},
-    "soft drinks": {"lipton", "tetley", "tata", "brooke bond", "brooke"},
+    "juices": {"lipton", "tetley", "tata", "brooke", "brooke bond"},
+    "soft_drinks": {"lipton", "tetley", "tata", "brooke bond", "brooke"},
+    "coffee": {"coca cola", "pepsi", "sprite", "fanta", "mirinda", "lipton", "tetley"},
+    "water": {"lipton", "tetley", "coca cola", "pepsi", "snickers", "cadbury"},
+}
+
+# Expected brands when a narrow sub-category is selected (OCR can override).
+SUB_CATEGORY_BRAND_HINTS: dict[str, dict[str, set[str]]] = {
+    "personal care": {
+        "shampoo": {
+            "dove", "pantene", "sunsilk", "head & shoulders", "tresemme", "tresemmé",
+            "clinic plus", "loreal", "l'oreal", "garnier", "indulekha", "himalaya",
+            "clear", "meera", "sunsilk", "schwarzkopf",
+        },
+        "soap": {
+            "lux", "dove", "dettol", "pears", "lifebuoy", "santoor", "hamam", "cinthol",
+            "medimix", "margo", "fiama", "yardley",
+        },
+        "toothpaste": {
+            "colgate", "pepsodent", "sensodyne", "closeup", "dabur", "himalaya", "oral-b",
+            "oral b", "meswak",
+        },
+        "deodorant": {"axe", "denim", "park avenue", "fogg", "nivea", "dove", "rexona"},
+        "skincare": {"nivea", "ponds", "pond's", "mamaearth", "garnier", "himalaya", "joy", "simple"},
+        "cosmetics": {"lakme", "lakmé", "maybelline", "loreal", "l'oreal", "colorbar"},
+        "shaving": {"gillette", "dorco", "bombay shaving", "park avenue"},
+    },
+    "beverages": {
+        "tea": {"lipton", "tetley", "tata", "brooke bond", "taj mahal", "red label", "yellow label"},
+        "coffee": {"nescafe", "bru", "davidoff", "continental"},
+        "soft_drinks": {"coca cola", "pepsi", "sprite", "fanta", "mirinda", "7up", "mountain dew"},
+        "juices": {"real", "tropicana", "paper boat", "b natural", "minute maid", "frooti", "maaza"},
+    },
 }
 
 _categories: list[dict] | None = None
@@ -89,6 +137,10 @@ _name_index: dict[str, dict] | None = None
 
 def _normalize_key(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower().strip())
+
+
+def _slug_key(text: str) -> str:
+    return re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", text.lower().strip())).strip("_")
 
 
 def load_aislix_categories() -> list[dict]:
@@ -112,6 +164,16 @@ def resolve_aislix_category(raw: str | None) -> dict | None:
         return None
     load_aislix_categories()
     return (_name_index or {}).get(_normalize_key(str(raw)))
+
+
+def resolve_subcategory_label(category: dict | None, sub_id: str | None) -> str | None:
+    if not category or not sub_id:
+        return None
+    sub_key = _slug_key(sub_id)
+    for sub in category.get("subcategories") or []:
+        if _slug_key(sub.get("id") or "") == sub_key:
+            return sub.get("label") or sub_id
+    return sub_id.replace("_", " ").title()
 
 
 def build_shelf_label(
@@ -154,7 +216,7 @@ def resolve_scan_context(metadata: dict | None) -> dict:
 
     catalog_cats = AISLIX_TO_CATALOG.get(_normalize_key(aislix_name), [])
     brand_hints = AISLE_BRAND_HINTS.get(_normalize_key(aislix_name), set())
-    sub_category = _resolve_sub_category(metadata)
+    sub_category, sub_category_label, sub_category_custom = _resolve_sub_category(metadata, resolved)
 
     return {
         "store_id": (metadata.get("store_id") or "").strip() or None,
@@ -165,23 +227,47 @@ def resolve_scan_context(metadata: dict | None) -> dict:
         "location": (metadata.get("location") or shelf_label or "").strip() or None,
         "notes": (metadata.get("notes") or "").strip() or None,
         "sub_category": sub_category,
+        "sub_category_label": sub_category_label,
+        "sub_category_custom": sub_category_custom,
         "catalog_categories": catalog_cats,
         "brand_hints": brand_hints,
     }
 
 
-def _resolve_sub_category(metadata: dict) -> str | None:
+def _resolve_sub_category(metadata: dict, category: dict | None) -> tuple[str | None, str | None, str | None]:
     raw = metadata.get("sub_category") or metadata.get("beverage_type") or metadata.get("product_type")
+    custom = (metadata.get("sub_category_custom") or "").strip() or None
+    label = (metadata.get("sub_category_label") or "").strip() or None
+
     if raw and str(raw).strip():
-        return _normalize_key(str(raw))
+        sub_id = _slug_key(str(raw))
+        if not label:
+            label = resolve_subcategory_label(category, sub_id)
+        return sub_id, label, custom
+
     notes = (metadata.get("notes") or "").lower()
     if "tea shelf" in notes or "tea aisle" in notes or notes.strip() == "tea":
-        return "tea"
+        return "tea", "Tea", custom
     if "juice" in notes:
-        return "juice"
+        return "juices", "Juices", custom
     if "soft drink" in notes or "cola" in notes:
-        return "soft drinks"
-    return None
+        return "soft_drinks", "Soft drinks", custom
+
+    if custom and category and _normalize_key(category.get("name") or "") == "others":
+        return "others", custom, custom
+
+    return None, None, custom
+
+
+def _ocr_confirms_brand(brand_l: str, ocr_text: str) -> bool:
+    if not ocr_text:
+        return False
+    text_l = ocr_text.lower()
+    if brand_l in text_l or brand_l.replace("-", " ") in text_l:
+        return True
+    if brand_l == "coca" and ("coca cola" in text_l or "coca-cola" in text_l):
+        return True
+    return False
 
 
 def sub_category_blocks_brand(context: dict | None, brand: str, ocr_text: str = "") -> bool:
@@ -191,17 +277,23 @@ def sub_category_blocks_brand(context: dict | None, brand: str, ocr_text: str = 
     sub = context.get("sub_category")
     if not sub:
         return False
-    blocklist = BEVERAGES_SUB_BLOCKLIST.get(sub, set())
+
     brand_l = brand.lower().strip()
-    if brand_l not in blocklist:
+    if _ocr_confirms_brand(brand_l, ocr_text):
         return False
-    if ocr_text:
-        text_l = ocr_text.lower()
-        if brand_l in text_l or brand_l.replace("-", " ") in text_l:
-            return False
-        if brand_l == "coca" and ("coca cola" in text_l or "coca-cola" in text_l):
-            return False
-    return True
+
+    blocklist = SUB_CATEGORY_BLOCKLIST.get(sub, set())
+    if brand_l in blocklist:
+        return True
+
+    aislix_key = _normalize_key(context.get("aislix_category") or "")
+    sub_hints = (SUB_CATEGORY_BRAND_HINTS.get(aislix_key) or {}).get(sub)
+    if sub_hints and sub != "others":
+        general_hints = context.get("brand_hints") or set()
+        if brand_l not in sub_hints and brand_l not in general_hints:
+            return True
+
+    return False
 
 
 def gpt_context_prompt(context: dict | None) -> str:
@@ -210,13 +302,39 @@ def gpt_context_prompt(context: dict | None) -> str:
     name = context["aislix_category"]
     examples = context.get("aislix_examples") or ""
     shelf = context.get("shelf_label") or ""
+    sub_label = context.get("sub_category_label") or ""
+    sub_custom = context.get("sub_category_custom") or ""
+
+    if sub_custom:
+        sub_label = sub_custom
+    elif not sub_label and context.get("sub_category"):
+        sub_label = str(context["sub_category"]).replace("_", " ").title()
+
     lines = [
         f"\nScan context: this shelf photo is from the **{name}** aisle.",
+        f"Sub-section: **{sub_label}**." if sub_label else "",
         f"Expected product types: {examples}." if examples else "",
         f"Location: {shelf}." if shelf else "",
-        "Only label products that belong in this aisle. Never label chocolate, biscuits, "
-        "snacks, or personal-care brands on a Beverages shelf.",
     ]
+
+    if _normalize_key(name) == "beverages":
+        lines.append(
+            "Only label beverages. Never label chocolate, biscuits, snacks, soap, or shampoo."
+        )
+    elif _normalize_key(name) == "personal care":
+        lines.append(
+            "Only label personal care products (shampoo, soap, toothpaste, skincare, etc.). "
+            "Never label food, snacks, beverages, olives, peanuts, or chocolate."
+        )
+    elif _normalize_key(name) == "home care":
+        lines.append("Only label home care / cleaning products. Never label food or beverages.")
+    else:
+        lines.append(
+            f"Only label products that belong in {name}"
+            + (f" — {sub_label}" if sub_label else "")
+            + ". Reject obvious cross-aisle guesses."
+        )
+
     return "\n".join(line for line in lines if line)
 
 
@@ -249,7 +367,6 @@ def sku_allowed_in_context(
         if sku_cat == "general":
             pass
         else:
-            # Dairy/snacks catalog entries must not pass on a beverages aisle just via hints.
             if brand_l in hints and sku_cat.lower() not in {"dairy", "snacks", "personal care", "household"}:
                 return True
             return False
@@ -272,9 +389,10 @@ def validate_scan_metadata(metadata: dict | None) -> list[str]:
     errors: list[str] = []
 
     category = metadata.get("category") or metadata.get("aislix_category")
+    resolved = resolve_aislix_category(str(category)) if category else None
     if required and not category:
         errors.append("category is required.")
-    elif category and not resolve_aislix_category(str(category)):
+    elif category and not resolved:
         errors.append(f"Unknown category: {category}")
 
     if required and not metadata.get("store_id"):
@@ -290,4 +408,19 @@ def validate_scan_metadata(metadata: dict | None) -> list[str]:
     if required and not shelf_label:
         errors.append("location is required.")
 
+    sub = metadata.get("sub_category") or metadata.get("product_type")
+    if required and resolved and (resolved.get("subcategories") or []) and not sub:
+        if _normalize_key(resolved.get("name") or "") != "others":
+            errors.append("sub_category is required.")
+
+    if sub and _slug_key(str(sub)) == "others":
+        custom = (metadata.get("sub_category_custom") or metadata.get("notes") or "").strip()
+        if not custom:
+            errors.append("sub_category_custom is required when sub_category is Others.")
+
     return errors
+
+
+def categories_for_api() -> list[dict]:
+    """Return category list with subcategories for GET /categories."""
+    return load_aislix_categories()
