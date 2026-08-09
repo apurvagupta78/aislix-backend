@@ -38,8 +38,8 @@ def metadata_to_sku(brand: str, product_name: str, variant: str = "") -> str:
 
 
 def is_learnable(label: dict) -> bool:
-    source = label.get("recognition_source")
-    if source not in {"gpt", "ocr"}:
+    source = label.get("recognition_source") or ""
+    if source != "gpt" and not (source == "ocr" or source.startswith("ocr")):
         return False
     if float(label.get("confidence") or 0) < float(os.getenv("LEARN_MIN_CONFIDENCE", "0.7")):
         return False

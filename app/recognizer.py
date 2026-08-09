@@ -151,9 +151,13 @@ def _is_valid_label(label: dict) -> bool:
     return float(label.get("confidence") or 0) >= 0.5
 
 
+def _is_ocr_source(source: str | None) -> bool:
+    return bool(source and (source == "ocr" or source.startswith("ocr")))
+
+
 def _should_learn(label: dict) -> bool:
     source = label.get("recognition_source")
-    if source not in {"gpt", "ocr"}:
+    if source != "gpt" and not _is_ocr_source(source):
         return False
     if float(label.get("confidence") or 0) < LEARN_MIN_CONFIDENCE:
         return False

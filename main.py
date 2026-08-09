@@ -56,7 +56,16 @@ def health():
         "status": "ok",
         "faiss_ready": (DATA_DIR / "faiss.index").exists() and (DATA_DIR / "catalog.json").exists(),
         "learned_skus": count_learned(),
+        "ocr_engine": _ocr_engine_status(),
     }
+
+
+def _ocr_engine_status() -> str:
+    from app.ocr_reader import OCR_ENABLED, active_ocr_engine
+
+    if not OCR_ENABLED:
+        return "disabled"
+    return active_ocr_engine() or "unavailable"
 
 
 @app.get("/catalog/learned")
