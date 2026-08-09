@@ -75,7 +75,10 @@ def inventory_to_api_products(inventory: list[dict]) -> list[dict]:
                 "confidence": row["confidence"],
                 "stock_status": row.get("stock_status") or "in_stock",
                 "compliance_status": row.get("compliance_status") or "ok",
+                "compliance_alert": row.get("compliance_alert") or "OK",
                 "compliance_interpretation": row.get("compliance_interpretation") or "",
+                "detected_sub_category_label": row.get("detected_sub_category_label") or "",
+                "expected_sub_category_label": row.get("expected_sub_category_label") or "",
             }
         )
     return products

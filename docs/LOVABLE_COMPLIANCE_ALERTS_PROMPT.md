@@ -78,6 +78,56 @@ Store on the scan row in Supabase:
 - `subcategory_mismatches` (jsonb)
 - `misplaced_products` (integer, from metrics)
 
+## CSV export (Export CSV button + download)
+
+The inventory table **Export CSV** button currently builds CSV client-side via `inventoryToCsv()`
+and does NOT include compliance columns. Fix both paths:
+
+### Option A (preferred): use backend CSV
+
+On scan complete, store `result.csv_base64` via `storeCsvReport` (see LOVABLE_DOWNLOAD_FIX_PROMPT.md).
+Export CSV / download buttons should fetch stored `csv_url` when available — backend CSV includes:
+
+`Brand, Product, Variant, Category, Quantity, Confidence %, Compliance Alert, Compliance Note, Detected Sub-category, Audit Sub-category, Stock Status`
+
+- **Compliance Alert:** `Category Mismatch Detected` or `OK`
+- **Compliance Note:** `Likely Putaway / Shelf Placement Violation` (empty when OK)
+
+### Option B: fix client-side inventoryToCsv fallback
+
+Update `inventoryToCsv(inventory)` to append these columns from each row:
+
+```typescript
+function inventoryToCsv(inventory: InventoryRow[]): string {
+  const headers = [
+    "Brand", "Product", "Variant", "Category", "Quantity", "Confidence %",
+    "Shelf position", "Compliance Alert", "Compliance Note",
+    "Detected Sub-category", "Audit Sub-category",
+  ];
+  const rows = inventory.map((row) => [
+    row.brand ?? "",
+    row.product_name ?? row.name ?? "",
+    row.variant ?? "",
+    row.category ?? "",
+    String(row.quantity ?? row.facings ?? 0),
+    String(Math.round(Number(row.confidence ?? 0) * 1000) / 10),
+    row.shelf_position ?? "",
+    row.compliance_alert ?? (row.compliance_status === "category_mismatch"
+      ? "Category Mismatch Detected"
+      : "OK"),
+    row.compliance_interpretation ?? "",
+    row.detected_sub_category_label ?? "",
+    row.expected_sub_category_label ?? "",
+  ]);
+  return [headers, ...rows]
+    .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+}
+```
+
+Ensure `inventory` / `products` saved from scan response includes:
+`compliance_alert`, `compliance_interpretation`, `detected_sub_category_label`, `expected_sub_category_label`
+
 ## Copy constants (keep in sync with backend)
 
 | Key | Value |

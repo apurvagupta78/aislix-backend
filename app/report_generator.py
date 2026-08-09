@@ -91,33 +91,36 @@ def generate_annotated_image(image: np.ndarray, classified: list[dict]) -> np.nd
 
 def generate_csv_bytes(inventory: list[dict]) -> bytes:
     buffer = io.StringIO()
-    writer = csv.DictWriter(
-        buffer,
-        fieldnames=[
-            "brand",
-            "product_name",
-            "variant",
-            "quantity",
-            "confidence",
-            "category",
-            "stock_status",
-            "compliance_status",
-            "compliance_interpretation",
-        ],
-    )
+    fieldnames = [
+        "Brand",
+        "Product",
+        "Variant",
+        "Category",
+        "Quantity",
+        "Confidence %",
+        "Compliance Alert",
+        "Compliance Note",
+        "Detected Sub-category",
+        "Audit Sub-category",
+        "Stock Status",
+    ]
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
     writer.writeheader()
     for row in inventory:
+        conf = float(row.get("confidence") or 0)
         writer.writerow(
             {
-                "brand": row.get("brand", ""),
-                "product_name": row.get("product_name", ""),
-                "variant": row.get("variant", ""),
-                "quantity": row.get("quantity", 0),
-                "confidence": row.get("confidence", 0),
-                "category": row.get("category", ""),
-                "stock_status": row.get("stock_status", ""),
-                "compliance_status": row.get("compliance_status", "ok"),
-                "compliance_interpretation": row.get("compliance_interpretation", ""),
+                "Brand": row.get("brand", ""),
+                "Product": row.get("product_name", ""),
+                "Variant": row.get("variant", ""),
+                "Category": row.get("category", ""),
+                "Quantity": row.get("quantity", 0),
+                "Confidence %": round(conf * 100, 1),
+                "Compliance Alert": row.get("compliance_alert") or "OK",
+                "Compliance Note": row.get("compliance_interpretation") or "",
+                "Detected Sub-category": row.get("detected_sub_category_label") or "",
+                "Audit Sub-category": row.get("expected_sub_category_label") or "",
+                "Stock Status": (row.get("stock_status") or "in_stock").replace("_", " "),
             }
         )
     return buffer.getvalue().encode("utf-8")

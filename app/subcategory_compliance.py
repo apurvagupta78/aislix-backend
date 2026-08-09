@@ -215,23 +215,30 @@ def apply_compliance_to_inventory(
     mismatches: list[dict],
 ) -> list[dict]:
     """Mark inventory rows that include at least one mismatched facing."""
-    mismatch_keys = {
-        (
+    mismatch_by_product: dict[tuple[str, str], dict] = {}
+    for row in mismatches:
+        key = (
             (row.get("brand") or "").lower(),
             (row.get("product_name") or "").lower(),
-            (row.get("detected_sub_category") or "").lower(),
         )
-        for row in mismatches
-    }
+        mismatch_by_product[key] = row
+
     for row in inventory:
         key = (
             (row.get("brand") or "").lower(),
             (row.get("product_name") or "").lower(),
         )
-        matched = any(k[0] == key[0] and k[1] == key[1] for k in mismatch_keys)
-        if matched:
+        mismatch = mismatch_by_product.get(key)
+        if mismatch:
             row["compliance_status"] = "category_mismatch"
+            row["compliance_alert"] = COMPLIANCE_ALERT_TITLE
             row["compliance_interpretation"] = COMPLIANCE_ALERT_INTERPRETATION
+            row["detected_sub_category"] = mismatch.get("detected_sub_category")
+            row["detected_sub_category_label"] = mismatch.get("detected_sub_category_label")
+            row["expected_sub_category"] = mismatch.get("expected_sub_category")
+            row["expected_sub_category_label"] = mismatch.get("expected_sub_category_label")
         else:
             row["compliance_status"] = "ok"
+            row["compliance_alert"] = "OK"
+            row["compliance_interpretation"] = ""
     return inventory
