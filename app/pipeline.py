@@ -14,6 +14,9 @@ import cv2
 import numpy as np
 
 from app.detector import (
+    YOLO_CONF_MULTI_ROW,
+    YOLO_CONF_SINGLE_ROW,
+    YOLO_CONF_SINGLE_ROW_RETRY,
     crop_products,
     detect_products,
     get_boxes,
@@ -21,6 +24,7 @@ from app.detector import (
     load_image_from_url,
 )
 from app.facing_filter import filter_nested_facings, merge_boxes_by_column
+from app.shelf_layout import Layout, detect_layout
 from app.inventory import aggregate_inventory, inventory_to_api_products
 from app.metrics import (
     brand_share,
@@ -70,20 +74,42 @@ def _recognition_stats(classified: list[dict]) -> dict:
     }
 
 
+def _detect_adaptive_boxes(image: np.ndarray) -> tuple[list, Layout]:
+    """Pick YOLO confidence from shelf layout — single-row vs multi-row."""
+    image_h = image.shape[0]
+    max_x = image.shape[1]
+
+    probe_results, pad_x = detect_products(image, conf=YOLO_CONF_MULTI_ROW)
+    probe_boxes = get_boxes(probe_results, pad_x=pad_x, max_x=max_x)
+    layout = detect_layout(probe_boxes, image_h)
+
+    if layout == "single_row":
+        conf = YOLO_CONF_SINGLE_ROW
+        results, pad_x = detect_products(image, conf=conf)
+        boxes = get_boxes(results, pad_x=pad_x, max_x=max_x)
+        if len(boxes) > 12:
+            results, pad_x = detect_products(image, conf=YOLO_CONF_SINGLE_ROW_RETRY)
+            boxes = get_boxes(results, pad_x=pad_x, max_x=max_x)
+    else:
+        boxes = probe_boxes
+
+    boxes = merge_boxes_by_column(boxes)
+    return boxes, layout
+
+
 def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata: dict | None = None) -> dict:
     started = time.time()
     scan_id = scan_id or uuid.uuid4().hex[:8]
     metadata = metadata or {}
     work_dir = None
     try:
-        results, pad_x = detect_products(image)
-        boxes = get_boxes(results, pad_x=pad_x, max_x=image.shape[1])
-        boxes = merge_boxes_by_column(boxes)
+        boxes, layout = _detect_adaptive_boxes(image)
         if not boxes:
             raise ValueError("No products detected in this shelf image.")
 
         records, work_dir = crop_products(image, boxes)
         scan_context = resolve_scan_context(metadata)
+        scan_context["shelf_layout"] = layout
         scan_category = scan_context.get("aislix_category") or metadata.get("category") or metadata.get("shelf_label")
         classified, recognition_engine_stats = classify_records(
             records,
@@ -91,7 +117,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             scan_category=scan_category,
             scan_context=scan_context,
         )
-        classified = filter_nested_facings(classified)
+        classified = filter_nested_facings(classified, layout=layout)
         compliance = analyze_subcategory_compliance(classified, scan_context)
         classified = compliance["classified"]
         subcategory_mismatches = compliance["subcategory_mismatches"]
@@ -176,6 +202,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
                 "location": scan_context.get("location"),
                 "shelf_label": scan_context.get("shelf_label"),
                 "store_id": scan_context.get("store_id"),
+                "shelf_layout": layout,
             },
         }
     finally:

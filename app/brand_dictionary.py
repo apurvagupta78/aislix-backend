@@ -89,6 +89,9 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bl[\s']?oreal\b", "Loreal", ""),
     (r"\btotal\s+repair\s*5?\b", "Loreal", "Paris Total Repair 5 Shampoo"),
     (r"\bdove\b", "Dove", ""),
+    (r"\bintense\s+repair\b", "Dove", "Intense Repair Shampoo"),
+    (r"\bclassic\s+clean\b", "Head", "Classic Clean Shampoo"),
+    (r"\bstrong\s*(?:&|and)\s*long\b", "Clinic", "Plus Strong And Long Health Shampoo"),
     (r"\bpantene\b", "Pantene", ""),
     (r"\bsunsilk\b", "Sunsilk", ""),
     (r"\bdabur\b", "Dabur", ""),
@@ -162,6 +165,9 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
         (r"\bmeera\b", "meera"),
         (r"\bjoy\b", "joy"),
         (r"\bcolgate\b", "colgate"),
+        (r"\bdabur\b", "dabur"),
+        (r"\bintense\s+repair\b", "dove"),
+        (r"\bstrong\s*(?:&|and)\s*long\b", "clinic"),
     ]
     for pattern, hinted_brand in ocr_brand_hints:
         if re.search(pattern, text_l, flags=re.IGNORECASE):
@@ -170,6 +176,20 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
                     if not any(token in text_l for token in _brand_tokens(label.get("brand") or "")):
                         return True
             break
+
+    if "himalaya" in text_l and label_brand == "dabur":
+        return True
+    if "dabur" in text_l and label_brand == "himalaya":
+        return True
+    if ("clinic" in text_l or "clinic plus" in text_l) and label_brand == "dove":
+        return True
+    if "dove" in text_l and label_brand in {"clinic", "dabur"}:
+        return True
+    product_l = (label.get("product_name") or "").lower()
+    if "pantene" in text_l and label_brand == "dove" and "conditioner" in product_l:
+        return True
+    if ("hair fall" in text_l or "hairfall" in text_l) and label_brand == "dove" and "conditioner" in product_l:
+        return True
 
     corrected = match_from_text(text)
     if not corrected:

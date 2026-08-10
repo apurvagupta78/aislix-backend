@@ -340,6 +340,7 @@ def _deduplicate_row_slots(facings: list[dict]) -> list[dict]:
 def filter_nested_facings(
     facings: list[dict],
     *,
+    layout: str = "multi_row",
     containment_threshold: float = 0.68,
     max_inner_area_ratio: float = 0.48,
 ) -> list[dict]:
@@ -400,8 +401,8 @@ def filter_nested_facings(
     # Pass 3: merge all overlaps in the same bottle column (any brand).
     survivors = _merge_same_column_facings(survivors)
 
-    # Pass 4: row-slot dedup only on dense multi-row shelves.
-    if len(survivors) >= ROW_SLOT_DEDUP_MIN_FACINGS:
+    # Pass 4: one facing per column — always on single-row shelves; multi-row when dense.
+    if layout == "single_row" or len(survivors) >= ROW_SLOT_DEDUP_MIN_FACINGS:
         survivors = _deduplicate_row_slots(survivors)
 
     return survivors

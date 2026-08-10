@@ -201,6 +201,36 @@ def _same_shelf_row(a: dict, b: dict) -> bool:
     return abs(acy - bcy) <= row_tol
 
 
+def _same_shelf_column(a: dict, b: dict) -> bool:
+    """True when two facings share the same bottle column (horizontal overlap)."""
+    ax1, ax2 = float(a.get("x1", 0)), float(a.get("x2", 0))
+    bx1, bx2 = float(b.get("x1", 0)), float(b.get("x2", 0))
+    ix1, ix2 = max(ax1, bx1), min(ax2, bx2)
+    if ix2 <= ix1:
+        return False
+    overlap = ix2 - ix1
+    narrower = min(ax2 - ax1, bx2 - bx1)
+    if narrower <= 0:
+        return False
+    if overlap / narrower >= 0.28:
+        return True
+    acx = (ax1 + ax2) / 2.0
+    bcx = (bx1 + bx2) / 2.0
+    return abs(acx - bcx) <= narrower * 0.38
+
+
+def _propagation_neighbor_allowed(
+    probe: dict,
+    ref: dict,
+    scan_context: dict | None,
+) -> bool:
+    if not _same_shelf_row(probe, ref):
+        return False
+    if (scan_context or {}).get("shelf_layout") == "single_row":
+        return _same_shelf_column(probe, ref)
+    return True
+
+
 def _try_ocr_override(
     records: list[dict],
     classified: list[dict | None],
@@ -267,7 +297,7 @@ def _propagate_shelf_labels(
         best_sim = 0.0
         best_label: dict | None = None
         for ref_emb, ref_label in known:
-            if not _same_shelf_row(probe_record, ref_label):
+            if not _propagation_neighbor_allowed(probe_record, ref_label, scan_context):
                 continue
             sim = _cosine_similarity(probe, ref_emb)
             if sim >= PROPAGATE_THRESHOLD and sim > best_sim:

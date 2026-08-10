@@ -185,6 +185,19 @@ def test_merge_boxes_by_column_keeps_separate_bottles():
     assert len(merge_boxes_by_column([a, b])) == 2
 
 
+def test_single_row_dedup_one_per_column():
+    facings = [
+        {"brand": "Sunsilk", "confidence": 0.98, "x1": 100, "y1": 50, "x2": 160, "y2": 200},
+        {"brand": "Unknown", "confidence": 0.35, "x1": 105, "y1": 50, "x2": 155, "y2": 95},
+        {"brand": "Pantene", "confidence": 0.96, "x1": 200, "y1": 50, "x2": 260, "y2": 200},
+        {"brand": "Unknown", "confidence": 0.35, "x1": 205, "y1": 50, "x2": 255, "y2": 95},
+    ]
+    result = filter_nested_facings(facings, layout="single_row")
+    assert len(result) == 2
+    brands = {r["brand"] for r in result}
+    assert brands == {"Sunsilk", "Pantene"}
+
+
 def test_merge_boxes_by_column_does_not_merge_across_shelf_rows():
     """Same x-column on row 1 and row 2 must stay separate (multi-row shelf)."""
     import numpy as np

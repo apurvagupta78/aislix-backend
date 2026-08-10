@@ -81,3 +81,22 @@ def test_pantene_conflicts_with_head_shoulders_ocr():
     label = {"brand": "Pantene", "product_name": "Lively Clean Shampoo"}
     text = "Head & Shoulders Classic Clean 180ml"
     assert label_conflicts_with_pack_text(label, text) is True
+
+
+def test_dabur_conflicts_with_himalaya_ocr():
+    label = {"brand": "Dabur", "product_name": "Shampoo"}
+    text = "Himalaya Anti Hair Fall Shampoo 180ml"
+    assert label_conflicts_with_pack_text(label, text) is True
+
+
+def test_dove_conflicts_with_clinic_plus_ocr():
+    label = {"brand": "Dove", "product_name": "Daily Shine Conditioner"}
+    text = "Clinic Plus Strong and Long Health Shampoo"
+    assert label_conflicts_with_pack_text(label, text) is True
+
+
+def test_dove_intense_repair_hint():
+    text = "Intense Repair Shampoo 180ml"
+    result = match_from_text(text)
+    assert result is not None
+    assert result["brand"].lower() == "dove"

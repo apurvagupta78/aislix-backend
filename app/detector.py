@@ -15,6 +15,9 @@ MODEL_PATH = BASE_DIR / "best.pt"
 _MODEL = None
 
 YOLO_CONF_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.08"))
+YOLO_CONF_SINGLE_ROW = float(os.getenv("YOLO_CONF_SINGLE_ROW", "0.16"))
+YOLO_CONF_SINGLE_ROW_RETRY = float(os.getenv("YOLO_CONF_SINGLE_ROW_RETRY", "0.20"))
+YOLO_CONF_MULTI_ROW = float(os.getenv("YOLO_CONF_MULTI_ROW", "0.08"))
 YOLO_IOU_THRESHOLD = float(os.getenv("YOLO_IOU_THRESHOLD", "0.50"))
 YOLO_DEDUP_IOU = float(os.getenv("YOLO_DEDUP_IOU", "0.55"))
 YOLO_DEDUP_CONTAIN = float(os.getenv("YOLO_DEDUP_CONTAIN", "0.72"))
@@ -46,7 +49,7 @@ def load_image_from_url(url: str, timeout: int = 60) -> np.ndarray:
     return load_image_bytes(response.content)
 
 
-def detect_products(image: np.ndarray) -> tuple[list, int]:
+def detect_products(image: np.ndarray, conf: float | None = None) -> tuple[list, int]:
     """Run YOLO; return (results, horizontal pad applied before inference)."""
     model = get_yolo_model()
     pad_x = int(image.shape[1] * YOLO_EDGE_PAD_RATIO) if YOLO_EDGE_PAD_RATIO > 0 else 0
@@ -56,7 +59,7 @@ def detect_products(image: np.ndarray) -> tuple[list, int]:
     results = model.predict(
         source=source,
         imgsz=YOLO_IMGSZ,
-        conf=YOLO_CONF_THRESHOLD,
+        conf=conf if conf is not None else YOLO_CONF_THRESHOLD,
         iou=YOLO_IOU_THRESHOLD,
         save=False,
         verbose=False,
