@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.brand_dictionary import display_brand_name, match_brand_in_text, match_from_text
+from app.brand_dictionary import display_brand_name, label_conflicts_with_pack_text, match_brand_in_text, match_from_text
 
 
 def test_head_and_shoulders_not_clean():
@@ -75,3 +75,9 @@ def test_taj_blocked_on_shampoo_pack():
     result = match_from_text(text)
     assert result is not None
     assert result["brand"].lower() == "dove"
+
+
+def test_pantene_conflicts_with_head_shoulders_ocr():
+    label = {"brand": "Pantene", "product_name": "Lively Clean Shampoo"}
+    text = "Head & Shoulders Classic Clean 180ml"
+    assert label_conflicts_with_pack_text(label, text) is True

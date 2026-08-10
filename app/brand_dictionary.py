@@ -146,14 +146,37 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
     """True when OCR clearly names a different brand than the proposed label."""
     if not text or len(text.strip()) < 3:
         return False
+    label_brand = (label.get("brand") or "").strip().lower()
+    text_l = _normalize(text)
+
+    # Fast partial-text checks (Paddle/EasyOCR often read fragments, not full SKUs).
+    ocr_brand_hints: list[tuple[str, str]] = [
+        (r"shoulder|head\s*&?\s*shoulder|head\s+shoulder", "head"),
+        (r"\bhimalaya\b", "himalaya"),
+        (r"\bsunsilk\b", "sunsilk"),
+        (r"\bclinic\s*plus\b|\bclinic\b", "clinic"),
+        (r"\btresemme\b|\btresemm", "tresemme"),
+        (r"\bl[\s']?oreal\b|\btotal\s+repair", "loreal"),
+        (r"\bdove\b", "dove"),
+        (r"\bpantene\b", "pantene"),
+        (r"\bmeera\b", "meera"),
+        (r"\bjoy\b", "joy"),
+        (r"\bcolgate\b", "colgate"),
+    ]
+    for pattern, hinted_brand in ocr_brand_hints:
+        if re.search(pattern, text_l, flags=re.IGNORECASE):
+            if label_brand and label_brand != hinted_brand:
+                if label_brand not in hinted_brand and hinted_brand not in label_brand:
+                    if not any(token in text_l for token in _brand_tokens(label.get("brand") or "")):
+                        return True
+            break
+
     corrected = match_from_text(text)
     if not corrected:
         return False
-    label_brand = (label.get("brand") or "").strip().lower()
     text_brand = (corrected.get("brand") or "").strip().lower()
     if not label_brand or not text_brand or label_brand == text_brand:
         return False
-    text_l = _normalize(text)
     if "dettol" in text_l and label_brand == "himalaya":
         return True
     if "himalaya" in text_l and label_brand == "dettol":

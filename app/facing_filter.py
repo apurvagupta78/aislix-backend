@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+# Only run heavy row-slot dedup on dense multi-row shelves.
+ROW_SLOT_DEDUP_MIN_FACINGS = 20
+
 
 def _area(item: dict) -> float:
     return max(0.0, float(item["x2"]) - float(item["x1"])) * max(
@@ -74,39 +77,104 @@ def _brand_key(item: dict) -> str:
     return (item.get("brand") or "").strip().lower()
 
 
+def _is_unknown(item: dict) -> bool:
+    return _brand_key(item) in {"", "unknown"}
+
+
+def _same_column(a: dict, b: dict) -> bool:
+    """True when two facings occupy the same bottle column on a shelf row."""
+    if not _same_row(a, b):
+        return False
+    if _horizontal_overlap_ratio(a, b) >= 0.28:
+        return True
+    gap = abs(_x_center(a) - _x_center(b))
+    return gap <= min(_width(a), _width(b)) * 0.38
+
+
 def _is_cap_fragment(inner: dict, outer: dict) -> bool:
     """True when inner looks like a cap/tag band on top of a bottle body."""
     outer_h = _height(outer)
     if outer_h <= 0:
         return False
     inner_cy = _y_center(inner)
-    cap_band = float(outer["y1"]) + outer_h * 0.45
+    cap_band = float(outer["y1"]) + outer_h * 0.48
     if inner_cy > cap_band:
         return False
-    if _horizontal_overlap_ratio(inner, outer) < 0.35:
+    if _horizontal_overlap_ratio(inner, outer) < 0.30:
         return False
-    if _area(inner) / _area(outer) > 0.5:
+    if _area(inner) / _area(outer) > 0.55:
         return False
     return True
 
 
 def _pick_preferred(a: dict, b: dict) -> int:
     """Return index to drop between two duplicate facings (0=a, 1=b)."""
-    a_area = _area(a)
-    b_area = _area(b)
-    a_conf = float(a.get("confidence") or 0)
-    b_conf = float(b.get("confidence") or 0)
-    a_unknown = _brand_key(a) in {"", "unknown"}
-    b_unknown = _brand_key(b) in {"", "unknown"}
+    a_unknown = _is_unknown(a)
+    b_unknown = _is_unknown(b)
     if a_unknown != b_unknown:
         return 0 if a_unknown else 1
-    if abs(a_conf - b_conf) > 0.08:
+    a_conf = float(a.get("confidence") or 0)
+    b_conf = float(b.get("confidence") or 0)
+    if abs(a_conf - b_conf) > 0.06:
         return 0 if a_conf < b_conf else 1
-    return 0 if a_area < b_area else 1
+    return 0 if _area(a) < _area(b) else 1
+
+
+def _median_width(facings: list[dict]) -> float:
+    widths = sorted(_width(item) for item in facings if _width(item) > 0)
+    if not widths:
+        return 0.0
+    return widths[len(widths) // 2]
+
+
+def _drop_narrow_unknown_fragments(facings: list[dict]) -> list[dict]:
+    """Remove tiny Unknown boxes (cap chips / gap noise between bottles)."""
+    median_w = _median_width(facings)
+    if median_w <= 0:
+        return facings
+    min_w = median_w * 0.42
+    kept: list[dict] = []
+    for item in facings:
+        if _is_unknown(item) and _width(item) < min_w:
+            continue
+        kept.append(item)
+    return kept
+
+
+def _merge_same_column_facings(facings: list[dict]) -> list[dict]:
+    """One facing per bottle column — cap + body + phantom duplicates collapse."""
+    if len(facings) <= 1:
+        return facings
+
+    drop = [False] * len(facings)
+    for idx_a, a in enumerate(facings):
+        if drop[idx_a]:
+            continue
+        for idx_b in range(idx_a + 1, len(facings)):
+            if drop[idx_b]:
+                continue
+            if not _same_column(a, facings[idx_b]):
+                continue
+            b = facings[idx_b]
+            overlap = (
+                _iou(a, b) >= 0.12
+                or _containment_ratio(a, b) >= 0.45
+                or _containment_ratio(b, a) >= 0.45
+                or _is_cap_fragment(a, b)
+                or _is_cap_fragment(b, a)
+            )
+            if not overlap and abs(_x_center(a) - _x_center(b)) > min(_width(a), _width(b)) * 0.25:
+                continue
+            drop_idx = idx_a if _pick_preferred(a, b) == 0 else idx_b
+            drop[drop_idx] = True
+            if drop_idx == idx_a:
+                a = facings[idx_b]
+
+    return [item for idx, item in enumerate(facings) if not drop[idx]]
 
 
 def _deduplicate_row_slots(facings: list[dict]) -> list[dict]:
-    """Keep one facing per bottle column within each shelf row."""
+    """Keep one facing per bottle column within each shelf row (multi-row shelves)."""
     if len(facings) <= 1:
         return facings
 
@@ -129,8 +197,7 @@ def _deduplicate_row_slots(facings: list[dict]) -> list[dict]:
                 cluster.append((idx, item))
                 continue
             prev_idx, prev = cluster[-1]
-            slot_w = min(_width(prev), _width(item)) * 0.52
-            if abs(_x_center(item) - _x_center(prev)) <= slot_w:
+            if _same_column(prev, item):
                 drop_idx = prev_idx if _pick_preferred(prev, item) == 0 else idx
                 drop[drop_idx] = True
                 if drop_idx == prev_idx:
@@ -144,11 +211,11 @@ def _deduplicate_row_slots(facings: list[dict]) -> list[dict]:
 def filter_nested_facings(
     facings: list[dict],
     *,
-    containment_threshold: float = 0.72,
-    max_inner_area_ratio: float = 0.45,
+    containment_threshold: float = 0.68,
+    max_inner_area_ratio: float = 0.48,
 ) -> list[dict]:
     """
-    Drop cap/tag fragments nested inside bottle bodies and merge same-brand overlaps.
+    Drop cap/tag fragments nested inside bottle bodies and merge same-column overlaps.
     One physical bottle should produce at most one facing.
     """
     if len(facings) <= 1:
@@ -174,65 +241,38 @@ def filter_nested_facings(
                 inner_area / outer_area <= max_inner_area_ratio
                 and _containment_ratio(inner, outer) >= containment_threshold
             )
-            cap_fragment = _is_cap_fragment(inner, outer)
-            if nested or cap_fragment:
+            if nested or _is_cap_fragment(inner, outer):
                 drop[inner_idx] = True
 
     survivors = [item for idx, item in enumerate(facings) if not drop[idx]]
+    survivors = _drop_narrow_unknown_fragments(survivors)
     if len(survivors) <= 1:
         return survivors
 
-    # Pass 2: drop unknown/low-conf cap bands sitting on a labeled neighbor column.
+    # Pass 2: drop unknown bands in the same column as any labeled bottle.
     drop = [False] * len(survivors)
     for inner_idx, inner in enumerate(survivors):
-        if _brand_key(inner) not in {"", "unknown"}:
+        if not _is_unknown(inner):
             continue
         for outer_idx, outer in enumerate(survivors):
             if inner_idx == outer_idx or drop[inner_idx]:
                 continue
-            if _brand_key(outer) in {"", "unknown"}:
+            if _is_unknown(outer):
                 continue
-            if not _same_row(inner, outer):
+            if not _same_column(inner, outer):
                 continue
-            if _is_cap_fragment(inner, outer) or (
-                _horizontal_overlap_ratio(inner, outer) >= 0.4
-                and _area(inner) < _area(outer) * 0.35
-            ):
+            if _is_cap_fragment(inner, outer) or _area(inner) < _area(outer) * 0.55:
                 drop[inner_idx] = True
 
     survivors = [item for idx, item in enumerate(survivors) if not drop[idx]]
     if len(survivors) <= 1:
         return survivors
 
-    # Pass 3: merge overlapping facings with the same brand (cap + body both labeled).
-    drop = [False] * len(survivors)
-    for idx_a, a in enumerate(survivors):
-        if drop[idx_a]:
-            continue
-        brand_a = _brand_key(a)
-        if not brand_a or brand_a == "unknown":
-            continue
-        for idx_b in range(idx_a + 1, len(survivors)):
-            if drop[idx_b]:
-                continue
-            b = survivors[idx_b]
-            if _brand_key(b) != brand_a:
-                continue
-            if not _same_row(a, b):
-                continue
-            overlap = (
-                _iou(a, b) >= 0.22
-                or _containment_ratio(a, b) >= 0.55
-                or _containment_ratio(b, a) >= 0.55
-                or _is_cap_fragment(a, b)
-                or _is_cap_fragment(b, a)
-            )
-            if not overlap:
-                continue
-            drop_idx = idx_a if _pick_preferred(a, b) == 0 else idx_b
-            drop[drop_idx] = True
+    # Pass 3: merge all overlaps in the same bottle column (any brand).
+    survivors = _merge_same_column_facings(survivors)
 
-    survivors = [item for idx, item in enumerate(survivors) if not drop[idx]]
+    # Pass 4: row-slot dedup only on dense multi-row shelves.
+    if len(survivors) >= ROW_SLOT_DEDUP_MIN_FACINGS:
+        survivors = _deduplicate_row_slots(survivors)
 
-    # Pass 4: one facing per bottle column per row (helps dense multi-row shelves).
-    return _deduplicate_row_slots(survivors)
+    return survivors

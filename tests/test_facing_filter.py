@@ -89,3 +89,57 @@ def test_row_slot_dedup_keeps_one_per_bottle():
     c = {"brand": "Pantene", "confidence": 0.9, "x1": 200, "y1": 10, "x2": 250, "y2": 130}
     result = filter_nested_facings([a, b, c])
     assert len(result) == 2
+
+
+def test_merges_different_brands_same_column_keeps_best():
+    """Cap/body mislabels in one column should collapse to a single facing."""
+    body = {
+        "brand": "Pantene",
+        "product_name": "Lively Clean",
+        "confidence": 0.97,
+        "x1": 100,
+        "y1": 55,
+        "x2": 165,
+        "y2": 210,
+    }
+    cap = {
+        "brand": "Tresemme",
+        "product_name": "Keratin Smooth",
+        "confidence": 0.90,
+        "x1": 108,
+        "y1": 50,
+        "x2": 158,
+        "y2": 95,
+    }
+    result = filter_nested_facings([body, cap])
+    assert len(result) == 1
+
+
+def test_drops_narrow_unknown_gap_fragment():
+    narrow = {
+        "brand": "Unknown",
+        "confidence": 0.35,
+        "x1": 175,
+        "y1": 60,
+        "x2": 195,
+        "y2": 110,
+    }
+    bottle = {
+        "brand": "Tresemme",
+        "confidence": 0.99,
+        "x1": 140,
+        "y1": 40,
+        "x2": 200,
+        "y2": 210,
+    }
+    other = {
+        "brand": "Loreal",
+        "confidence": 0.95,
+        "x1": 220,
+        "y1": 40,
+        "x2": 280,
+        "y2": 210,
+    }
+    result = filter_nested_facings([narrow, bottle, other])
+    assert len(result) == 2
+    assert all(r["brand"] != "Unknown" for r in result)
