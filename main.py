@@ -47,12 +47,14 @@ app.add_middleware(
 def on_startup():
     port = os.getenv("PORT", "8080")
     from app.learned_catalog import load_learned
+    from app.ocr_reader import active_ocr_engine
     from app.retailklip import ensure_checkpoint, is_available
 
     learned = load_learned()
     ensure_checkpoint()
     rk = "yes" if is_available() else "no"
-    print(f"Aislix API starting on 0.0.0.0:{port} (learned SKUs: {learned}, RetailKLIP: {rk})")
+    ocr = active_ocr_engine() or "none"
+    print(f"Aislix API starting on 0.0.0.0:{port} (learned SKUs: {learned}, RetailKLIP: {rk}, OCR: {ocr})")
 
 
 @app.get("/")
@@ -81,12 +83,11 @@ def _retailklip_status() -> bool:
 
 
 def _ocr_engine_status() -> str:
-    from app.ocr_reader import OCR_ENABLED
+    from app.ocr_reader import OCR_ENABLED, active_ocr_engine
 
     if not OCR_ENABLED:
         return "disabled"
-    # Avoid heavy OCR init on every health ping — report configured engine.
-    return os.getenv("OCR_ENGINE", "easyocr")
+    return active_ocr_engine() or os.getenv("OCR_ENGINE", "easyocr")
 
 
 @app.get("/catalog/learned")

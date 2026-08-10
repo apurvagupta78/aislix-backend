@@ -30,7 +30,7 @@ uvicorn main:app --reload --port 8000
 - `GPT_MAX_FALLBACKS=80` (smart cap in v2 — was 12)
 - `RECOGNITION_V2=true` (OCR-first pipeline; set `false` to revert to v1)
 - `OCR_ENABLED=true` / `OCR_LANGUAGES=en`
-- `OCR_ENGINE=easyocr` (default on Railway; PaddleOCR optional via `requirements-paddle.txt`)
+- `OCR_ENGINE=paddle` (default on Railway Docker; falls back to EasyOCR if Paddle fails to load)
 - `OCR_MIN_CONFIDENCE=0.6`
 - `LEARN_MIN_CONFIDENCE=0.7` (only OCR/GPT labels above this are learned)
 - `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (optional — for Supabase-backed learned SKU sync; Lovable can persist without these)

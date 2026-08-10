@@ -29,15 +29,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-paddle.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir paddlepaddle==3.0.0 \
+        -i https://www.paddlepaddle.org.cn/packages/stable/cpu/ \
+    && pip install --no-cache-dir -r requirements-paddle.txt
 
 COPY . .
 
 # Overwrite any Git LFS pointer stub with the full checkpoint from the fetch stage.
 COPY --from=lfs-fetch /src/models/retailklip_vitb32.pt models/retailklip_vitb32.pt
 
-RUN python scripts/verify_retailklip_checkpoint.py
+RUN python scripts/verify_retailklip_checkpoint.py \
+    && python scripts/verify_paddle_ocr.py
 
 ENV USE_RETAILKLIP=true
 
