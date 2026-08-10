@@ -88,3 +88,12 @@ def test_blue_blocked_on_beverages():
         entry_category="Staples",
         context=_ctx("Beverages"),
     ) is False
+
+
+def test_sunsilk_protein_shampoo_allowed_on_personal_care():
+    assert sku_allowed_in_context(
+        "Sunsilk",
+        sku="sunsilk_nourishing_soft_smooth_shampoo_with_egg_protein_almond_oil_vitamin_c_for_2x_smoother_softer_hair_180_ml_180_ml",
+        entry_category="Personal Care",
+        context=_ctx("Personal Care", {"sunsilk", "dove"}),
+    ) is True

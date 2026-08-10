@@ -74,7 +74,7 @@ def _sibling_pc_subcategory(selected: str, detected: str | None) -> bool:
     """Shampoo vs conditioner on same aisle — not a putaway violation."""
     if not detected or detected == selected:
         return True
-    hair_care = {"shampoo"}
+    hair_care = {"shampoo", "conditioner"}
     if selected in hair_care and detected in hair_care:
         return True
     return False

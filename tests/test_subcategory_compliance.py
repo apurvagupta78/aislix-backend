@@ -115,3 +115,25 @@ def test_loreal_staples_category_not_mismatch_on_shampoo_audit():
     assert classified[0]["subcategory_match"] is True
 
 
+def test_sunsilk_egg_protein_shampoo_not_cross_aisle_mismatch():
+    """Shampoo SKUs containing 'protein' must not trigger snack cross-aisle guard."""
+    ctx = {
+        "aislix_category": "Personal Care",
+        "sub_category": "shampoo",
+        "sub_category_label": "Shampoo",
+        "catalog_categories": ["personal care"],
+        "brand_hints": {"sunsilk", "dove", "pantene"},
+    }
+    classified = [
+        _facing(
+            "Sunsilk",
+            "Nourishing Soft Smooth Shampoo With Egg Protein Almond Oil Vitamin C 180 Ml",
+            sku="sunsilk_nourishing_soft_smooth_shampoo_with_egg_protein_almond_oil_vitamin_c_for_2x_smoother_softer_hair_180_ml_180_ml",
+            category="Personal Care",
+        )
+    ]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 0
+    assert classified[0]["subcategory_match"] is True
+
+

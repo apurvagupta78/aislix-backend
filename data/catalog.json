@@ -51031,6 +51031,14 @@
       "variant": "50 g",
       "sku": "bru_instant_coffee_50g",
       "category": "Beverages"
+    },
+    {
+      "class_id": 9011,
+      "brand": "Loreal",
+      "product_name": "Paris Total Repair 5 Shampoo",
+      "variant": "180 ml",
+      "sku": "loreal_paris_total_repair_5_shampoo_180ml",
+      "category": "Personal Care"
     }
   ]
 }

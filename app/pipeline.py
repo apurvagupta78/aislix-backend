@@ -76,8 +76,8 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
     metadata = metadata or {}
     work_dir = None
     try:
-        results = detect_products(image)
-        boxes = get_boxes(results)
+        results, pad_x = detect_products(image)
+        boxes = get_boxes(results, pad_x=pad_x, max_x=image.shape[1])
         if not boxes:
             raise ValueError("No products detected in this shelf image.")
 

@@ -88,6 +88,14 @@ NEW_SKUS = [
         "sku": "dove_intense_repair_shampoo_180ml",
         "category": "Personal Care",
     },
+    {
+        "class_id": 9011,
+        "brand": "Loreal",
+        "product_name": "Paris Total Repair 5 Shampoo",
+        "variant": "180 ml",
+        "sku": "loreal_paris_total_repair_5_shampoo_180ml",
+        "category": "Personal Care",
+    },
 ]
 
 

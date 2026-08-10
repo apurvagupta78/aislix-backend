@@ -70,7 +70,7 @@ FOOD_SNACK_BRANDS: set[str] = {
 
 # SKU/product tokens that indicate snacks — reject outside snack aisle audits.
 CROSS_AISLE_SNACK_TOKENS = (
-    "choco_berry", "protein_bar", "protein", "caster_sugar", "namkeen", "biscuit",
+    "choco_berry", "protein_bar", "caster_sugar", "namkeen", "biscuit",
     "cheese_slices", "peanut", "jalapeno", "trident", "snack", "bhujia", "wafer",
 )
 

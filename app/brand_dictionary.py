@@ -87,7 +87,7 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bhead\s+shoulders\b", "Head", ""),
     (r"\bclinic\s+plus\b", "Clinic", "Plus Strong And Long Health Shampoo"),
     (r"\bl[\s']?oreal\b", "Loreal", ""),
-    (r"\btotal\s+repair\s*5?\b", "Loreal", ""),
+    (r"\btotal\s+repair\s*5?\b", "Loreal", "Paris Total Repair 5 Shampoo"),
     (r"\bdove\b", "Dove", ""),
     (r"\bpantene\b", "Pantene", ""),
     (r"\bsunsilk\b", "Sunsilk", ""),
@@ -437,6 +437,32 @@ def _volume_tokens(text: str) -> set[str]:
     return {match.group(0).replace(" ", "").lower() for match in re.finditer(r"\b\d+\s*ml\b", text.lower())}
 
 
+def _hair_product_type_adjustment(normalized: str, entry: dict) -> float:
+    """Prefer shampoo vs conditioner SKUs when pack text indicates product type."""
+    sku_l = (entry.get("sku") or "").lower()
+    product_l = (entry.get("product_name") or "").lower()
+    is_shampoo = "shampoo" in sku_l or "shampoo" in product_l
+    is_conditioner = "conditioner" in sku_l or "conditioner" in product_l
+    if not is_shampoo and not is_conditioner:
+        return 0.0
+    if "shampoo" in normalized:
+        if is_shampoo:
+            return 0.18
+        if is_conditioner:
+            return -0.28
+    if "conditioner" in normalized or "color protect" in normalized:
+        if is_conditioner:
+            return 0.18
+        if is_shampoo:
+            return -0.28
+    if any(token in normalized for token in ("total repair", "repair 5", "hair fall", "anti dandruff")):
+        if is_shampoo:
+            return 0.12
+        if is_conditioner:
+            return -0.18
+    return 0.0
+
+
 def match_product_for_brand(brand: str, text: str) -> dict | None:
     """Pick the best catalog SKU for a brand given OCR text."""
     entries = products_for_brand(brand)
@@ -476,6 +502,7 @@ def match_product_for_brand(brand: str, text: str) -> dict | None:
                 score += 0.08
             elif entry_vol and not (entry_vol & volume_tokens):
                 score -= 0.05
+        score += _hair_product_type_adjustment(normalized, entry)
         if score >= best_score:
             best_score = score
             best = entry

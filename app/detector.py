@@ -14,11 +14,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_DIR / "best.pt"
 _MODEL = None
 
-YOLO_CONF_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.20"))
+YOLO_CONF_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.15"))
 YOLO_IOU_THRESHOLD = float(os.getenv("YOLO_IOU_THRESHOLD", "0.50"))
 YOLO_DEDUP_IOU = float(os.getenv("YOLO_DEDUP_IOU", "0.55"))
 YOLO_DEDUP_CONTAIN = float(os.getenv("YOLO_DEDUP_CONTAIN", "0.72"))
-YOLO_IMGSZ = int(os.getenv("YOLO_IMGSZ", "640"))
+YOLO_IMGSZ = int(os.getenv("YOLO_IMGSZ", "960"))
+YOLO_EDGE_PAD_RATIO = float(os.getenv("YOLO_EDGE_PAD_RATIO", "0.06"))
 
 
 def get_yolo_model():
@@ -45,16 +46,22 @@ def load_image_from_url(url: str, timeout: int = 60) -> np.ndarray:
     return load_image_bytes(response.content)
 
 
-def detect_products(image: np.ndarray):
+def detect_products(image: np.ndarray) -> tuple[list, int]:
+    """Run YOLO; return (results, horizontal pad applied before inference)."""
     model = get_yolo_model()
-    return model.predict(
-        source=image,
+    pad_x = int(image.shape[1] * YOLO_EDGE_PAD_RATIO) if YOLO_EDGE_PAD_RATIO > 0 else 0
+    source = image
+    if pad_x > 0:
+        source = cv2.copyMakeBorder(image, 0, 0, pad_x, pad_x, cv2.BORDER_REPLICATE)
+    results = model.predict(
+        source=source,
         imgsz=YOLO_IMGSZ,
         conf=YOLO_CONF_THRESHOLD,
         iou=YOLO_IOU_THRESHOLD,
         save=False,
         verbose=False,
     )
+    return results, pad_x
 
 
 def _box_area(box: np.ndarray) -> float:
@@ -148,7 +155,7 @@ def deduplicate_boxes(
     return [boxes[idx] for idx in final]
 
 
-def get_boxes(results) -> list[np.ndarray]:
+def get_boxes(results, *, pad_x: int = 0, max_x: int | None = None) -> list[np.ndarray]:
     boxes: list[np.ndarray] = []
     confidences: list[float] = []
     for result in results:
@@ -157,7 +164,14 @@ def get_boxes(results) -> list[np.ndarray]:
         xyxy = result.boxes.xyxy.cpu().numpy()
         conf = result.boxes.conf.cpu().numpy()
         for index, box in enumerate(xyxy):
-            boxes.append(box)
+            adjusted = box.copy()
+            if pad_x:
+                adjusted[0] -= pad_x
+                adjusted[2] -= pad_x
+            if max_x is not None:
+                adjusted[0] = max(0.0, adjusted[0])
+                adjusted[2] = min(float(max_x), adjusted[2])
+            boxes.append(adjusted)
             confidences.append(float(conf[index]) if index < len(conf) else 0.0)
     return deduplicate_boxes(boxes, confidences)
 

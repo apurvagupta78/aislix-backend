@@ -21,6 +21,18 @@ def _containment_ratio(inner: dict, outer: dict) -> float:
     return inter / inner_area if inner_area > 0 else 0.0
 
 
+def _iou(a: dict, b: dict) -> float:
+    ix1 = max(float(a["x1"]), float(b["x1"]))
+    iy1 = max(float(a["y1"]), float(b["y1"]))
+    ix2 = min(float(a["x2"]), float(b["x2"]))
+    iy2 = min(float(a["y2"]), float(b["y2"]))
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    inter = (ix2 - ix1) * (iy2 - iy1)
+    union = _area(a) + _area(b) - inter
+    return inter / union if union > 0 else 0.0
+
+
 def _same_row(a: dict, b: dict) -> bool:
     ay1, ay2 = float(a["y1"]), float(a["y2"])
     by1, by2 = float(b["y1"]), float(b["y2"])
@@ -32,6 +44,25 @@ def _same_row(a: dict, b: dict) -> bool:
     return abs(acy - bcy) <= row_tol
 
 
+def _brand_key(item: dict) -> str:
+    return (item.get("brand") or "").strip().lower()
+
+
+def _pick_preferred(a: dict, b: dict) -> int:
+    """Return index to drop between two duplicate facings (0=a, 1=b)."""
+    a_area = _area(a)
+    b_area = _area(b)
+    a_conf = float(a.get("confidence") or 0)
+    b_conf = float(b.get("confidence") or 0)
+    a_unknown = _brand_key(a) in {"", "unknown"}
+    b_unknown = _brand_key(b) in {"", "unknown"}
+    if a_unknown != b_unknown:
+        return 0 if a_unknown else 1
+    if abs(a_conf - b_conf) > 0.08:
+        return 0 if a_conf < b_conf else 1
+    return 0 if a_area < b_area else 1
+
+
 def filter_nested_facings(
     facings: list[dict],
     *,
@@ -39,19 +70,21 @@ def filter_nested_facings(
     max_inner_area_ratio: float = 0.45,
 ) -> list[dict]:
     """
-    Drop small facings nested inside larger neighbors (cap-only crops, tag fragments).
-    Prefer keeping the larger facing; drop inner when Unknown or lower confidence.
+    Drop cap/tag fragments nested inside bottle bodies and merge same-brand overlaps.
+    One physical bottle should produce at most one facing.
     """
     if len(facings) <= 1:
         return facings
 
     drop = [False] * len(facings)
+
+    # Pass 1: drop smaller facings nested inside a larger neighbor on the same row.
     for inner_idx, inner in enumerate(facings):
         inner_area = _area(inner)
         if inner_area <= 0:
             continue
         for outer_idx, outer in enumerate(facings):
-            if inner_idx == outer_idx:
+            if inner_idx == outer_idx or drop[inner_idx]:
                 continue
             outer_area = _area(outer)
             if outer_area <= inner_area:
@@ -62,18 +95,32 @@ def filter_nested_facings(
                 continue
             if _containment_ratio(inner, outer) < containment_threshold:
                 continue
+            drop[inner_idx] = True
 
-            inner_brand = (inner.get("brand") or "").strip().lower()
-            outer_brand = (outer.get("brand") or "").strip().lower()
-            inner_conf = float(inner.get("confidence") or 0)
-            outer_conf = float(outer.get("confidence") or 0)
+    survivors = [item for idx, item in enumerate(facings) if not drop[idx]]
+    if len(survivors) <= 1:
+        return survivors
 
-            if inner_brand in {"", "unknown"}:
-                drop[inner_idx] = True
+    # Pass 2: merge overlapping facings with the same brand (cap + body both labeled).
+    drop = [False] * len(survivors)
+    for idx_a, a in enumerate(survivors):
+        if drop[idx_a]:
+            continue
+        brand_a = _brand_key(a)
+        if not brand_a or brand_a == "unknown":
+            continue
+        for idx_b in range(idx_a + 1, len(survivors)):
+            if drop[idx_b]:
                 continue
-            if outer_brand in {"", "unknown"}:
+            b = survivors[idx_b]
+            if _brand_key(b) != brand_a:
                 continue
-            if inner_conf <= outer_conf + 0.05:
-                drop[inner_idx] = True
+            if not _same_row(a, b):
+                continue
+            overlap = _iou(a, b) >= 0.22 or _containment_ratio(a, b) >= 0.55 or _containment_ratio(b, a) >= 0.55
+            if not overlap:
+                continue
+            drop_idx = idx_a if _pick_preferred(a, b) == 0 else idx_b
+            drop[drop_idx] = True
 
-    return [item for idx, item in enumerate(facings) if not drop[idx]]
+    return [item for idx, item in enumerate(survivors) if not drop[idx]]
