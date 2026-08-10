@@ -97,3 +97,12 @@ def test_sunsilk_protein_shampoo_allowed_on_personal_care():
         entry_category="Personal Care",
         context=_ctx("Personal Care", {"sunsilk", "dove"}),
     ) is True
+
+
+def test_taj_blocked_on_personal_care():
+    assert sku_allowed_in_context(
+        "Taj",
+        sku="taj_mahal_tea",
+        entry_category="Beverages",
+        context=_ctx("Personal Care", {"dove", "pantene"}),
+    ) is False

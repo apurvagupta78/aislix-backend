@@ -195,6 +195,18 @@ def _tea_brand_blocked_on_pack(text: str, brand: str) -> bool:
     return any(marker in text_l for marker in pc_markers)
 
 
+def _tea_brand_blocked_on_pc_pack(text: str, brand: str) -> bool:
+    """Reject tea brands when pack text indicates personal care (price-tag bleed)."""
+    brand_l = brand.lower().strip()
+    if brand_l not in {"taj", "brooke", "tata", "lipton", "tetley"}:
+        return False
+    text_l = _normalize(text)
+    if any(token in text_l for token in ("tea", "chai", "green tea", "tea bags", "tea bag")):
+        return False
+    pc_markers = ("shampoo", "conditioner", "soap", "hand wash", "handwash", "toothpaste", "dandruff")
+    return any(marker in text_l for marker in pc_markers) or len(text_l) < 40
+
+
 def _hint_matched_in_text(normalized: str) -> bool:
     for pattern, _, _ in PRODUCT_HINTS:
         if re.search(pattern, normalized, flags=re.IGNORECASE):
@@ -385,6 +397,8 @@ def match_from_text(text: str) -> dict | None:
         return None
     brand, brand_conf = brand_match
     if _tea_brand_blocked_on_pack(text, brand):
+        return None
+    if _tea_brand_blocked_on_pc_pack(text, brand):
         return None
     product = match_product_for_brand(brand, text)
     if not product:

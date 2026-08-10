@@ -14,12 +14,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_DIR / "best.pt"
 _MODEL = None
 
-YOLO_CONF_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.15"))
+YOLO_CONF_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.12"))
 YOLO_IOU_THRESHOLD = float(os.getenv("YOLO_IOU_THRESHOLD", "0.50"))
 YOLO_DEDUP_IOU = float(os.getenv("YOLO_DEDUP_IOU", "0.55"))
 YOLO_DEDUP_CONTAIN = float(os.getenv("YOLO_DEDUP_CONTAIN", "0.72"))
-YOLO_IMGSZ = int(os.getenv("YOLO_IMGSZ", "960"))
-YOLO_EDGE_PAD_RATIO = float(os.getenv("YOLO_EDGE_PAD_RATIO", "0.06"))
+YOLO_IMGSZ = int(os.getenv("YOLO_IMGSZ", "1280"))
+YOLO_EDGE_PAD_RATIO = float(os.getenv("YOLO_EDGE_PAD_RATIO", "0.10"))
 
 
 def get_yolo_model():

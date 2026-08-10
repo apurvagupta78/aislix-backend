@@ -114,6 +114,7 @@ AISLE_BRAND_BLOCKLIST: dict[str, set[str]] = {
         "surf excel", "ariel", "rin", "tide", "vim", "harpic",
         "ragu", "davidoff", "twinings", "twinning", "schweppes", "girnar", "ritebite",
         "rite bite", "trident", "american garden", "blue bird", "blue", "shan", "knorr", "rite",
+        "taj", "taj mahal", "brooke", "brooke bond", "tata", "nescafe", "bru",
     },
     "home care": FOOD_SNACK_BRANDS | {"lipton", "tetley", "coca cola", "pepsi", "dove", "colgate"},
     "health & wellness": FOOD_SNACK_BRANDS | {"lipton", "coca cola", "pepsi", "lays"},
@@ -130,7 +131,21 @@ SUB_CATEGORY_BLOCKLIST: dict[str, set[str]] = {
     "soft_drinks": {"lipton", "tetley", "tata", "brooke bond", "brooke"},
     "coffee": {"coca cola", "pepsi", "sprite", "fanta", "mirinda", "lipton", "tetley"},
     "water": {"lipton", "tetley", "coca cola", "pepsi", "snickers", "cadbury"},
+    "shampoo": {
+        "taj", "taj mahal", "lipton", "tetley", "tata", "brooke", "brooke bond",
+        "coca", "pepsi", "sprite", "fanta", "mirinda", "nescafe", "bru",
+        "colgate", "pepsodent", "sensodyne", "closeup", "oral-b", "oral b",
+        "haldiram", "haldiram's", "britannia", "parle", "maggi", "lays", "rite",
+    },
 }
+
+NARROW_PC_SUBCATEGORIES = frozenset({"shampoo", "soap", "toothpaste", "deodorant", "skincare"})
+
+SHAMPOO_REJECT_TEXT = (
+    "roll on", "roll-on", "deodorant", "toothpaste", "tooth brush", "toothbrush",
+    "tea bags", "tea bag", "taj mahal", "red label", "yellow label", "green tea",
+    "antiseptic liquid", "soap bar", "bathing bar", "namkeen", "biscuit",
+)
 
 # Expected brands when a narrow sub-category is selected (OCR can override).
 SUB_CATEGORY_BRAND_HINTS: dict[str, dict[str, set[str]]] = {
@@ -231,6 +246,10 @@ def _cross_aisle_sku_conflict(aislix_key: str, brand_l: str, sku_l: str) -> bool
 
     if aislix_key not in BLUE_BRAND_ALLOWED_AISLES and brand_l == "blue":
         return True
+
+    if aislix_key in PC_AISLE_KEYS:
+        if brand_l in {"taj", "lipton", "tetley", "brooke", "tata", "nescafe", "bru", "coca", "pepsi"}:
+            return True
 
     return False
 
@@ -447,7 +466,13 @@ def _ocr_confirms_brand(brand_l: str, ocr_text: str) -> bool:
     return False
 
 
-def sub_category_blocks_brand(context: dict | None, brand: str, ocr_text: str = "") -> bool:
+def sub_category_blocks_brand(
+    context: dict | None,
+    brand: str,
+    ocr_text: str = "",
+    *,
+    product_name: str = "",
+) -> bool:
     """Return True when brand should be rejected for this scan sub_category."""
     if not context or not brand:
         return False
@@ -463,14 +488,21 @@ def sub_category_blocks_brand(context: dict | None, brand: str, ocr_text: str = 
     if brand_l in blocklist:
         return True
 
-    # Narrow sub-category hints are enforced strictly for beverages (tea vs cola),
-    # but personal care shelves are often mixed (soap + shampoo on one photo).
+    if sub == "shampoo":
+        haystack = f"{ocr_text} {product_name}".lower()
+        if any(token in haystack for token in SHAMPOO_REJECT_TEXT):
+            return True
+
     aislix_key = _normalize_key(context.get("aislix_category") or "")
     sub_hints = (SUB_CATEGORY_BRAND_HINTS.get(aislix_key) or {}).get(sub)
-    if sub_hints and sub != "others" and aislix_key == "beverages":
-        general_hints = context.get("brand_hints") or set()
-        if brand_l not in sub_hints and brand_l not in general_hints:
-            return True
+    general_hints = context.get("brand_hints") or set()
+    if sub_hints and sub != "others":
+        if aislix_key == "beverages":
+            if brand_l not in sub_hints and brand_l not in general_hints:
+                return True
+        elif aislix_key == "personal care" and sub in NARROW_PC_SUBCATEGORIES:
+            if brand_l not in sub_hints and brand_l not in general_hints:
+                return True
 
     return False
 

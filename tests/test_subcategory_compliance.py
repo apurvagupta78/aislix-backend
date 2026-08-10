@@ -137,3 +137,27 @@ def test_sunsilk_egg_protein_shampoo_not_cross_aisle_mismatch():
     assert classified[0]["subcategory_match"] is True
 
 
+def test_taj_blocked_on_shampoo_audit():
+    from app.scan_context import sub_category_blocks_brand
+
+    ctx = {
+        "aislix_category": "Personal Care",
+        "sub_category": "shampoo",
+        "brand_hints": {"dove", "pantene", "sunsilk"},
+    }
+    assert sub_category_blocks_brand(ctx, "Taj", "", product_name="Mahal") is True
+
+
+def test_nivea_roll_on_blocked_on_shampoo_audit():
+    from app.scan_context import sub_category_blocks_brand
+
+    ctx = {
+        "aislix_category": "Personal Care",
+        "sub_category": "shampoo",
+        "brand_hints": {"dove", "pantene", "sunsilk", "head & shoulders"},
+    }
+    assert sub_category_blocks_brand(
+        ctx, "Nivea", "", product_name="Pearl Beauty Roll On"
+    ) is True
+
+

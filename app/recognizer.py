@@ -320,7 +320,12 @@ def _propagate_shelf_labels(
             ):
                 still_unknown.append(index)
                 continue
-            if sub_category_blocks_brand(scan_context, label.get("brand") or "", pack_text):
+            if sub_category_blocks_brand(
+                scan_context,
+                label.get("brand") or "",
+                pack_text,
+                product_name=label.get("product_name") or "",
+            ):
                 still_unknown.append(index)
                 continue
             label = {
@@ -402,7 +407,12 @@ def _accept_faiss_fusion(
     brand = match.get("brand") or ""
     if label_conflicts_with_tea_pack(match, ocr_text):
         return False
-    if sub_category_blocks_brand(scan_context, brand, ocr_text):
+    if sub_category_blocks_brand(
+        scan_context,
+        brand,
+        ocr_text,
+        product_name=match.get("product_name") or "",
+    ):
         return False
     if ocr_text and len(ocr_text.strip()) >= 3:
         if not ocr_agrees_with_label(match, ocr_text) and score < FAISS_HIGH_CONFIDENCE:
@@ -459,7 +469,12 @@ def classify_records_v2(
         ocr_texts[index] = pack_text
         ocr_label = classify_with_ocr(images[index], raw_text=pack_text)
         if ocr_label and _is_valid_label(ocr_label) and _accept_ocr_label(ocr_label, scan_context):
-            if sub_category_blocks_brand(scan_context, ocr_label.get("brand") or "", pack_text):
+            if sub_category_blocks_brand(
+                scan_context,
+                ocr_label.get("brand") or "",
+                pack_text,
+                product_name=ocr_label.get("product_name") or "",
+            ):
                 pending.append(index)
                 continue
             row = _merge_label(records[index], ocr_label)

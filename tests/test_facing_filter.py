@@ -57,3 +57,35 @@ def test_merges_same_brand_cap_and_body():
     result = filter_nested_facings([body, cap])
     assert len(result) == 1
     assert result[0]["brand"] == "Pantene"
+
+
+def test_drops_unknown_cap_on_labeled_bottle():
+    body = {
+        "brand": "Himalaya",
+        "product_name": "Anti Hair Fall Shampoo",
+        "confidence": 0.94,
+        "x1": 100,
+        "y1": 50,
+        "x2": 165,
+        "y2": 220,
+    }
+    cap = {
+        "brand": "Unknown",
+        "product_name": "Unidentified SKU",
+        "confidence": 0.35,
+        "x1": 108,
+        "y1": 50,
+        "x2": 158,
+        "y2": 98,
+    }
+    result = filter_nested_facings([body, cap])
+    assert len(result) == 1
+    assert result[0]["brand"] == "Himalaya"
+
+
+def test_row_slot_dedup_keeps_one_per_bottle():
+    a = {"brand": "Dove", "confidence": 0.9, "x1": 10, "y1": 10, "x2": 55, "y2": 130}
+    b = {"brand": "Dove", "confidence": 0.88, "x1": 18, "y1": 12, "x2": 48, "y2": 125}
+    c = {"brand": "Pantene", "confidence": 0.9, "x1": 200, "y1": 10, "x2": 250, "y2": 130}
+    result = filter_nested_facings([a, b, c])
+    assert len(result) == 2
