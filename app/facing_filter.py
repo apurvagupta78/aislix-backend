@@ -57,6 +57,9 @@ def _is_vertical_stack(a: dict, b: dict, median_h: float) -> bool:
     half_h = min(_height(a), _height(b))
     if half_h <= 0:
         return False
+    ref_h = median_h if median_h > 0 else half_h
+    if combined_h > ref_h * 2.2:
+        return False
     # Each half is ~50–65% of a full bottle; combined is ~1.4–2.4× one half.
     ratio = combined_h / half_h
     if 1.35 <= ratio <= 2.4:
@@ -67,7 +70,14 @@ def _is_vertical_stack(a: dict, b: dict, median_h: float) -> bool:
 
 
 def _should_merge_boxes(a: dict, b: dict, median_h: float) -> bool:
+    """Merge cap/body duplicates on one row, or stacked half-bottle splits."""
     if not _same_bottle_column(a, b):
+        return False
+    # Upper + lower half of the same bottle (not the same shelf row).
+    if _is_vertical_stack(a, b, median_h):
+        return True
+    # Cap fragments and IoU duplicates must sit on the same shelf row.
+    if not _same_row(a, b):
         return False
     return (
         _is_cap_fragment(a, b)
@@ -75,12 +85,22 @@ def _should_merge_boxes(a: dict, b: dict, median_h: float) -> bool:
         or _iou(a, b) >= 0.12
         or _containment_ratio(a, b) >= 0.45
         or _containment_ratio(b, a) >= 0.45
-        or _is_vertical_stack(a, b, median_h)
     )
 
 
+def _merge_height_ok(merged: dict, median_h: float) -> bool:
+    """Reject merges that span multiple shelf rows."""
+    if median_h <= 0:
+        return True
+    return _height(merged) <= median_h * 2.25
+
+
 def merge_boxes_by_column(boxes: list) -> list:
-    """Merge YOLO boxes in the same bottle column before cropping (geometry only)."""
+    """Merge YOLO boxes in the same bottle column before cropping (geometry only).
+
+    Only merges cap/body or half-bottle splits on a **single shelf row**. Boxes in
+    the same x-column on different rows are never combined (fixes multi-row collapse).
+    """
     if len(boxes) <= 1:
         return boxes
 
@@ -98,11 +118,13 @@ def merge_boxes_by_column(boxes: list) -> list:
                     continue
                 if not _should_merge_boxes(items[idx_a], items[idx_b], median_h):
                     continue
-                items[idx_a] = _union_box(items[idx_a], items[idx_b])
+                merged = _union_box(items[idx_a], items[idx_b])
+                if not _merge_height_ok(merged, median_h):
+                    continue
+                items[idx_a] = merged
                 drop[idx_b] = True
                 changed = True
         items = [item for idx, item in enumerate(items) if not drop[idx]]
-        median_h = _median_height(items)
 
     if isinstance(boxes[0], np.ndarray):
         return [

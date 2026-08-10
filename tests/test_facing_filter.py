@@ -183,3 +183,16 @@ def test_merge_boxes_by_column_keeps_separate_bottles():
     a = np.array([10.0, 50.0, 70.0, 200.0])
     b = np.array([200.0, 50.0, 260.0, 200.0])
     assert len(merge_boxes_by_column([a, b])) == 2
+
+
+def test_merge_boxes_by_column_does_not_merge_across_shelf_rows():
+    """Same x-column on row 1 and row 2 must stay separate (multi-row shelf)."""
+    import numpy as np
+
+    row1 = np.array([100.0, 80.0, 160.0, 200.0])
+    row2 = np.array([102.0, 280.0, 158.0, 400.0])
+    row3 = np.array([104.0, 480.0, 156.0, 600.0])
+    merged = merge_boxes_by_column([row1, row2, row3])
+    assert len(merged) == 3
+    for box in merged:
+        assert box[3] - box[1] < 250  # no full-shelf-height strip
