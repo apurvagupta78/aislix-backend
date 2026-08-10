@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.facing_filter import filter_nested_facings
+from app.facing_filter import filter_nested_facings, merge_boxes_by_column
 
 
 def test_drops_unknown_cap_inside_bottle():
@@ -143,3 +143,43 @@ def test_drops_narrow_unknown_gap_fragment():
     result = filter_nested_facings([narrow, bottle, other])
     assert len(result) == 2
     assert all(r["brand"] != "Unknown" for r in result)
+
+
+def test_merge_stacked_half_bottle_unknowns():
+    """Two stacked half-bottle Unknown boxes collapse to one facing."""
+    upper = {
+        "brand": "Unknown",
+        "confidence": 0.35,
+        "x1": 100,
+        "y1": 50,
+        "x2": 160,
+        "y2": 120,
+    }
+    lower = {
+        "brand": "Unknown",
+        "confidence": 0.35,
+        "x1": 102,
+        "y1": 118,
+        "x2": 158,
+        "y2": 200,
+    }
+    result = filter_nested_facings([upper, lower])
+    assert len(result) == 1
+
+
+def test_merge_boxes_by_column_stacks_halves():
+    import numpy as np
+
+    upper = np.array([100.0, 50.0, 160.0, 120.0])
+    lower = np.array([102.0, 118.0, 158.0, 200.0])
+    left = np.array([10.0, 50.0, 70.0, 200.0])
+    merged = merge_boxes_by_column([upper, lower, left])
+    assert len(merged) == 2
+
+
+def test_merge_boxes_by_column_keeps_separate_bottles():
+    import numpy as np
+
+    a = np.array([10.0, 50.0, 70.0, 200.0])
+    b = np.array([200.0, 50.0, 260.0, 200.0])
+    assert len(merge_boxes_by_column([a, b])) == 2

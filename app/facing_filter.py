@@ -2,8 +2,114 @@
 
 from __future__ import annotations
 
+import numpy as np
+
 # Only run heavy row-slot dedup on dense multi-row shelves.
 ROW_SLOT_DEDUP_MIN_FACINGS = 20
+
+
+def _as_box_dict(box) -> dict:
+    if isinstance(box, dict):
+        return box
+    return {
+        "x1": float(box[0]),
+        "y1": float(box[1]),
+        "x2": float(box[2]),
+        "y2": float(box[3]),
+    }
+
+
+def _union_box(a: dict, b: dict) -> dict:
+    return {
+        "x1": min(float(a["x1"]), float(b["x1"])),
+        "y1": min(float(a["y1"]), float(b["y1"])),
+        "x2": max(float(a["x2"]), float(b["x2"])),
+        "y2": max(float(a["y2"]), float(b["y2"])),
+    }
+
+
+def _median_height(items: list[dict]) -> float:
+    heights = sorted(_height(item) for item in items if _height(item) > 0)
+    if not heights:
+        return 0.0
+    return heights[len(heights) // 2]
+
+
+def _same_bottle_column(a: dict, b: dict) -> bool:
+    """Same vertical column — allows stacked upper/lower half boxes."""
+    if _horizontal_overlap_ratio(a, b) >= 0.28:
+        return True
+    gap = abs(_x_center(a) - _x_center(b))
+    return gap <= min(_width(a), _width(b)) * 0.38
+
+
+def _is_vertical_stack(a: dict, b: dict, median_h: float) -> bool:
+    """True when two boxes are stacked halves of one bottle."""
+    if _horizontal_overlap_ratio(a, b) < 0.25:
+        return False
+    if abs(_x_center(a) - _x_center(b)) > min(_width(a), _width(b)) * 0.38:
+        return False
+    top, bottom = (a, b) if _y_center(a) < _y_center(b) else (b, a)
+    gap_y = float(bottom["y1"]) - float(top["y2"])
+    if gap_y > max(_height(top), _height(bottom)) * 0.4:
+        return False
+    combined_h = float(bottom["y2"]) - float(top["y1"])
+    half_h = min(_height(a), _height(b))
+    if half_h <= 0:
+        return False
+    # Each half is ~50–65% of a full bottle; combined is ~1.4–2.4× one half.
+    ratio = combined_h / half_h
+    if 1.35 <= ratio <= 2.4:
+        return True
+    if median_h > 0:
+        return 0.9 * median_h <= combined_h <= 1.35 * median_h
+    return False
+
+
+def _should_merge_boxes(a: dict, b: dict, median_h: float) -> bool:
+    if not _same_bottle_column(a, b):
+        return False
+    return (
+        _is_cap_fragment(a, b)
+        or _is_cap_fragment(b, a)
+        or _iou(a, b) >= 0.12
+        or _containment_ratio(a, b) >= 0.45
+        or _containment_ratio(b, a) >= 0.45
+        or _is_vertical_stack(a, b, median_h)
+    )
+
+
+def merge_boxes_by_column(boxes: list) -> list:
+    """Merge YOLO boxes in the same bottle column before cropping (geometry only)."""
+    if len(boxes) <= 1:
+        return boxes
+
+    items = [_as_box_dict(box) for box in boxes]
+    median_h = _median_height(items)
+    changed = True
+    while changed:
+        changed = False
+        drop = [False] * len(items)
+        for idx_a in range(len(items)):
+            if drop[idx_a]:
+                continue
+            for idx_b in range(idx_a + 1, len(items)):
+                if drop[idx_b]:
+                    continue
+                if not _should_merge_boxes(items[idx_a], items[idx_b], median_h):
+                    continue
+                items[idx_a] = _union_box(items[idx_a], items[idx_b])
+                drop[idx_b] = True
+                changed = True
+        items = [item for idx, item in enumerate(items) if not drop[idx]]
+        median_h = _median_height(items)
+
+    if isinstance(boxes[0], np.ndarray):
+        return [
+            np.array([item["x1"], item["y1"], item["x2"], item["y2"]], dtype=boxes[0].dtype)
+            for item in items
+        ]
+    return items
 
 
 def _area(item: dict) -> float:
@@ -146,6 +252,7 @@ def _merge_same_column_facings(facings: list[dict]) -> list[dict]:
     if len(facings) <= 1:
         return facings
 
+    median_h = _median_height(facings)
     drop = [False] * len(facings)
     for idx_a, a in enumerate(facings):
         if drop[idx_a]:
@@ -153,17 +260,17 @@ def _merge_same_column_facings(facings: list[dict]) -> list[dict]:
         for idx_b in range(idx_a + 1, len(facings)):
             if drop[idx_b]:
                 continue
-            if not _same_column(a, facings[idx_b]):
-                continue
             b = facings[idx_b]
-            overlap = (
-                _iou(a, b) >= 0.12
-                or _containment_ratio(a, b) >= 0.45
-                or _containment_ratio(b, a) >= 0.45
-                or _is_cap_fragment(a, b)
-                or _is_cap_fragment(b, a)
-            )
-            if not overlap and abs(_x_center(a) - _x_center(b)) > min(_width(a), _width(b)) * 0.25:
+            merge = _should_merge_boxes(a, b, median_h)
+            if not merge and _same_column(a, b):
+                merge = (
+                    _iou(a, b) >= 0.12
+                    or _containment_ratio(a, b) >= 0.45
+                    or _containment_ratio(b, a) >= 0.45
+                    or _is_cap_fragment(a, b)
+                    or _is_cap_fragment(b, a)
+                )
+            if not merge:
                 continue
             drop_idx = idx_a if _pick_preferred(a, b) == 0 else idx_b
             drop[drop_idx] = True

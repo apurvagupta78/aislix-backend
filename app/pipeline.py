@@ -20,7 +20,7 @@ from app.detector import (
     load_image_bytes,
     load_image_from_url,
 )
-from app.facing_filter import filter_nested_facings
+from app.facing_filter import filter_nested_facings, merge_boxes_by_column
 from app.inventory import aggregate_inventory, inventory_to_api_products
 from app.metrics import (
     brand_share,
@@ -78,6 +78,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
     try:
         results, pad_x = detect_products(image)
         boxes = get_boxes(results, pad_x=pad_x, max_x=image.shape[1])
+        boxes = merge_boxes_by_column(boxes)
         if not boxes:
             raise ValueError("No products detected in this shelf image.")
 

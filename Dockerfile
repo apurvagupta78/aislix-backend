@@ -44,7 +44,7 @@ RUN python scripts/verify_retailklip_checkpoint.py \
     && python scripts/verify_paddle_ocr.py
 
 ENV HOME=/app
-ENV OCR_ENGINE=paddle
+ENV OCR_ENGINE=easyocr
 ENV USE_RETAILKLIP=true
 
 EXPOSE 8080
