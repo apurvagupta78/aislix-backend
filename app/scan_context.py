@@ -68,11 +68,33 @@ FOOD_SNACK_BRANDS: set[str] = {
     "blue bird", "shan", "homelite", "knorr", "kellogg's", "kelloggs", "quaker", "rite",
 }
 
-# SKU/product tokens that indicate snacks — reject on personal care scans.
-PC_SNACK_SKU_TOKENS = (
+# SKU/product tokens that indicate snacks — reject outside snack aisle audits.
+CROSS_AISLE_SNACK_TOKENS = (
     "choco_berry", "protein_bar", "protein", "caster_sugar", "namkeen", "biscuit",
-    "cheese_slices", "peanut", "jalapeno", "trident", "snack",
+    "cheese_slices", "peanut", "jalapeno", "trident", "snack", "bhujia", "wafer",
 )
+
+# Beverage SKU tokens — reject outside beverage aisle audits.
+CROSS_AISLE_BEVERAGE_TOKENS = (
+    "soft_drink", "soft drink", "nescafe", "green_tea", "tea_bags", "tea_bag",
+    "instant_coffee", "filter_coffee", "mineral_water", "fruit_drink", "mango_drink",
+)
+
+# Personal care SKU tokens — reject outside PC / health & wellness audits.
+CROSS_AISLE_PC_TOKENS = (
+    "shampoo", "conditioner", "toothpaste", "toothbrush", "hand_wash", "handwash",
+    "bathing_bar", "face_wash", "facewash",
+)
+
+# Aisle keys where snack / beverage / PC product tokens are expected (not cross-aisle).
+SNACK_AISLE_KEYS = frozenset({"packaged food & snacks"})
+BEVERAGE_AISLE_KEYS = frozenset({"beverages"})
+PC_AISLE_KEYS = frozenset({"personal care", "health & wellness"})
+GROCERY_AISLE_KEYS = frozenset({"grocery & staples"})
+BLUE_BRAND_ALLOWED_AISLES = GROCERY_AISLE_KEYS | SNACK_AISLE_KEYS
+
+# Backward-compatible alias used in tests/docs.
+PC_SNACK_SKU_TOKENS = CROSS_AISLE_SNACK_TOKENS
 
 # Brands that must never appear when a specific aisle category is selected.
 AISLE_BRAND_BLOCKLIST: dict[str, set[str]] = {
@@ -143,6 +165,7 @@ SUB_CATEGORY_BRAND_HINTS: dict[str, dict[str, set[str]]] = {
 SUB_CATEGORY_PRODUCT_KEYWORDS: dict[str, list[str]] = {
     "shampoo": ["shampoo", "conditioner", "hair fall", "anti dandruff", "hair care", "keratin"],
     "soap": ["soap", "handwash", "hand wash", "bathing bar", "bath bar", "antiseptic liquid"],
+    "hand_care": ["hand wash", "handwash", "hand-wash", "hand sanitizer", "sanitizer"],
     "toothpaste": ["toothpaste", "toothbrush", "tooth brush", "dental", "oral care", "mouthwash"],
     "deodorant": ["deodorant", "deo", "body spray", "antiperspirant"],
     "skincare": ["face wash", "facewash", "moistur", "lotion", "cream", "serum", "sunscreen", "spf"],
@@ -176,8 +199,41 @@ SUB_CATEGORY_PRODUCT_KEYWORDS: dict[str, list[str]] = {
     "oil": ["cooking oil", "mustard oil", "sunflower oil", "refined oil"],
 }
 
-# Product types used to block wrong label propagation (shampoo → toothbrush, etc.).
-PROPAGATION_PRODUCT_TYPES = ("shampoo", "soap", "toothpaste", "hand_care")
+# Product types used to block wrong label propagation across all aisles.
+PROPAGATION_PRODUCT_TYPES = (
+    "shampoo", "soap", "toothpaste", "hand_care",
+    "tea", "coffee", "soft_drinks", "juices", "water",
+    "biscuits", "chips", "namkeen", "noodles", "chocolates",
+    "detergent", "dishwash", "floor_cleaner", "toilet_cleaner",
+    "milk", "atta", "rice", "oil",
+)
+
+def _cross_aisle_sku_conflict(aislix_key: str, brand_l: str, sku_l: str) -> bool:
+    """True when SKU/brand tokens belong to a different aisle than the audit selection."""
+    haystack = f"{sku_l} {brand_l}"
+
+    if aislix_key not in SNACK_AISLE_KEYS and aislix_key not in GROCERY_AISLE_KEYS:
+        if brand_l == "rite":
+            return True
+        if any(token in haystack for token in CROSS_AISLE_SNACK_TOKENS):
+            return True
+
+    if aislix_key not in BEVERAGE_AISLE_KEYS:
+        if any(token in sku_l for token in CROSS_AISLE_BEVERAGE_TOKENS):
+            return True
+        if brand_l in {"coca", "pepsi", "lipton", "tetley", "fanta", "sprite", "mirinda", "nescafe", "bru"}:
+            if brand_l not in (AISLE_BRAND_HINTS.get(aislix_key) or set()):
+                return True
+
+    if aislix_key not in PC_AISLE_KEYS:
+        if any(token in sku_l for token in CROSS_AISLE_PC_TOKENS):
+            return True
+
+    if aislix_key not in BLUE_BRAND_ALLOWED_AISLES and brand_l == "blue":
+        return True
+
+    return False
+
 
 HAND_SANITIZER_KEYWORDS = ("hand sanitizer", "sanitizer", "hand sanitiser")
 HANDWASH_KEYWORDS = ("hand wash", "handwash", "hand-wash")
@@ -458,7 +514,32 @@ def gpt_context_prompt(context: dict | None) -> str:
             "A toothbrush must never be labeled as shampoo."
         )
     elif _normalize_key(name) == "home care":
-        lines.append("Only label home care / cleaning products. Never label food or beverages.")
+        lines.append(
+            "Only label home care / cleaning products (detergent, dishwash, floor cleaner, "
+            "toilet cleaner, repellent). Never label food, beverages, or shampoo."
+        )
+        lines.append(
+            "Common brands: Surf Excel, Ariel, Rin, Tide, Vim, Harpic, Lizol, Domex, "
+            "Good Knight, All Out, Odonil."
+        )
+    elif _normalize_key(name) == "packaged food & snacks":
+        lines.append(
+            "Only label packaged food and snacks (biscuits, chips, namkeen, noodles, "
+            "chocolates, protein bars). Never label beverages, shampoo, or detergent."
+        )
+        lines.append(
+            "Common brands: Haldiram, Britannia, Parle, Lay's, Kurkure, Maggi, Cadbury, "
+            "Snickers, MTR, Sunfeast."
+        )
+    elif _normalize_key(name) == "grocery & staples":
+        lines.append(
+            "Only label grocery and staples (atta, rice, dal, oil, spices, sugar). "
+            "Never label shampoo, beverages, or biscuits unless they are clearly in this aisle."
+        )
+        lines.append(
+            "Common brands: Aashirvaad, Fortune, India Gate, Tata Sampann, MDH, Everest, "
+            "Patanjali, Blue Bird (sugar/baking)."
+        )
     else:
         lines.append(
             f"Only label products that belong in {name}"
@@ -486,21 +567,13 @@ def sku_allowed_in_context(
     allowed_catalog = context.get("catalog_categories") or []
     hints = context.get("brand_hints") or set()
     blocklist = AISLE_BRAND_BLOCKLIST.get(aislix_key, set())
+    sku_l = (sku or "").lower()
 
     if brand_l in blocklist:
         return False
 
-    if aislix_key == "personal care" and brand_l == "blue":
+    if _cross_aisle_sku_conflict(aislix_key, brand_l, sku_l):
         return False
-
-    sku_l = (sku or "").lower()
-    product_l = (entry_category or "").lower()
-    if aislix_key == "personal care":
-        if brand_l == "rite":
-            return False
-        haystack = f"{sku_l} {product_l} {brand_l}"
-        if any(token in haystack for token in PC_SNACK_SKU_TOKENS):
-            return False
 
     sku_cat = (entry_category or infer_category(sku or brand_l)).lower()
 

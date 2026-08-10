@@ -40,6 +40,10 @@ TEXT_ALIASES: dict[str, str] = {
     "tresemrn": "Tresemme",
     "blue bird": "Blue",
     "pear": "Pears",
+    "parle-g": "Parle",
+    "parle g": "Parle",
+    "haldiram's": "Haldiram",
+    "surf excel": "Surf",
 }
 
 # Single-token catalog brands that are usually variant words, not manufacturers.
@@ -98,6 +102,22 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bpears\b", "Pears", ""),
     (r"\bpear\b", "Pears", ""),
     (r"\bjoy\b", "Joy", ""),
+    (r"\bhaldiram(?:\'s)?\b", "Haldiram", ""),
+    (r"\bbritannia\b", "Britannia", ""),
+    (r"\bparle(?:\s+-?\s*g)?\b", "Parle", ""),
+    (r"\bmaggi\b", "Maggi", ""),
+    (r"\blay(?:\'|s)?s\b", "Lays", ""),
+    (r"\bnescafe\b", "Nescafe", ""),
+    (r"\bbru\b", "Bru", ""),
+    (r"\bsprite\b", "Sprite", ""),
+    (r"\bmountain\s+dew\b", "Mountain", ""),
+    (r"\bsurf\s+excel\b", "Surf", ""),
+    (r"\bharpic\b", "Harpic", ""),
+    (r"\bvim\b", "Vim", ""),
+    (r"\baashirvaad\b", "Aashirvaad", ""),
+    (r"\bfortune\b", "Fortune", ""),
+    (r"\bindia\s+gate\b", "India", ""),
+    (r"\bamul\b", "Amul", ""),
 ]
 
 TEA_OCR_MARKERS = (
