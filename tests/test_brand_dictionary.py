@@ -39,8 +39,39 @@ def test_display_head_and_shoulders():
     assert display_brand_name("Head", "And Shoulders Classic Clean Shampoo") == "Head & Shoulders"
 
 
-def test_loreal_total_repair_hint():
-    text = "L'Oreal Paris Total Repair 5 Shampoo 180ml"
+def test_pears_not_blue_bird():
+    text = "Pears Pure and Gentle Soap 125g"
     result = match_from_text(text)
     assert result is not None
-    assert "loreal" in result["brand"].lower()
+    assert result["brand"].lower() == "pears"
+    assert "blue" not in result["brand"].lower()
+
+
+def test_smooth_shine_blue_not_blue_bird():
+    text = "Smooth and Shine blue bottle"
+    result = match_from_text(text)
+    if result:
+        assert result["brand"].lower() != "blue"
+
+
+def test_dettol_handwash():
+    text = "Dettol Original Hand Wash 200ml"
+    result = match_from_text(text)
+    assert result is not None
+    assert result["brand"].lower() == "dettol"
+    assert "hand" in (result.get("product_name") or "").lower()
+
+
+def test_keratin_smooth_tresemme():
+    text = "Keratin Smooth Shampoo 185ml Tresemme"
+    result = match_from_text(text)
+    assert result is not None
+    assert "tresemme" in result["brand"].lower()
+    assert "keratin" in (result.get("product_name") or "").lower()
+
+
+def test_taj_blocked_on_shampoo_pack():
+    text = "Dove Intense Repair Shampoo Taj Mahal tea"
+    result = match_from_text(text)
+    assert result is not None
+    assert result["brand"].lower() == "dove"

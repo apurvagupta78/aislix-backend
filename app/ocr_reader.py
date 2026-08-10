@@ -217,11 +217,14 @@ def read_packaging_text(image: Image.Image) -> str:
     """Always read visible text, even when brand matching fails."""
     if not OCR_ENABLED:
         return ""
-    full_text = _clean_ocr_text(read_text_from_pil(image))
     width, height = image.size
-    if height >= 40:
-        band_h = max(1, int(height * 0.45))
-        band = image.crop((0, 0, width, band_h))
+    # Exclude bottom 15% — yellow price tags read as wrong brands (Taj Mahal, etc.).
+    pack_bottom = max(1, int(height * 0.85))
+    pack_crop = image.crop((0, 0, width, pack_bottom))
+    full_text = _clean_ocr_text(read_text_from_pil(pack_crop))
+    if pack_bottom >= 40:
+        band_h = max(1, int(pack_bottom * 0.45))
+        band = pack_crop.crop((0, 0, width, band_h))
         band_text = _clean_ocr_text(read_text_from_pil(band))
         if band_text and band_text.lower() not in full_text.lower():
             merged = f"{band_text} {full_text}".strip()

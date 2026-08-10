@@ -6,6 +6,27 @@ from collections import defaultdict
 
 LOW_STOCK_THRESHOLD = 2
 
+BRAND_DISPLAY_ALIASES: dict[str, str] = {
+    "tresemmé": "Tresemme",
+    "tresemm": "Tresemme",
+    "tresenme": "Tresemme",
+    "tresemrn": "Tresemme",
+    "l'oreal": "L'Oreal",
+    "l oreal": "L'Oreal",
+    "head": "Head & Shoulders",
+    "clinic": "Clinic Plus",
+}
+
+
+def _normalize_brand_key(brand: str, product: str = "") -> str:
+    brand_l = brand.lower().strip()
+    product_l = product.lower()
+    if brand_l == "head" and "shoulder" in product_l:
+        return "head & shoulders"
+    if brand_l == "clinic" and "plus" in product_l:
+        return "clinic plus"
+    return BRAND_DISPLAY_ALIASES.get(brand_l, brand_l)
+
 
 def aggregate_inventory(classified: list[dict]) -> list[dict]:
     buckets: dict[tuple, dict] = defaultdict(lambda: {"quantity": 0, "confidences": []})
@@ -15,9 +36,15 @@ def aggregate_inventory(classified: list[dict]) -> list[dict]:
         product = (item.get("product_name") or "Unknown").strip()
         variant = (item.get("variant") or "").strip()
         sku = (item.get("sku") or "").strip()
-        key = (brand.lower(), product.lower(), variant.lower(), sku.lower())
+        brand_key = _normalize_brand_key(brand, product)
+        key = (brand_key, product.lower(), variant.lower(), sku.lower())
         bucket = buckets[key]
-        bucket["brand"] = brand
+        display_brand = BRAND_DISPLAY_ALIASES.get(brand.lower(), brand)
+        if brand_key == "head & shoulders":
+            display_brand = "Head & Shoulders"
+        elif brand_key == "clinic plus":
+            display_brand = "Clinic Plus"
+        bucket["brand"] = display_brand
         bucket["product_name"] = product
         bucket["variant"] = variant
         bucket["category"] = item.get("category") or "General"

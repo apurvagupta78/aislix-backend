@@ -50855,6 +50855,62 @@
       "variant": "150 ml",
       "sku": "yardley_london_morning_dew_refreshing_deo_150_ml",
       "category": "Personal Care"
+    },
+    {
+      "class_id": 9001,
+      "brand": "Pears",
+      "product_name": "Pure And Gentle Soap",
+      "variant": "125 g",
+      "sku": "pears_pure_and_gentle_soap_125g",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 9002,
+      "brand": "Pears",
+      "product_name": "Germ Shield Soap",
+      "variant": "125 g",
+      "sku": "pears_germ_shield_soap_125g",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 9003,
+      "brand": "Dettol",
+      "product_name": "Original Hand Wash",
+      "variant": "200 ml",
+      "sku": "dettol_original_hand_wash_200ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 9004,
+      "brand": "Dettol",
+      "product_name": "Skincare Hand Wash",
+      "variant": "200 ml",
+      "sku": "dettol_skincare_hand_wash_200ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 9005,
+      "brand": "Himalaya",
+      "product_name": "Anti Hair Fall Shampoo",
+      "variant": "180 ml",
+      "sku": "himalaya_anti_hair_fall_shampoo_180ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 9006,
+      "brand": "Tresemme",
+      "product_name": "Keratin Smooth Shampoo",
+      "variant": "185 ml",
+      "sku": "tresemme_keratin_smooth_shampoo_185ml",
+      "category": "Personal Care"
+    },
+    {
+      "class_id": 9007,
+      "brand": "Tresemme",
+      "product_name": "Smooth Shine Shampoo",
+      "variant": "180 ml",
+      "sku": "tresemme_smooth_shine_shampoo_180ml",
+      "category": "Personal Care"
     }
   ]
 }

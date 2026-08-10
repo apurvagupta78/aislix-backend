@@ -37,6 +37,7 @@ FAISS_THRESHOLD_CONTEXT = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_CONTEXT", 
 FAISS_THRESHOLD_RETRY = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_RETRY", "0.82"))
 FAISS_HIGH_CONFIDENCE = float(os.getenv("FAISS_HIGH_CONFIDENCE", "0.95"))
 PROPAGATE_THRESHOLD = float(os.getenv("PROPAGATE_SIMILARITY_THRESHOLD", "0.90"))
+PROPAGATE_THRESHOLD_NO_OCR = float(os.getenv("PROPAGATE_SIMILARITY_THRESHOLD_NO_OCR", "0.95"))
 LEARN_MIN_CONFIDENCE = float(os.getenv("LEARN_MIN_CONFIDENCE", "0.7"))
 
 
@@ -284,7 +285,7 @@ def _propagate_shelf_labels(
                     continue
                 still_unknown.append(index)
                 continue
-            if not ocr_agrees_with_label(best_label, pack_text):
+            if not ocr_agrees_with_label(best_label, pack_text, strict=True):
                 if _try_ocr_override(
                     records, classified, embeddings, index, pack_text, scan_context, known
                 ):
@@ -294,6 +295,9 @@ def _propagate_shelf_labels(
                 continue
 
         if best_label:
+            if use_ocr and not pack_text.strip() and best_sim < PROPAGATE_THRESHOLD_NO_OCR:
+                still_unknown.append(index)
+                continue
             if use_ocr and pack_text and propagation_type_conflict(best_label, pack_text):
                 if _try_ocr_override(
                     records, classified, embeddings, index, pack_text, scan_context, known

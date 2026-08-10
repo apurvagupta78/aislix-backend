@@ -85,7 +85,7 @@ AISLE_BRAND_BLOCKLIST: dict[str, set[str]] = {
         "lipton", "tetley", "coca cola", "pepsi", "sprite", "fanta", "mirinda", "real",
         "surf excel", "ariel", "rin", "tide", "vim", "harpic",
         "ragu", "davidoff", "twinings", "twinning", "schweppes", "girnar", "ritebite",
-        "rite bite", "trident", "american garden", "blue bird", "shan", "knorr",
+        "rite bite", "trident", "american garden", "blue bird", "blue", "shan", "knorr",
     },
     "home care": FOOD_SNACK_BRANDS | {"lipton", "tetley", "coca cola", "pepsi", "dove", "colgate"},
     "health & wellness": FOOD_SNACK_BRANDS | {"lipton", "coca cola", "pepsi", "lays"},
@@ -171,13 +171,20 @@ SUB_CATEGORY_PRODUCT_KEYWORDS: dict[str, list[str]] = {
 }
 
 # Product types used to block wrong label propagation (shampoo → toothbrush, etc.).
-PROPAGATION_PRODUCT_TYPES = ("shampoo", "soap", "toothpaste")
+PROPAGATION_PRODUCT_TYPES = ("shampoo", "soap", "toothpaste", "hand_care")
+
+HAND_SANITIZER_KEYWORDS = ("hand sanitizer", "sanitizer", "hand sanitiser")
+HANDWASH_KEYWORDS = ("hand wash", "handwash", "hand-wash")
 
 
 def _infer_product_type(text: str) -> str | None:
     text_l = _normalize_key(text)
     if len(text_l) < 3:
         return None
+    if any(kw in text_l for kw in HAND_SANITIZER_KEYWORDS):
+        return "hand_sanitizer"
+    if any(kw in text_l for kw in HANDWASH_KEYWORDS):
+        return "hand_care"
     best_score = 0
     best_type: str | None = None
     for ptype in PROPAGATION_PRODUCT_TYPES:
@@ -200,6 +207,8 @@ def propagation_type_conflict(ref_label: dict, probe_text: str) -> bool:
     probe_type = _infer_product_type(probe_text)
     if not ref_type or not probe_type:
         return False
+    if {ref_type, probe_type} == {"hand_sanitizer", "hand_care"}:
+        return True
     return ref_type != probe_type
 
 # Cross-aisle product keywords for compliance (wrong putaway on a focused audit).
@@ -473,6 +482,9 @@ def sku_allowed_in_context(
     blocklist = AISLE_BRAND_BLOCKLIST.get(aislix_key, set())
 
     if brand_l in blocklist:
+        return False
+
+    if aislix_key == "personal care" and brand_l == "blue":
         return False
 
     sku_cat = (entry_category or infer_category(sku or brand_l)).lower()

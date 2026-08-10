@@ -36,13 +36,17 @@ TEXT_ALIASES: dict[str, str] = {
     "oral b": "Oral",
     "tresemmé": "Tresemme",
     "tresemm": "Tresemme",
+    "tresenme": "Tresemme",
+    "tresemrn": "Tresemme",
+    "blue bird": "Blue",
+    "pear": "Pears",
 }
 
 # Single-token catalog brands that are usually variant words, not manufacturers.
 VARIANT_BRAND_BLOCKLIST = frozenset({
     "clean", "classic", "plus", "repair", "smooth", "nourish", "control", "long",
     "fresh", "total", "intense", "active", "original", "natural", "herbal",
-    "anti", "pro", "extra", "super", "deep", "mild", "soft", "strong",
+    "anti", "pro", "extra", "super", "deep", "mild", "soft", "strong", "blue",
 })
 
 # Distinctive pack text → brand + preferred catalog product (checked before generic brand match).
@@ -67,6 +71,10 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bhimalaya\b", "Himalaya", ""),
     (r"\btresemme\b", "Tresemme", ""),
     (r"\btresemm[eé]\b", "Tresemme", ""),
+    (r"\btresenme\b", "Tresemme", ""),
+    (r"\bkeratin\s+smooth\b", "Tresemme", "Keratin Smooth Shampoo"),
+    (r"\bsmooth\s*(?:&|and\s+)?\s*shine\b", "Tresemme", "Smooth Shine Shampoo"),
+    (r"\banti[\-\s]?hair\s*fall\b", "Himalaya", "Anti Hair Fall Shampoo"),
     (r"\bhead\s*(?:&|and)\s*shoulders\b", "Head", ""),
     (r"\bhead\s+shoulders\b", "Head", ""),
     (r"\bclinic\s+plus\b", "Clinic", "Plus Strong And Long Health Shampoo"),
@@ -85,12 +93,17 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bsimple\b", "Simple", ""),
     (r"\bmeera\b", "Meera", ""),
     (r"\bpears\b", "Pears", ""),
+    (r"\bpear\b", "Pears", ""),
+    (r"\bdettol\b.*\bhand\s*wash\b", "Dettol", "Original Hand Wash"),
+    (r"\bhand\s*wash\b.*\bdettol\b", "Dettol", "Original Hand Wash"),
+    (r"\bhandwash\b.*\bdettol\b", "Dettol", "Original Hand Wash"),
     (r"\bjoy\b", "Joy", ""),
 ]
 
 TEA_OCR_MARKERS = (
     "lipton", "tetley", "tata tea", "tea agni", "agni", "green tea", "red label",
     "yellow label", "brooke bond", "taj mahal", "tea bags", "tea bag", "tea premix",
+    "taj mahal tea", "brooke bond taj",
 )
 NON_TEA_BEVERAGE_BRANDS = {
     "sofit", "coca cola", "coca-cola", "pepsi", "fanta", "sprite", "tropicana", "maaza",
@@ -138,7 +151,24 @@ def _brand_tokens(brand: str) -> set[str]:
         tokens.add("clinic plus")
     if brand_l == "loreal":
         tokens.update({"l'oreal", "l oreal"})
+    if brand_l == "blue":
+        tokens.add("blue bird")
     return tokens
+
+
+def _blue_brand_allowed(normalized: str) -> bool:
+    """Blue catalog brand is baking (Blue Bird); block color-only OCR matches."""
+    return "bird" in normalized or "caster sugar" in normalized or "demerara" in normalized
+
+
+def _tea_brand_blocked_on_pack(text: str, brand: str) -> bool:
+    """Reject tea brands when pack text indicates shampoo/personal care."""
+    brand_l = brand.lower().strip()
+    if brand_l not in {"taj", "brooke", "tata", "lipton", "tetley"}:
+        return False
+    text_l = _normalize(text)
+    pc_markers = ("shampoo", "conditioner", "soap", "hand wash", "handwash", "toothpaste")
+    return any(marker in text_l for marker in pc_markers)
 
 
 def _hint_matched_in_text(normalized: str) -> bool:
@@ -157,6 +187,8 @@ def _variant_brand_blocked(brand_norm: str, normalized: str, has_hint: bool) -> 
         return True
     if brand_norm == "plus" and "clinic" in normalized:
         return True
+    if brand_norm == "blue" and not _blue_brand_allowed(normalized):
+        return True
     return False
 
 
@@ -173,14 +205,16 @@ def display_brand_name(brand: str, product_name: str = "") -> str:
     return brand
 
 
-def ocr_agrees_with_label(label: dict, text: str) -> bool:
+def ocr_agrees_with_label(label: dict, text: str, *, strict: bool = False) -> bool:
     """Return True when OCR text supports the proposed brand/product label."""
     if not text or len(text.strip()) < 3:
-        return True
+        return not strict
+    label_brand = (label.get("brand") or "").strip().lower()
+    if label_brand == "blue" and not _blue_brand_allowed(_normalize(text)):
+        return False
     corrected = match_from_text(text)
     if not corrected:
         return False
-    label_brand = (label.get("brand") or "").strip().lower()
     text_brand = (corrected.get("brand") or "").strip().lower()
     if not label_brand or not text_brand:
         return False
@@ -189,7 +223,10 @@ def ocr_agrees_with_label(label: dict, text: str) -> bool:
     if label_brand in text_brand or text_brand in label_brand:
         return True
     text_l = _normalize(text)
-    return any(token in text_l for token in _brand_tokens(label.get("brand") or ""))
+    tokens = _brand_tokens(label.get("brand") or "")
+    if label_brand == "blue":
+        return "bird" in text_l
+    return any(token in text_l for token in tokens if len(token) >= 4)
 
 
 def _normalize(text: str) -> str:
@@ -321,6 +358,8 @@ def match_from_text(text: str) -> dict | None:
     if not brand_match:
         return None
     brand, brand_conf = brand_match
+    if _tea_brand_blocked_on_pack(text, brand):
+        return None
     product = match_product_for_brand(brand, text)
     if not product:
         return None
@@ -368,15 +407,29 @@ def reconcile_label_with_text(label: dict, text: str) -> dict:
     return merged
 
 
+def _volume_tokens(text: str) -> set[str]:
+    return {match.group(0).replace(" ", "").lower() for match in re.finditer(r"\b\d+\s*ml\b", text.lower())}
+
+
 def match_product_for_brand(brand: str, text: str) -> dict | None:
     """Pick the best catalog SKU for a brand given OCR text."""
     entries = products_for_brand(brand)
     if not entries:
         return None
     normalized = _normalize(text)
+    volume_tokens = _volume_tokens(text)
+    seen_skus: set[str] = set()
+    unique_entries: list[dict] = []
+    for entry in entries:
+        sku = (entry.get("sku") or "").lower()
+        if sku in seen_skus:
+            continue
+        seen_skus.add(sku)
+        unique_entries.append(entry)
+
     best: dict | None = None
     best_score = 0.0
-    for entry in entries:
+    for entry in unique_entries:
         product = (entry.get("product_name") or "").strip()
         variant = (entry.get("variant") or "").strip()
         sku = (entry.get("sku") or "").strip()
@@ -391,7 +444,13 @@ def match_product_for_brand(brand: str, text: str) -> dict | None:
             for token in re.split(r"[\s\-]+", _normalize(product)):
                 if len(token) >= 4 and _word_in_text(token, normalized):
                     score = max(score, 0.95)
-        if score > best_score:
+        if volume_tokens:
+            entry_vol = _volume_tokens(haystack)
+            if entry_vol & volume_tokens:
+                score += 0.08
+            elif entry_vol and not (entry_vol & volume_tokens):
+                score -= 0.05
+        if score >= best_score:
             best_score = score
             best = entry
     if best and best_score >= 0.55:
