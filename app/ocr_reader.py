@@ -18,6 +18,7 @@ _paddle_ocr: Any | None = None
 _easyocr_reader: Any | None = None
 _active_engine: ActiveEngine = None
 _init_attempted = False
+_paddle_init_error: str | None = None
 
 OCR_MIN_CONFIDENCE = float(os.getenv("OCR_MIN_CONFIDENCE", "0.6"))
 OCR_LINE_MIN_CONFIDENCE = float(os.getenv("OCR_LINE_MIN_CONFIDENCE", "0.45"))
@@ -58,25 +59,32 @@ def _enrich_text_for_matching(text: str) -> str:
 
 
 def _init_paddle() -> Any | None:
-    global _paddle_ocr
+    global _paddle_ocr, _paddle_init_error
     if _paddle_ocr is not None:
         return _paddle_ocr
     try:
-        os.environ.setdefault("FLAGS_use_mkldnn", "1")
+        # MKLDNN can crash on some Railway CPU hosts; prefer plain CPU ops.
+        os.environ["FLAGS_use_mkldnn"] = "0"
         from paddleocr import PaddleOCR
 
         lang = (os.getenv("OCR_LANGUAGES", "en").split(",")[0] or "en").strip()
-        _paddle_ocr = PaddleOCR(
-            use_angle_cls=True,
-            lang=lang,
-            use_gpu=False,
-            show_log=False,
-            det_db_thresh=0.25,
-            rec_batch_num=8,
-        )
-        print(f"PaddleOCR ready (lang={lang})")
+        base_kwargs = {
+            "use_angle_cls": True,
+            "lang": lang,
+            "use_gpu": False,
+            "show_log": False,
+            "det_db_thresh": 0.25,
+            "rec_batch_num": 8,
+        }
+        try:
+            _paddle_ocr = PaddleOCR(**base_kwargs, enable_mkldnn=False)
+        except TypeError:
+            _paddle_ocr = PaddleOCR(**base_kwargs)
+        _paddle_init_error = None
+        print(f"PaddleOCR ready (lang={lang}, home={os.path.expanduser('~')})")
         return _paddle_ocr
     except Exception as exc:
+        _paddle_init_error = str(exc)
         print(f"PaddleOCR unavailable: {exc}")
         return None
 
@@ -179,6 +187,23 @@ def read_text_from_pil(image: Image.Image) -> str:
 def active_ocr_engine() -> str | None:
     """Return the OCR engine in use ('paddle' or 'easyocr'), if any."""
     return _resolve_engine()
+
+
+def ocr_engine_status() -> dict:
+    """Configured vs active OCR engine — useful when Paddle falls back to EasyOCR."""
+    _resolve_engine()
+    active = _active_engine
+    requested = OCR_ENGINE
+    fallback = None
+    if requested == "paddle" and active == "easyocr":
+        fallback = _paddle_init_error or "PaddleOCR init failed; using EasyOCR fallback"
+    elif requested not in {"paddle", "easyocr"}:
+        fallback = f"Unknown OCR_ENGINE={requested!r}; using {active or 'none'}"
+    return {
+        "ocr_engine": active or "none",
+        "ocr_engine_requested": requested,
+        "ocr_fallback_reason": fallback,
+    }
 
 
 def _clean_ocr_text(text: str) -> str:

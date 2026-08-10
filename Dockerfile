@@ -43,6 +43,8 @@ COPY --from=lfs-fetch /src/models/retailklip_vitb32.pt models/retailklip_vitb32.
 RUN python scripts/verify_retailklip_checkpoint.py \
     && python scripts/verify_paddle_ocr.py
 
+ENV HOME=/app
+ENV OCR_ENGINE=paddle
 ENV USE_RETAILKLIP=true
 
 EXPOSE 8080

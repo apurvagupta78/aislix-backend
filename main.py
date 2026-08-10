@@ -54,7 +54,7 @@ def on_startup():
     ensure_checkpoint()
     rk = "yes" if is_available() else "no"
     ocr = active_ocr_engine() or "none"
-    print(f"Aislix API starting on 0.0.0.0:{port} (learned SKUs: {learned}, RetailKLIP: {rk}, OCR: {ocr})")
+    print(f"Aislix API starting on 0.0.0.0:{port} (learned SKUs: {learned}, RetailKLIP: {rk}, OCR: {ocr}, OCR requested: {os.getenv('OCR_ENGINE', 'easyocr')})")
 
 
 @app.get("/")
@@ -70,7 +70,7 @@ def health():
         "status": "ok",
         "faiss_ready": (DATA_DIR / "faiss.index").exists() and (DATA_DIR / "catalog.json").exists(),
         "learned_skus": count_learned(),
-        "ocr_engine": _ocr_engine_status(),
+        **_ocr_status_detail(),
         "retailklip": _retailklip_status(),
     }
 
@@ -83,11 +83,19 @@ def _retailklip_status() -> bool:
 
 
 def _ocr_engine_status() -> str:
-    from app.ocr_reader import OCR_ENABLED, active_ocr_engine
+    from app.ocr_reader import OCR_ENABLED, ocr_engine_status
 
     if not OCR_ENABLED:
         return "disabled"
-    return active_ocr_engine() or os.getenv("OCR_ENGINE", "easyocr")
+    return ocr_engine_status()["ocr_engine"]
+
+
+def _ocr_status_detail() -> dict:
+    from app.ocr_reader import OCR_ENABLED, ocr_engine_status
+
+    if not OCR_ENABLED:
+        return {"ocr_engine": "disabled", "ocr_engine_requested": "disabled", "ocr_fallback_reason": None}
+    return ocr_engine_status()
 
 
 @app.get("/catalog/learned")
