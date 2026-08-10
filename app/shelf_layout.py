@@ -1,10 +1,11 @@
-"""Detect single-row vs multi-row shelf layout from YOLO box geometry."""
+"""Detect shelf layout: full rack (multi-row), wide single row, or close-up single bin."""
 
 from __future__ import annotations
 
 from typing import Literal
 
 Layout = Literal["single_row", "multi_row"]
+ShelfMode = Literal["single_bin", "single_row", "multi_row"]
 
 
 def _box_y_stats(box) -> tuple[float, float]:
@@ -15,6 +16,12 @@ def _box_y_stats(box) -> tuple[float, float]:
     height = max(0.0, y2 - y1)
     center = (y1 + y2) / 2.0
     return center, height
+
+
+def _box_width(box) -> float:
+    if isinstance(box, dict):
+        return max(0.0, float(box["x2"]) - float(box["x1"]))
+    return max(0.0, float(box[2]) - float(box[0]))
 
 
 def detect_layout(boxes: list, image_h: int) -> Layout:
@@ -48,3 +55,31 @@ def detect_layout(boxes: list, image_h: int) -> Layout:
         return "single_row"
 
     return "multi_row"
+
+
+def detect_shelf_mode(boxes: list, image_h: int, image_w: int) -> ShelfMode:
+    """
+    Distinguish a close-up photo of one shelf bin (8 bottles filling the frame)
+    from a single row on a full rack (many small facings) or a multi-row rack.
+    """
+    layout = detect_layout(boxes, image_h)
+    if layout == "multi_row":
+        return "multi_row"
+
+    heights = sorted(_box_y_stats(box)[1] for box in boxes if _box_y_stats(box)[1] > 0)
+    if not heights:
+        return "single_row"
+
+    median_h = heights[len(heights) // 2]
+    median_w = sorted(_box_width(b) for b in boxes if _box_width(b) > 0)
+    median_w = median_w[len(median_w) // 2] if median_w else 0.0
+
+    # Close-up bin: large facings and/or YOLO over-segmentation (cap + body splits).
+    bottles_fill_frame = median_h >= image_h * 0.16
+    over_segmented = len(boxes) >= 9
+    wide_bottles = median_w >= image_w * 0.06
+
+    if bottles_fill_frame or (over_segmented and wide_bottles):
+        return "single_bin"
+
+    return "single_row"

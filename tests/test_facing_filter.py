@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.facing_filter import filter_nested_facings, merge_boxes_by_column
+from app.facing_filter import cluster_boxes_x_slots, filter_nested_facings, merge_boxes_by_column
 
 
 def test_drops_unknown_cap_inside_bottle():
@@ -192,10 +192,20 @@ def test_single_row_dedup_one_per_column():
         {"brand": "Pantene", "confidence": 0.96, "x1": 200, "y1": 50, "x2": 260, "y2": 200},
         {"brand": "Unknown", "confidence": 0.35, "x1": 205, "y1": 50, "x2": 255, "y2": 95},
     ]
-    result = filter_nested_facings(facings, layout="single_row")
+    result = filter_nested_facings(facings, layout="single_bin")
     assert len(result) == 2
     brands = {r["brand"] for r in result}
     assert brands == {"Sunsilk", "Pantene"}
+
+
+def test_cluster_boxes_x_slots_merges_cap_and_body():
+    import numpy as np
+
+    cap = np.array([100.0, 50.0, 150.0, 95.0])
+    body = np.array([102.0, 90.0, 148.0, 210.0])
+    other = np.array([220.0, 50.0, 270.0, 210.0])
+    merged = cluster_boxes_x_slots([cap, body, other])
+    assert len(merged) == 2
 
 
 def test_merge_boxes_by_column_does_not_merge_across_shelf_rows():

@@ -95,6 +95,33 @@ def _merge_height_ok(merged: dict, median_h: float) -> bool:
     return _height(merged) <= median_h * 2.25
 
 
+def cluster_boxes_x_slots(boxes: list) -> list:
+    """Merge every detection in the same bottle x-column into one union box.
+
+    Used for close-up single-bin photos where YOLO splits each bottle into
+    cap + body + half-bottle fragments at slightly different x positions.
+    """
+    if len(boxes) <= 1:
+        return boxes
+
+    items = [_as_box_dict(box) for box in boxes]
+    items.sort(key=_x_center)
+
+    clusters: list[dict] = [items[0]]
+    for item in items[1:]:
+        if _same_bottle_column(clusters[-1], item):
+            clusters[-1] = _union_box(clusters[-1], item)
+        else:
+            clusters.append(item)
+
+    if isinstance(boxes[0], np.ndarray):
+        return [
+            np.array([item["x1"], item["y1"], item["x2"], item["y2"]], dtype=boxes[0].dtype)
+            for item in clusters
+        ]
+    return clusters
+
+
 def merge_boxes_by_column(boxes: list) -> list:
     """Merge YOLO boxes in the same bottle column before cropping (geometry only).
 
@@ -401,8 +428,8 @@ def filter_nested_facings(
     # Pass 3: merge all overlaps in the same bottle column (any brand).
     survivors = _merge_same_column_facings(survivors)
 
-    # Pass 4: one facing per column — always on single-row shelves; multi-row when dense.
-    if layout == "single_row" or len(survivors) >= ROW_SLOT_DEDUP_MIN_FACINGS:
+    # Pass 4: one facing per column — close-up bins and single rows; multi-row when dense.
+    if layout in {"single_row", "single_bin"} or len(survivors) >= ROW_SLOT_DEDUP_MIN_FACINGS:
         survivors = _deduplicate_row_slots(survivors)
 
     return survivors

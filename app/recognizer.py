@@ -226,7 +226,7 @@ def _propagation_neighbor_allowed(
 ) -> bool:
     if not _same_shelf_row(probe, ref):
         return False
-    if (scan_context or {}).get("shelf_layout") == "single_row":
+    if (scan_context or {}).get("shelf_mode") in {"single_row", "single_bin"}:
         return _same_shelf_column(probe, ref)
     return True
 
