@@ -64,6 +64,30 @@ NEW_SKUS = [
         "sku": "tresemme_smooth_shine_shampoo_180ml",
         "category": "Personal Care",
     },
+    {
+        "class_id": 9008,
+        "brand": "Simple",
+        "product_name": "Kind To Skin Refreshing Facial Wash",
+        "variant": "150 ml",
+        "sku": "simple_kind_to_skin_refreshing_facial_wash_150ml",
+        "category": "Personal Care",
+    },
+    {
+        "class_id": 9009,
+        "brand": "Simple",
+        "product_name": "Kind To Skin Moisturising Facial Wash",
+        "variant": "150 ml",
+        "sku": "simple_kind_to_skin_moisturising_facial_wash_150ml",
+        "category": "Personal Care",
+    },
+    {
+        "class_id": 9010,
+        "brand": "Dove",
+        "product_name": "Intense Repair Shampoo",
+        "variant": "180 ml",
+        "sku": "dove_intense_repair_shampoo_180ml",
+        "category": "Personal Care",
+    },
 ]
 
 

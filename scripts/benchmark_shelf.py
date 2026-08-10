@@ -30,6 +30,8 @@ MIXED_SHELF_OCR_CASES = [
     ("Smooth and Shine blue bottle Tresemme", "Tresemme"),
     ("Himalaya Anti Hair Fall Shampoo 180ml", "Himalaya"),
     ("Keratin Smooth Shampoo 185ml Tresemme", "Tresemme"),
+    ("Simple Kind To Skin Refreshing Facial Wash", "Simple"),
+    ("Dettol hand wash original 200 ml", "Dettol"),
 ]
 
 

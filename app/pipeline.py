@@ -20,6 +20,7 @@ from app.detector import (
     load_image_bytes,
     load_image_from_url,
 )
+from app.facing_filter import filter_nested_facings
 from app.inventory import aggregate_inventory, inventory_to_api_products
 from app.metrics import (
     brand_share,
@@ -89,6 +90,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             scan_category=scan_category,
             scan_context=scan_context,
         )
+        classified = filter_nested_facings(classified)
         compliance = analyze_subcategory_compliance(classified, scan_context)
         classified = compliance["classified"]
         subcategory_mismatches = compliance["subcategory_mismatches"]

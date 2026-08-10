@@ -65,8 +65,14 @@ FOOD_SNACK_BRANDS: set[str] = {
     "snickers", "mars", "cadbury", "kitkat", "munch", "perk", "galaxy", "twix", "bounty",
     "figaro", "haldiram", "haldiram's", "britannia", "parle", "lays", "lay's", "kurkure",
     "bingo", "maggi", "maggie", "nutella", "american garden", "jabsons", "nutrela",
-    "blue bird", "shan", "homelite", "knorr", "kellogg's", "kelloggs", "quaker",
+    "blue bird", "shan", "homelite", "knorr", "kellogg's", "kelloggs", "quaker", "rite",
 }
+
+# SKU/product tokens that indicate snacks — reject on personal care scans.
+PC_SNACK_SKU_TOKENS = (
+    "choco_berry", "protein_bar", "protein", "caster_sugar", "namkeen", "biscuit",
+    "cheese_slices", "peanut", "jalapeno", "trident", "snack",
+)
 
 # Brands that must never appear when a specific aisle category is selected.
 AISLE_BRAND_BLOCKLIST: dict[str, set[str]] = {
@@ -85,7 +91,7 @@ AISLE_BRAND_BLOCKLIST: dict[str, set[str]] = {
         "lipton", "tetley", "coca cola", "pepsi", "sprite", "fanta", "mirinda", "real",
         "surf excel", "ariel", "rin", "tide", "vim", "harpic",
         "ragu", "davidoff", "twinings", "twinning", "schweppes", "girnar", "ritebite",
-        "rite bite", "trident", "american garden", "blue bird", "blue", "shan", "knorr",
+        "rite bite", "trident", "american garden", "blue bird", "blue", "shan", "knorr", "rite",
     },
     "home care": FOOD_SNACK_BRANDS | {"lipton", "tetley", "coca cola", "pepsi", "dove", "colgate"},
     "health & wellness": FOOD_SNACK_BRANDS | {"lipton", "coca cola", "pepsi", "lays"},
@@ -486,6 +492,15 @@ def sku_allowed_in_context(
 
     if aislix_key == "personal care" and brand_l == "blue":
         return False
+
+    sku_l = (sku or "").lower()
+    product_l = (entry_category or "").lower()
+    if aislix_key == "personal care":
+        if brand_l == "rite":
+            return False
+        haystack = f"{sku_l} {product_l} {brand_l}"
+        if any(token in haystack for token in PC_SNACK_SKU_TOKENS):
+            return False
 
     sku_cat = (entry_category or infer_category(sku or brand_l)).lower()
 

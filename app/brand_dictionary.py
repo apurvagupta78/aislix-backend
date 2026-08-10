@@ -66,6 +66,10 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bcoca[\-\s]?cola\b", "Coca", "Coke"),
     (r"\bpepsi\b", "Pepsi", ""),
     (r"\bfanta\b", "Fanta", ""),
+    (r"\bsimple\b", "Simple", "Kind To Skin Refreshing Facial Wash"),
+    (r"\bdettol\b.*\bhand\s*wash\b", "Dettol", "Original Hand Wash"),
+    (r"\bhand\s*wash\b.*\bdettol\b", "Dettol", "Original Hand Wash"),
+    (r"\bhandwash\b.*\bdettol\b", "Dettol", "Original Hand Wash"),
     (r"\bdettol\b", "Dettol", ""),
     (r"\bindulekha\b", "Indulekha", ""),
     (r"\bhimalaya\b", "Himalaya", ""),
@@ -90,13 +94,9 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\blux\b", "Lux", ""),
     (r"\blifebuoy\b", "Lifebuoy", ""),
     (r"\bmamaearth\b", "Mamaearth", ""),
-    (r"\bsimple\b", "Simple", ""),
     (r"\bmeera\b", "Meera", ""),
     (r"\bpears\b", "Pears", ""),
     (r"\bpear\b", "Pears", ""),
-    (r"\bdettol\b.*\bhand\s*wash\b", "Dettol", "Original Hand Wash"),
-    (r"\bhand\s*wash\b.*\bdettol\b", "Dettol", "Original Hand Wash"),
-    (r"\bhandwash\b.*\bdettol\b", "Dettol", "Original Hand Wash"),
     (r"\bjoy\b", "Joy", ""),
 ]
 
@@ -134,6 +134,10 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
     if not label_brand or not text_brand or label_brand == text_brand:
         return False
     text_l = _normalize(text)
+    if "dettol" in text_l and label_brand == "himalaya":
+        return True
+    if "himalaya" in text_l and label_brand == "dettol":
+        return True
     if any(token in text_l for token in _brand_tokens(label.get("brand") or "")):
         return False
     return True
@@ -188,6 +192,8 @@ def _variant_brand_blocked(brand_norm: str, normalized: str, has_hint: bool) -> 
     if brand_norm == "plus" and "clinic" in normalized:
         return True
     if brand_norm == "blue" and not _blue_brand_allowed(normalized):
+        return True
+    if brand_norm == "rite":
         return True
     return False
 

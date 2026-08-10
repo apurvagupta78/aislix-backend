@@ -14,9 +14,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_DIR / "best.pt"
 _MODEL = None
 
-YOLO_CONF_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.25"))
+YOLO_CONF_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.20"))
 YOLO_IOU_THRESHOLD = float(os.getenv("YOLO_IOU_THRESHOLD", "0.50"))
 YOLO_DEDUP_IOU = float(os.getenv("YOLO_DEDUP_IOU", "0.55"))
+YOLO_DEDUP_CONTAIN = float(os.getenv("YOLO_DEDUP_CONTAIN", "0.72"))
 YOLO_IMGSZ = int(os.getenv("YOLO_IMGSZ", "640"))
 
 
@@ -84,6 +85,18 @@ def _same_shelf_row(a: np.ndarray, b: np.ndarray) -> bool:
     return abs(acy - bcy) <= row_tol
 
 
+def _containment_ratio(inner: np.ndarray, outer: np.ndarray) -> float:
+    ix1 = max(float(inner[0]), float(outer[0]))
+    iy1 = max(float(inner[1]), float(outer[1]))
+    ix2 = min(float(inner[2]), float(outer[2]))
+    iy2 = min(float(inner[3]), float(outer[3]))
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    inter = (ix2 - ix1) * (iy2 - iy1)
+    inner_area = _box_area(inner)
+    return inter / inner_area if inner_area > 0 else 0.0
+
+
 def deduplicate_boxes(
     boxes: list[np.ndarray],
     confidences: list[float] | None = None,
@@ -112,8 +125,27 @@ def deduplicate_boxes(
                 break
         if not duplicate:
             kept.append(idx)
-    kept.sort()
-    return [boxes[idx] for idx in kept]
+
+    # Drop cap/tag fragments nested inside a larger box on the same row.
+    kept.sort(key=lambda idx: _box_area(boxes[idx]), reverse=True)
+    final: list[int] = []
+    for idx in kept:
+        box = boxes[idx]
+        box_area = _box_area(box)
+        nested = False
+        for kept_idx in final:
+            outer_area = _box_area(boxes[kept_idx])
+            if outer_area <= box_area:
+                continue
+            if not _same_shelf_row(box, boxes[kept_idx]):
+                continue
+            if box_area / outer_area <= 0.45 and _containment_ratio(box, boxes[kept_idx]) >= YOLO_DEDUP_CONTAIN:
+                nested = True
+                break
+        if not nested:
+            final.append(idx)
+    final.sort()
+    return [boxes[idx] for idx in final]
 
 
 def get_boxes(results) -> list[np.ndarray]:
