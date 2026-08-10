@@ -217,4 +217,15 @@ def read_packaging_text(image: Image.Image) -> str:
     """Always read visible text, even when brand matching fails."""
     if not OCR_ENABLED:
         return ""
-    return _clean_ocr_text(read_text_from_pil(image))
+    full_text = _clean_ocr_text(read_text_from_pil(image))
+    width, height = image.size
+    if height >= 40:
+        band_h = max(1, int(height * 0.45))
+        band = image.crop((0, 0, width, band_h))
+        band_text = _clean_ocr_text(read_text_from_pil(band))
+        if band_text and band_text.lower() not in full_text.lower():
+            merged = f"{band_text} {full_text}".strip()
+            return _clean_ocr_text(merged)
+        if band_text and len(band_text) > len(full_text):
+            return band_text
+    return full_text

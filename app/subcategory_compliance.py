@@ -50,6 +50,36 @@ def _keyword_score(haystack: str, keywords: list[str]) -> int:
     return sum(1 for kw in keywords if kw in haystack)
 
 
+def _pc_brand_in_context(brand: str, scan_context: dict) -> bool:
+    """True when brand belongs to personal care hints for this scan."""
+    brand_l = brand.lower().strip()
+    if not brand_l:
+        return False
+    hints = scan_context.get("brand_hints") or set()
+    if brand_l in hints:
+        return True
+    aislix_key = _normalize_key(scan_context.get("aislix_category") or "")
+    if aislix_key != "personal care":
+        return False
+    for sub_brands in (SUB_CATEGORY_BRAND_HINTS.get("personal care") or {}).values():
+        if brand_l in sub_brands:
+            return True
+        for hint in sub_brands:
+            if brand_l in hint or hint in brand_l:
+                return True
+    return False
+
+
+def _sibling_pc_subcategory(selected: str, detected: str | None) -> bool:
+    """Shampoo vs conditioner on same aisle — not a putaway violation."""
+    if not detected or detected == selected:
+        return True
+    hair_care = {"shampoo"}
+    if selected in hair_care and detected in hair_care:
+        return True
+    return False
+
+
 def _infer_foreign_aisle(haystack: str, scan_aisle_key: str) -> tuple[str, str] | None:
     """Return (aisle_key, display_name) when product text belongs to another aisle."""
     best_score = 0
@@ -125,9 +155,12 @@ def _evaluate_compliance(
     allowed_catalog = [c.lower() for c in (scan_context.get("catalog_categories") or [])]
     item_cat = (item.get("category") or "General").strip().lower()
     if allowed_catalog and item_cat not in {"", "general"} and item_cat not in allowed_catalog:
-        foreign = _infer_foreign_aisle(haystack, aislix_key)
-        label = foreign[1] if foreign else item_cat.title()
-        return False, foreign[0] if foreign else "cross_aisle", label
+        if aislix_key == "personal care" and _pc_brand_in_context(brand, scan_context):
+            pass
+        else:
+            foreign = _infer_foreign_aisle(haystack, aislix_key)
+            label = foreign[1] if foreign else item_cat.title()
+            return False, foreign[0] if foreign else "cross_aisle", label
 
     foreign = _infer_foreign_aisle(haystack, aislix_key)
     if foreign:
@@ -135,6 +168,8 @@ def _evaluate_compliance(
 
     detected = infer_detected_subcategory(item, scan_context)
     if detected and detected != selected:
+        if _sibling_pc_subcategory(selected, detected):
+            return True, selected, selected_label
         return False, detected, _subcategory_label(scan_context, detected)
 
     if not detected:

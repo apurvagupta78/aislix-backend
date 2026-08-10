@@ -24,7 +24,7 @@ from app.clip_embeddings import embed_pil_images
 from app.faiss_matcher import is_ready, match_embeddings_batch
 from app.learned_catalog import learn_sku, metadata_to_sku
 from app.ocr_reader import classify_with_ocr, read_packaging_text
-from app.scan_context import gpt_context_prompt, sub_category_blocks_brand
+from app.scan_context import gpt_context_prompt, propagation_type_conflict, sub_category_blocks_brand
 
 load_dotenv()
 
@@ -294,6 +294,14 @@ def _propagate_shelf_labels(
                 continue
 
         if best_label:
+            if use_ocr and pack_text and propagation_type_conflict(best_label, pack_text):
+                if _try_ocr_override(
+                    records, classified, embeddings, index, pack_text, scan_context, known
+                ):
+                    propagated += 1
+                    continue
+                still_unknown.append(index)
+                continue
             label = {
                 k: v
                 for k, v in best_label.items()
@@ -473,10 +481,11 @@ def classify_records_v2(
         )
         stats["propagate"] += round_prop
 
-    # Step 4: GPT on remaining hard crops.
+    # Step 4: GPT on remaining hard crops (OCR-empty first).
     gpt_cap = _smart_gpt_cap(len(pending))
     gpt_used = 0
     faiss_retry_queue: list[int] = []
+    pending.sort(key=lambda idx: (0 if ocr_texts[idx].strip() else 1, idx))
     for index in pending:
         if gpt_used < gpt_cap:
             label = classify_with_gpt(
@@ -514,6 +523,14 @@ def classify_records_v2(
 
     if learned_new:
         print(f"Learned {learned_new} new SKU(s) (scan={scan_id})")
+
+    # Final pass: OCR text always wins over FAISS/propagate/GPT when pack text is clear.
+    for index, row in enumerate(classified):
+        if not row:
+            continue
+        pack_text = ocr_texts[index]
+        if pack_text and len(pack_text.strip()) >= 3:
+            classified[index] = reconcile_label_with_text(row, pack_text)
 
     stats["gpt_calls"] = gpt_used
     stats["unknown_count"] = stats["none"]

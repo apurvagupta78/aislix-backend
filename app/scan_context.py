@@ -170,6 +170,38 @@ SUB_CATEGORY_PRODUCT_KEYWORDS: dict[str, list[str]] = {
     "oil": ["cooking oil", "mustard oil", "sunflower oil", "refined oil"],
 }
 
+# Product types used to block wrong label propagation (shampoo → toothbrush, etc.).
+PROPAGATION_PRODUCT_TYPES = ("shampoo", "soap", "toothpaste")
+
+
+def _infer_product_type(text: str) -> str | None:
+    text_l = _normalize_key(text)
+    if len(text_l) < 3:
+        return None
+    best_score = 0
+    best_type: str | None = None
+    for ptype in PROPAGATION_PRODUCT_TYPES:
+        keywords = SUB_CATEGORY_PRODUCT_KEYWORDS.get(ptype) or []
+        score = sum(1 for kw in keywords if kw in text_l)
+        if score > best_score:
+            best_score = score
+            best_type = ptype
+    return best_type if best_score > 0 else None
+
+
+def propagation_type_conflict(ref_label: dict, probe_text: str) -> bool:
+    """True when reference label and probe OCR text indicate different product types."""
+    ref_parts = [
+        ref_label.get("brand") or "",
+        ref_label.get("product_name") or "",
+        ref_label.get("variant") or "",
+    ]
+    ref_type = _infer_product_type(" ".join(ref_parts))
+    probe_type = _infer_product_type(probe_text)
+    if not ref_type or not probe_type:
+        return False
+    return ref_type != probe_type
+
 # Cross-aisle product keywords for compliance (wrong putaway on a focused audit).
 AISLE_PRODUCT_KEYWORDS: dict[str, list[str]] = {
     "beverages": [
@@ -402,6 +434,14 @@ def gpt_context_prompt(context: dict | None) -> str:
             "Only label personal care products (shampoo, soap, toothpaste, skincare, etc.). "
             "Never label food, snacks, beverages, olives, peanuts, or chocolate."
         )
+        lines.append(
+            "Common shampoo brands: Dove, Pantene, Sunsilk, Head & Shoulders, Tresemme, "
+            "Clinic Plus, L'Oreal, Himalaya, Indulekha, Garnier, Meera, Mamaearth, Dabur. "
+            "Toothpaste/toothbrush: Colgate, Oral-B, Sensodyne, Closeup, Pepsodent. "
+            "Soap/handwash: Dettol, Lux, Lifebuoy, Pears, Santoor. "
+            "Read the brand LOGO on THIS pack — never copy a neighbor's label. "
+            "A toothbrush must never be labeled as shampoo."
+        )
     elif _normalize_key(name) == "home care":
         lines.append("Only label home care / cleaning products. Never label food or beverages.")
     else:
@@ -444,6 +484,8 @@ def sku_allowed_in_context(
             pass
         else:
             if brand_l in hints and sku_cat.lower() not in {"dairy", "snacks", "personal care", "household"}:
+                return True
+            if aislix_key == "personal care" and brand_l in hints:
                 return True
             return False
 

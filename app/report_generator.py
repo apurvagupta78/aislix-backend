@@ -24,9 +24,17 @@ MISMATCH_BOX_COLOR = (0, 0, 220)
 OK_BOX_COLOR = (0, 210, 0)
 
 
+import unicodedata
+
+
+def _ascii_label(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text or "")
+    return normalized.encode("ascii", "ignore").decode("ascii").strip()
+
+
 def _annotation_label(item: dict, img_w: int | None = None) -> str:
-    brand = (item.get("brand") or "?").strip()
-    product = (item.get("product_name") or "").strip()
+    brand = _ascii_label((item.get("brand") or "?").strip())
+    product = _ascii_label((item.get("product_name") or "").strip())
     skip_product = product.lower() in {"", "unknown", "unidentified sku", brand.lower()}
     box_w = int(item.get("x2", 0)) - int(item.get("x1", 0))
     near_edge = img_w is not None and int(item.get("x2", 0)) >= img_w - 12

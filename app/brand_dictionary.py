@@ -25,7 +25,25 @@ TEXT_ALIASES: dict[str, str] = {
     "tata gold": "Tata",
     "tata premium": "Tata",
     "tea agni": "Tata",
+    "head & shoulders": "Head",
+    "head and shoulders": "Head",
+    "head shoulders": "Head",
+    "clinic plus": "Clinic",
+    "l'oreal": "Loreal",
+    "l oreal": "Loreal",
+    "mama earth": "Mamaearth",
+    "oral-b": "Oral",
+    "oral b": "Oral",
+    "tresemmé": "Tresemme",
+    "tresemm": "Tresemme",
 }
+
+# Single-token catalog brands that are usually variant words, not manufacturers.
+VARIANT_BRAND_BLOCKLIST = frozenset({
+    "clean", "classic", "plus", "repair", "smooth", "nourish", "control", "long",
+    "fresh", "total", "intense", "active", "original", "natural", "herbal",
+    "anti", "pro", "extra", "super", "deep", "mild", "soft", "strong",
+})
 
 # Distinctive pack text → brand + preferred catalog product (checked before generic brand match).
 PRODUCT_HINTS: list[tuple[str, str, str]] = [
@@ -49,6 +67,25 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bhimalaya\b", "Himalaya", ""),
     (r"\btresemme\b", "Tresemme", ""),
     (r"\btresemm[eé]\b", "Tresemme", ""),
+    (r"\bhead\s*(?:&|and)\s*shoulders\b", "Head", ""),
+    (r"\bhead\s+shoulders\b", "Head", ""),
+    (r"\bclinic\s+plus\b", "Clinic", "Plus Strong And Long Health Shampoo"),
+    (r"\bl[\s']?oreal\b", "Loreal", ""),
+    (r"\btotal\s+repair\s*5?\b", "Loreal", ""),
+    (r"\bdove\b", "Dove", ""),
+    (r"\bpantene\b", "Pantene", ""),
+    (r"\bsunsilk\b", "Sunsilk", ""),
+    (r"\bdabur\b", "Dabur", ""),
+    (r"\bcolgate\b", "Colgate", ""),
+    (r"\bcloseup\b", "Closeup", ""),
+    (r"\bnivea\b", "Nivea", ""),
+    (r"\blux\b", "Lux", ""),
+    (r"\blifebuoy\b", "Lifebuoy", ""),
+    (r"\bmamaearth\b", "Mamaearth", ""),
+    (r"\bsimple\b", "Simple", ""),
+    (r"\bmeera\b", "Meera", ""),
+    (r"\bpears\b", "Pears", ""),
+    (r"\bjoy\b", "Joy", ""),
 ]
 
 TEA_OCR_MARKERS = (
@@ -95,7 +132,45 @@ def _brand_tokens(brand: str) -> set[str]:
     if brand_l == "coca":
         tokens.add("coca cola")
         tokens.add("coca-cola")
+    if brand_l == "head":
+        tokens.update({"head & shoulders", "head and shoulders", "head shoulders", "shoulders"})
+    if brand_l == "clinic":
+        tokens.add("clinic plus")
+    if brand_l == "loreal":
+        tokens.update({"l'oreal", "l oreal"})
     return tokens
+
+
+def _hint_matched_in_text(normalized: str) -> bool:
+    for pattern, _, _ in PRODUCT_HINTS:
+        if re.search(pattern, normalized, flags=re.IGNORECASE):
+            return True
+    return False
+
+
+def _variant_brand_blocked(brand_norm: str, normalized: str, has_hint: bool) -> bool:
+    if brand_norm not in VARIANT_BRAND_BLOCKLIST:
+        return False
+    if has_hint:
+        return True
+    if brand_norm == "clean" and ("head" in normalized or "shoulders" in normalized):
+        return True
+    if brand_norm == "plus" and "clinic" in normalized:
+        return True
+    return False
+
+
+def display_brand_name(brand: str, product_name: str = "") -> str:
+    """Human-readable brand for UI/annotations."""
+    brand = (brand or "").strip()
+    product_l = (product_name or "").lower()
+    if brand.lower() == "head" and "shoulder" in product_l:
+        return "Head & Shoulders"
+    if brand.lower() == "head" and ("head" in product_l or "shoulder" in product_l):
+        return "Head & Shoulders"
+    if brand.lower() == "clinic" and "plus" in product_l:
+        return "Clinic Plus"
+    return brand
 
 
 def ocr_agrees_with_label(label: dict, text: str) -> bool:
@@ -167,19 +242,22 @@ def match_brand_in_text(text: str) -> tuple[str, float] | None:
         return None
     normalized = _normalize(text)
     candidates: list[tuple[str, float, int]] = []
+    has_hint = _hint_matched_in_text(normalized)
 
     for pattern, brand, _product in PRODUCT_HINTS:
         if re.search(pattern, normalized, flags=re.IGNORECASE):
             span_len = len(re.search(pattern, normalized, flags=re.IGNORECASE).group(0))  # type: ignore[union-attr]
-            candidates.append((brand, 0.94, span_len))
+            candidates.append((brand, 0.94, span_len + 1000))
 
     for alias, brand in sorted((_brand_aliases or {}).items(), key=lambda item: -len(item[0])):
         if alias in normalized:
-            candidates.append((brand, 0.91, len(alias)))
+            candidates.append((brand, 0.91, len(alias) + 500))
 
     for brand in _brands:
         brand_norm = _normalize(brand)
         if len(brand_norm) < 3:
+            continue
+        if _variant_brand_blocked(brand_norm, normalized, has_hint):
             continue
         if _word_in_text(brand_norm, normalized):
             candidates.append((brand, min(0.99, 0.84 + len(brand_norm) / 100), len(brand_norm)))
@@ -222,9 +300,10 @@ def match_from_text(text: str) -> dict | None:
         if product_name:
             entry = _catalog_entry(brand, product_name)
             if entry:
+                product_name = entry.get("product_name") or product_name
                 return {
-                    "brand": brand,
-                    "product_name": entry.get("product_name") or product_name,
+                    "brand": display_brand_name(brand, product_name),
+                    "product_name": product_name,
                     "variant": entry.get("variant") or "",
                     "sku": entry.get("sku") or "",
                     "category": entry.get("category") or infer_category(entry.get("sku") or ""),
@@ -316,21 +395,24 @@ def match_product_for_brand(brand: str, text: str) -> dict | None:
             best_score = score
             best = entry
     if best and best_score >= 0.55:
+        product_name = best.get("product_name") or brand
         return {
-            "brand": brand,
-            "product_name": best.get("product_name") or brand,
+            "brand": display_brand_name(brand, product_name),
+            "product_name": product_name,
             "variant": best.get("variant") or "",
             "sku": best.get("sku") or "",
             "category": best.get("category") or infer_category(best.get("sku") or ""),
             "confidence": round(min(0.98, best_score), 4),
             "recognition_source": "ocr",
         }
+    fallback = entries[0]
+    product_name = fallback.get("product_name") or brand
     return {
-        "brand": brand,
-        "product_name": brand,
+        "brand": display_brand_name(brand, product_name),
+        "product_name": product_name if product_name != brand else display_brand_name(brand, product_name),
         "variant": "",
-        "sku": entries[0].get("sku") or "",
-        "category": entries[0].get("category") or "General",
+        "sku": fallback.get("sku") or "",
+        "category": fallback.get("category") or "General",
         "confidence": 0.78,
         "recognition_source": "ocr",
     }

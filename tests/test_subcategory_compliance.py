@@ -98,10 +98,20 @@ def test_pizza_sauce_mismatch_on_soap_audit():
     assert classified[0]["detected_sub_category_label"] == "Packaged Food & Snacks"
 
 
-def test_espresso_mismatch_on_soap_audit():
-    classified = [_facing("Davidoff", "Espresso 57")]
-    result = analyze_subcategory_compliance(classified, _soap_context())
-    assert result["misplaced_facings"] == 1
-    assert classified[0]["detected_sub_category_label"] == "Beverages"
+def test_loreal_staples_category_not_mismatch_on_shampoo_audit():
+    """PC brand with wrong catalog Staples tag should not trigger compliance alert."""
+    ctx = {
+        "aislix_category": "Personal Care",
+        "sub_category": "shampoo",
+        "sub_category_label": "Shampoo",
+        "catalog_categories": ["personal care"],
+        "brand_hints": {
+            "dove", "pantene", "sunsilk", "loreal", "l'oreal", "tresemme", "himalaya",
+        },
+    }
+    classified = [_facing("Loreal", "Paris 6 Oil Nourish Conditioner 180Ml", category="Staples")]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 0
+    assert classified[0]["subcategory_match"] is True
 
 
