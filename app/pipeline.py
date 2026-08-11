@@ -137,6 +137,25 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
 
         inventory = aggregate_inventory(classified)
         inventory = apply_compliance_to_inventory(inventory, subcategory_mismatches)
+
+        planogram_items = metadata.get("planogram_items") or []
+        planogram_compliance = None
+        if planogram_items:
+            from app.planogram_compliance import compare_planogram
+
+            planogram_compliance = compare_planogram(
+                planogram_items=planogram_items,
+                inventory=inventory,
+                scan_context=scan_context,
+                scope_type=metadata.get("assignment_scope_type"),
+                scope_values=metadata.get("assignment_scope_values") or {},
+                full_store_items=metadata.get("planogram_items_full") or planogram_items,
+            )
+            metrics_planogram = planogram_compliance.get("compliance_percent")
+            if metrics_planogram is not None:
+                # surfaced to Lovable → shelf_scans.planogram_compliance_percent
+                scan_context["planogram_compliance_percent"] = metrics_planogram
+
         products = inventory_to_api_products(inventory)
         processing_ms = int((time.time() - started) * 1000)
         metrics = compute_metrics(
@@ -149,6 +168,9 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         recognition_stats = _recognition_stats(classified)
         metrics.update(recognition_stats)
         metrics["gpt_vision_calls"] = int(recognition_engine_stats.get("gpt_calls") or 0)
+        if planogram_compliance:
+            metrics["planogram_compliance_percent"] = planogram_compliance.get("compliance_percent")
+            metrics["planogram_summary"] = planogram_compliance.get("summary")
         shares = brand_share(inventory)
         categories = category_breakdown(inventory)
         alerts = build_alerts(metrics, compliance_alerts=compliance_alerts)
@@ -196,6 +218,8 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             "subcategory_mismatches": subcategory_mismatches,
             "recommendations": recommendations,
             "annotated_image_base64": annotated_b64,
+            "planogram_compliance": planogram_compliance,
+            "assignment_id": metadata.get("assignment_id"),
             "pdf_base64": pdf_b64,
             "csv_base64": csv_b64,
             "learned_updates": learned_updates,

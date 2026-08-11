@@ -164,6 +164,11 @@ async def scan(request: Request):
             "bin": body.get("bin"),
             "beverage_type": body.get("beverage_type"),
             "product_type": body.get("product_type"),
+            "assignment_id": body.get("assignment_id"),
+            "assignment_scope_type": body.get("assignment_scope_type"),
+            "assignment_scope_values": body.get("assignment_scope_values"),
+            "planogram_items": body.get("planogram_items"),
+            "planogram_items_full": body.get("planogram_items_full"),
         }
 
         from app.scan_context import build_shelf_label, validate_scan_metadata
@@ -245,3 +250,60 @@ async def export_assets(request: Request):
         "annotated_image_base64": result.get("annotated_image_base64"),
         "csv_base64": result.get("csv_base64"),
     }
+
+
+@app.post("/planogram/parse-csv")
+async def planogram_parse_csv(request: Request):
+    """Validate planogram CSV; returns preview rows and errors (no DB write)."""
+    from app.planogram_csv import parse_csv_text
+
+    content_type = request.headers.get("content-type", "")
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        upload = form.get("file")
+        if upload is None:
+            raise HTTPException(status_code=400, detail='Missing "file" in multipart body.')
+        text = (await upload.read()).decode("utf-8-sig", errors="replace")
+    else:
+        body = await request.json()
+        text = body.get("csv_text") or body.get("content") or ""
+        if not text:
+            raise HTTPException(status_code=400, detail="csv_text or file is required.")
+
+    return parse_csv_text(text)
+
+
+@app.post("/planogram/compare")
+async def planogram_compare(request: Request):
+    """Compare expected planogram rows vs scan inventory (standalone or post-scan)."""
+    from app.planogram_compliance import compare_planogram
+
+    body = await request.json()
+    planogram_items = body.get("planogram_items") or []
+    inventory = body.get("inventory") or []
+    if not planogram_items:
+        raise HTTPException(status_code=400, detail="planogram_items is required.")
+    if not inventory:
+        raise HTTPException(status_code=400, detail="inventory is required.")
+
+    result = compare_planogram(
+        planogram_items=planogram_items,
+        inventory=inventory,
+        scan_context=body.get("scan_context") or {},
+        scope_type=body.get("scope_type"),
+        scope_values=body.get("scope_values") or {},
+        full_store_items=body.get("planogram_items_full") or planogram_items,
+    )
+    return {"planogram_compliance": result}
+
+
+@app.post("/planogram/normalize-row")
+async def planogram_normalize_row(request: Request):
+    """Validate a single manual planogram row (Store Master form)."""
+    from app.planogram_csv import normalize_planogram_row
+
+    body = await request.json()
+    row, errors = normalize_planogram_row(body)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    return {"row": row}
