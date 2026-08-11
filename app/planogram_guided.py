@@ -18,6 +18,69 @@ from app.planogram_compliance import _brand_key, _norm, _text_has_kind, _token_o
 from app.planogram_csv import build_match_key
 
 PLANOGRAM_MATCH_MIN_SCORE = 0.38
+PLANOGRAM_SLOT_MIN_SCORE = 0.22
+PLANOGRAM_LEARN_MIN_CONFIDENCE = 0.55
+
+
+def _x_center_rec(record: dict) -> float:
+    return (float(record["x1"]) + float(record["x2"])) / 2.0
+
+
+def _same_bottle_column_records(a: dict, b: dict) -> bool:
+    ax1, ax2 = float(a["x1"]), float(a["x2"])
+    bx1, bx2 = float(b["x1"]), float(b["x2"])
+    ix1, ix2 = max(ax1, bx1), min(ax2, bx2)
+    if ix2 <= ix1:
+        gap = abs(_x_center_rec(a) - _x_center_rec(b))
+        return gap <= min(ax2 - ax1, bx2 - bx1) * 0.38
+    overlap = ix2 - ix1
+    narrower = min(ax2 - ax1, bx2 - bx1)
+    if narrower <= 0:
+        return False
+    if overlap / narrower >= 0.28:
+        return True
+    return abs(_x_center_rec(a) - _x_center_rec(b)) <= narrower * 0.38
+
+
+def cluster_records_by_column(records: list[dict]) -> list[list[dict]]:
+    """Group facings into bottle columns left-to-right."""
+    if not records:
+        return []
+    if len(records) == 1:
+        return [records]
+    ordered = sorted(records, key=_x_center_rec)
+    clusters: list[list[dict]] = [[ordered[0]]]
+    for rec in ordered[1:]:
+        if _same_bottle_column_records(clusters[-1][-1], rec):
+            clusters[-1].append(rec)
+        else:
+            clusters.append([rec])
+    return clusters
+
+
+def _union_record_box(records: list[dict]) -> dict:
+    base = dict(records[0])
+    base["x1"] = min(float(r["x1"]) for r in records)
+    base["y1"] = min(float(r["y1"]) for r in records)
+    base["x2"] = max(float(r["x2"]) for r in records)
+    base["y2"] = max(float(r["y2"]) for r in records)
+    return base
+
+
+def _is_unknown_record(record: dict) -> bool:
+    brand = _norm(record.get("brand") or "")
+    product = _norm(record.get("product_name") or record.get("name") or "")
+    return brand in {"", "unknown"} or product in {"", "unknown", "unidentified sku"}
+
+
+def _pick_best_in_slot(slot: list[dict]) -> dict:
+    def rank(rec: dict) -> tuple:
+        unknown = _is_unknown_record(rec)
+        conf = float(rec.get("confidence") or 0)
+        area = max(0.0, float(rec["x2"]) - float(rec["x1"])) * max(0.0, float(rec["y2"]) - float(rec["y1"]))
+        return (0 if unknown else 1, conf, area)
+
+    return max(slot, key=rank)
 
 
 def prepare_planogram_candidates(
@@ -58,6 +121,13 @@ def _brand_in_text(text: str, candidate: dict) -> float:
         return 0.0
     if brand in blob:
         return 1.0
+    # Common OCR variants
+    if "head" in blob and "shoulder" in blob and ("head" in brand or "shoulder" in brand):
+        return 0.88
+    if "clinic" in blob and "plus" in blob and "clinic" in brand:
+        return 0.88
+    if "himalaya" in blob and "himalaya" in brand:
+        return 0.9
     parts = [p for p in re.split(r"[\s&]+", brand) if len(p) > 2]
     if parts and all(p in blob for p in parts):
         return 0.9
@@ -392,3 +462,100 @@ def classify_records_planogram_guided(
 
     output = [{k: v for k, v in row.items() if k != "_index"} for row in classified if row]
     return output, stats
+
+
+def assign_planogram_slots(
+    records: list[dict],
+    candidates: list[dict],
+    scan_id: str | None = None,
+    scan_context: dict | None = None,
+) -> list[dict]:
+    """One facing per planogram SKU: column cluster + greedy match + positional fallback."""
+    from app.clip_embeddings import embed_pil_images
+    from app.learned_catalog import learn_sku
+
+    if not records or not candidates:
+        return records
+
+    slots = cluster_records_by_column(records)
+    if not slots:
+        return records
+
+    slot_best = [_pick_best_in_slot(slot) for slot in slots]
+    slot_ocrs: list[str] = []
+    slot_images = []
+    for best in slot_best:
+        path = best.get("image_path")
+        if path:
+            img = Image.open(path).convert("RGB")
+            slot_images.append(img)
+            slot_ocrs.append(read_packaging_text(img))
+        else:
+            slot_images.append(None)
+            slot_ocrs.append("")
+
+    n_slots = len(slots)
+    n_cand = len(candidates)
+    pairs: list[tuple[float, int, int]] = []
+    for si in range(n_slots):
+        for ci in range(n_cand):
+            score = score_text_against_candidate(slot_ocrs[si], candidates[ci])
+            if not _is_unknown_record(slot_best[si]):
+                label_match = best_candidate_from_label(
+                    slot_best[si], [candidates[ci]], ocr_text=slot_ocrs[si], min_score=0.25
+                )
+                if label_match:
+                    score = max(score, label_match[1])
+            pairs.append((score, si, ci))
+    pairs.sort(key=lambda item: item[0], reverse=True)
+
+    slot_to_cand: dict[int, int] = {}
+    used_cands: set[int] = set()
+    for score, si, ci in pairs:
+        if si in slot_to_cand or ci in used_cands:
+            continue
+        if score >= PLANOGRAM_SLOT_MIN_SCORE:
+            slot_to_cand[si] = ci
+            used_cands.add(ci)
+
+    if abs(n_slots - n_cand) <= 1:
+        for si in range(min(n_slots, n_cand)):
+            if si not in slot_to_cand and si not in used_cands:
+                slot_to_cand[si] = si
+                used_cands.add(si)
+
+    learned = 0
+    output: list[dict] = []
+    for si, slot in enumerate(slots):
+        ci = slot_to_cand.get(si)
+        if ci is None:
+            continue
+        candidate = candidates[ci]
+        best = slot_best[si]
+        ocr = slot_ocrs[si]
+        text_score = score_text_against_candidate(ocr, candidate)
+        conf = max(0.58, text_score, float(best.get("confidence") or 0) * 0.85)
+        source = "planogram_slot_ocr" if text_score >= PLANOGRAM_SLOT_MIN_SCORE else "planogram_slot"
+        label = label_from_candidate(candidate, conf, source, ocr)
+        merged = _merge_record(_union_record_box(slot), label)
+
+        if (
+            scan_id
+            and slot_images[si] is not None
+            and conf >= PLANOGRAM_LEARN_MIN_CONFIDENCE
+            and text_score >= PLANOGRAM_SLOT_MIN_SCORE
+        ):
+            try:
+                emb = embed_pil_images([slot_images[si]])[0]
+                if learn_sku(emb, label, scan_id=scan_id):
+                    learned += 1
+                    merged["recognition_source"] = "planogram_learned"
+            except Exception:
+                pass
+
+        output.append(merged)
+
+    if learned:
+        print(f"Planogram slot learning: {learned} SKU(s) (scan={scan_id})")
+
+    return output if output else records

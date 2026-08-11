@@ -144,6 +144,15 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             scan_context=scan_context,
         )
         classified = filter_nested_facings(classified, layout=shelf_mode)
+        if scan_context.get("planogram_mode") and scan_context.get("planogram_candidates"):
+            from app.planogram_guided import assign_planogram_slots
+
+            classified = assign_planogram_slots(
+                classified,
+                scan_context["planogram_candidates"],
+                scan_id=scan_id,
+                scan_context=scan_context,
+            )
         compliance = analyze_subcategory_compliance(classified, scan_context)
         classified = compliance["classified"]
         subcategory_mismatches = compliance["subcategory_mismatches"]

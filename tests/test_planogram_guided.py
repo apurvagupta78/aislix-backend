@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.planogram_csv import parse_csv_text
 from app.planogram_guided import (
+    assign_planogram_slots,
     best_candidate_from_text,
     label_from_candidate,
     prepare_planogram_candidates,
@@ -75,3 +76,23 @@ def test_label_from_candidate_marks_guided():
     label = label_from_candidate(cands[0], 0.88, "planogram_ocr")
     assert label["planogram_guided"] is True
     assert label["brand"]
+
+
+def test_assign_planogram_slots_one_per_column():
+    cands = _candidates()
+    records = []
+    for i, cand in enumerate(cands):
+        records.append({
+            "x1": i * 100,
+            "y1": 10,
+            "x2": i * 100 + 80,
+            "y2": 200,
+            "brand": "Unknown",
+            "product_name": "Unidentified SKU",
+            "confidence": 0.35,
+        })
+    assigned = assign_planogram_slots(records, cands)
+    assert len(assigned) == 8
+    brands = {r["brand"] for r in assigned}
+    assert len(brands) == 8
+    assert all(r["planogram_guided"] for r in assigned)
