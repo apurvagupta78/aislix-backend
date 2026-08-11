@@ -99,3 +99,82 @@ def test_corrective_actions_generated():
     result = compare_planogram(expected, inventory)
     assert result["corrective_actions"]
     assert "Replenish" in result["corrective_actions"][0]["suggestion"]
+
+
+def test_brand_shampoo_variant_counts_as_correct():
+    """OCR variant name differs but same brand + shampoo type on shelf."""
+    expected = [{
+        "brand": "Dove",
+        "product_name": "Nutritive",
+        "expected_qty": 1,
+        "sub_category": "Shampoo",
+        "category": "Personal Care",
+    }]
+    inventory = [{
+        "brand": "Dove",
+        "product_name": "Anti Dandruff Solutions Dandruff Clean Fresh Shampoo",
+        "quantity": 1,
+    }]
+    result = compare_planogram(
+        expected,
+        inventory,
+        scan_context={"sub_category": "shampoo"},
+    )
+    assert result["compliance_percent"] == 100.0
+    assert result["lines"][0]["issue_type"] == ISSUE_CORRECT
+
+
+def test_conditioner_on_shampoo_row_is_wrong_product():
+    expected = [{
+        "brand": "L'Oreal",
+        "product_name": "Total Repair 5 Shampoo",
+        "expected_qty": 1,
+        "sub_category": "Shampoo",
+        "category": "Personal Care",
+    }]
+    inventory = [{
+        "brand": "Loreal",
+        "product_name": "Paris Color Protect Conditioner",
+        "quantity": 1,
+    }]
+    result = compare_planogram(expected, inventory, scan_context={"sub_category": "shampoo"})
+    assert result["lines"][0]["issue_type"] != ISSUE_CORRECT
+
+
+def test_qty_over_expected_is_mismatch():
+    expected = [{
+        "brand": "Tresemme",
+        "product_name": "Smooth & Shine Shampoo",
+        "expected_qty": 1,
+        "sub_category": "Shampoo",
+        "category": "Personal Care",
+    }]
+    inventory = [{"brand": "Tresemme", "product_name": "Smooth Shine Shampoo", "quantity": 2}]
+    result = compare_planogram(expected, inventory, scan_context={"sub_category": "shampoo"})
+    assert result["lines"][0]["issue_type"] == ISSUE_QTY_MISMATCH
+    assert result["lines"][0]["actual_qty"] == 2
+
+
+def test_shampoo_row_realistic_inventory_compliance():
+    """Simulate Hello's scan inventory vs 8-bottle fixture — should beat 13%."""
+    expected = _load_fixture_items()
+    inventory = [
+        {"brand": "Unknown", "product_name": "Unidentified SKU", "quantity": 6},
+        {"brand": "Tresemme", "product_name": "Smooth Shine Shampoo", "quantity": 2},
+        {"brand": "Tresemme", "product_name": "Keratin Smooth Shampoo", "quantity": 1},
+        {"brand": "Loreal", "product_name": "Paris Color Protect Conditioner", "quantity": 1},
+        {"brand": "Head & Shoulders", "product_name": "Shampoo", "quantity": 1},
+        {"brand": "Sunsilk", "product_name": "Nourishing Soft Smooth Shampoo With Egg Protein", "quantity": 1},
+        {"brand": "Pantene", "product_name": "2 In 1 Hairfall Control Shampoo Conditioner", "quantity": 1},
+        {"brand": "Dove", "product_name": "Anti Dandruff Solutions Dandruff Clean Fresh Shampoo", "quantity": 1},
+        {"brand": "Dove", "product_name": "Daily Shine Conditioner", "quantity": 1},
+    ]
+    result = compare_planogram(
+        expected,
+        inventory,
+        scan_context={"sub_category": "shampoo", "shelf_label": "A-1-Z"},
+        scope_type="category",
+        scope_values={"category": "Personal Care"},
+    )
+    assert result["compliance_percent"] >= 50.0
+    assert result["summary"]["wrong_products"] <= 2

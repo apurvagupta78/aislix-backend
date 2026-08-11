@@ -33,6 +33,47 @@ def _token_overlap(a: str, b: str) -> float:
     return len(ta & tb) / max(len(ta), len(tb))
 
 
+# Keywords for relaxed brand+type matching when OCR returns a different variant name.
+_SUB_CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "shampoo": ("shampoo",),
+    "conditioner": ("conditioner", "conditioning"),
+}
+
+
+def _text_has_kind(text: str, sub_category: str) -> bool:
+    keywords = _SUB_CATEGORY_KEYWORDS.get(_norm(sub_category), ())
+    blob = _norm(text)
+    if not keywords:
+        return bool(blob)
+    return any(k in blob for k in keywords)
+
+
+def _brand_and_type_match(expected: dict, actual: dict, scan_context: dict | None = None) -> bool:
+    """Same brand + expected sub-category kind (e.g. shampoo) on the facing."""
+    scan_context = scan_context or {}
+    exp_brand = _brand_key({"brand": expected.get("brand"), "product_name": expected.get("product_name")})
+    act_brand = _brand_key(actual)
+    if not exp_brand or exp_brand != act_brand:
+        if exp_brand not in act_brand and act_brand not in exp_brand:
+            return False
+
+    exp_sub = _norm(expected.get("sub_category") or scan_context.get("sub_category") or "")
+    if not exp_sub:
+        return True
+
+    act_product = actual.get("product_name") or actual.get("name") or ""
+    if not _text_has_kind(act_product, exp_sub):
+        return False
+
+    # Shampoo planogram row should not accept a conditioner detection.
+    if exp_sub == "shampoo" and _text_has_kind(act_product, "conditioner"):
+        return False
+    if exp_sub == "conditioner" and _text_has_kind(act_product, "shampoo") and not _text_has_kind(act_product, "conditioner"):
+        return False
+
+    return True
+
+
 def _inventory_key(item: dict) -> str:
     brand = item.get("brand") or ""
     product = item.get("product_name") or item.get("name") or ""
@@ -92,7 +133,8 @@ def _match_score(expected: dict, actual: dict) -> float:
     if exp_brand != act_brand and exp_brand not in act_brand and act_brand not in exp_brand:
         return 0.0
 
-    product_score = _token_overlap(expected.get("product_name") or "", actual.get("product_name") or actual.get("name") or "")
+    act_product = actual.get("product_name") or actual.get("name") or ""
+    product_score = _token_overlap(expected.get("product_name") or "", act_product)
     if product_score >= 0.5:
         return 0.6 + 0.4 * product_score
 
@@ -101,7 +143,9 @@ def _match_score(expected: dict, actual: dict) -> float:
     if exp_sub and act_sub and exp_sub == act_sub:
         return 0.55
 
-    if exp_brand == act_brand:
+    if exp_brand == act_brand or exp_brand in act_brand or act_brand in exp_brand:
+        if exp_sub and _text_has_kind(act_product, exp_sub):
+            return 0.62
         return 0.45
 
     return 0.0
@@ -149,6 +193,8 @@ def _suggest_action(issue_type: str, line: dict) -> str:
 
     if issue_type == ISSUE_WRONG_LOCATION:
         return f"Move {ab} {ap} to the correct aisle ({detail or 'see planogram'})."
+    if issue_type == ISSUE_QTY_MISMATCH and act_qty > exp_qty:
+        return f"Remove {act_qty - exp_qty} extra facing(s) of {ab} {ap}."
     if issue_type in {ISSUE_MISSING, ISSUE_QTY_MISMATCH}:
         return f"Replenish {eb} {ep} — {delta} unit(s) required."
     if issue_type == ISSUE_WRONG_CATEGORY:
@@ -243,7 +289,7 @@ def compare_planogram(
                 "severity": SEVERITY_CRITICAL,
                 "detail": f"Expected sub-category {expected.get('sub_category')}",
             })
-        elif score < 0.6:
+        elif score < 0.6 and not _brand_and_type_match(expected, actual, scan_context):
             lines.append({
                 "planogram_item_id": expected.get("id"),
                 "issue_type": ISSUE_WRONG_PRODUCT,
@@ -256,7 +302,7 @@ def compare_planogram(
                 "severity": SEVERITY_WARNING,
                 "detail": "Detected product does not match expected SKU/name",
             })
-        elif act_qty < exp_qty:
+        elif act_qty != exp_qty:
             lines.append({
                 "planogram_item_id": expected.get("id"),
                 "issue_type": ISSUE_QTY_MISMATCH,
@@ -270,6 +316,9 @@ def compare_planogram(
                 "detail": f"Expected {exp_qty}, found {act_qty}",
             })
         else:
+            detail = "OK"
+            if score < 0.6 and _brand_and_type_match(expected, actual, scan_context):
+                detail = "Brand and product type match (variant name differs)"
             lines.append({
                 "planogram_item_id": expected.get("id"),
                 "issue_type": ISSUE_CORRECT,
@@ -280,7 +329,7 @@ def compare_planogram(
                 "actual_product": act_product,
                 "actual_qty": act_qty,
                 "severity": SEVERITY_INFO,
-                "detail": "OK",
+                "detail": detail,
             })
 
     for idx, actual in enumerate(inventory):
