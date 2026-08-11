@@ -122,6 +122,21 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         scan_context["shelf_mode"] = shelf_mode
         scan_context["shelf_layout"] = "single_row" if shelf_mode != "multi_row" else "multi_row"
         scan_category = scan_context.get("aislix_category") or metadata.get("category") or metadata.get("shelf_label")
+
+        planogram_items = metadata.get("planogram_items") or []
+        if planogram_items:
+            from app.planogram_guided import prepare_planogram_candidates
+
+            candidates = prepare_planogram_candidates(
+                planogram_items,
+                metadata.get("assignment_scope_type"),
+                metadata.get("assignment_scope_values") or {},
+                scan_context,
+            )
+            if candidates:
+                scan_context["planogram_mode"] = True
+                scan_context["planogram_candidates"] = candidates
+
         classified, recognition_engine_stats = classify_records(
             records,
             scan_id=scan_id,
@@ -138,7 +153,6 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         inventory = aggregate_inventory(classified)
         inventory = apply_compliance_to_inventory(inventory, subcategory_mismatches)
 
-        planogram_items = metadata.get("planogram_items") or []
         planogram_compliance = None
         if planogram_items:
             from app.planogram_compliance import compare_planogram
@@ -168,6 +182,9 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         recognition_stats = _recognition_stats(classified)
         metrics.update(recognition_stats)
         metrics["gpt_vision_calls"] = int(recognition_engine_stats.get("gpt_calls") or 0)
+        if scan_context.get("planogram_mode"):
+            metrics["planogram_guided_recognition"] = True
+            metrics["planogram_candidate_count"] = len(scan_context.get("planogram_candidates") or [])
         if planogram_compliance:
             metrics["planogram_compliance_percent"] = planogram_compliance.get("compliance_percent")
             metrics["planogram_summary"] = planogram_compliance.get("summary")

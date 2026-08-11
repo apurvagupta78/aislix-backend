@@ -643,6 +643,25 @@ def classify_records(
     scan_context: dict | None = None,
 ) -> tuple[list[dict], dict]:
     if RECOGNITION_V2:
+        if scan_context and scan_context.get("planogram_candidates"):
+            from app.planogram_guided import classify_records_planogram_guided
+
+            classified, stats = classify_records_planogram_guided(
+                records,
+                scan_id=scan_id,
+                scan_category=scan_category,
+                scan_context=scan_context,
+            )
+            print(
+                "Recognition planogram-guided:",
+                f"planogram={stats.get('planogram', 0)}",
+                f"ocr={stats.get('ocr', 0)}",
+                f"gpt={stats.get('gpt', 0)}",
+                f"faiss={stats.get('faiss', 0)}",
+                f"unknown={stats.get('none', 0)}",
+                f"candidates={stats.get('planogram_candidates', 0)}",
+            )
+            return classified, stats
         classified, stats = classify_records_v2(
             records,
             scan_id=scan_id,
