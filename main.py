@@ -16,6 +16,9 @@ DATA_DIR = BASE_DIR / "data"
 DEFAULT_ORIGINS = [
     "https://aislix.lovable.app",
     "https://id-preview--449a1800-6064-43d4-9afe-f713a920d0d4.lovable.app",
+    "https://app.aislix.com",
+    "https://aislix.com",
+    "https://www.aislix.com",
     "http://localhost:5173",
     "http://localhost:3000",
 ]
