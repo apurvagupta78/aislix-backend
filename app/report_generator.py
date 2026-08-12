@@ -16,7 +16,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image as RLImage
-from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.scan_context import COMPLIANCE_ALERT_INTERPRETATION, COMPLIANCE_ALERT_TITLE
 
@@ -173,6 +173,20 @@ def _annotated_image_flowable(
     return RLImage(bio, width=width, height=height)
 
 
+def _append_annotated_shelf_section(story: list, styles, annotated_jpeg: bytes) -> None:
+    """Insert annotated shelf image in the summary section (same JPEG as scan result download)."""
+    story.append(Paragraph("<b>Annotated Shelf Image</b>", styles["Heading3"]))
+    story.append(
+        Paragraph(
+            "<i>Detections rendered by the vision model (green = OK, red = mismatch).</i>",
+            styles["Normal"],
+        )
+    )
+    story.append(Spacer(1, 0.08 * inch))
+    story.append(_annotated_image_flowable(annotated_jpeg))
+    story.append(Spacer(1, 0.2 * inch))
+
+
 def generate_pdf_bytes(
     scan_id: str,
     metrics: dict,
@@ -211,6 +225,12 @@ def generate_pdf_bytes(
         story.append(Paragraph(executive_summary, styles["Normal"]))
         story.append(Spacer(1, 0.15 * inch))
 
+    if annotated_jpeg is None and annotated_image is not None and annotated_image.size > 0:
+        annotated_jpeg = encode_annotated_image_bytes(annotated_image)
+
+    if annotated_jpeg:
+        _append_annotated_shelf_section(story, styles, annotated_jpeg)
+
     summary = [
         ["Metric", "Value"],
         ["Total Facings", metrics.get("total_products", 0)],
@@ -236,9 +256,6 @@ def generate_pdf_bytes(
     )
     story.append(table)
     story.append(Spacer(1, 0.2 * inch))
-
-    if annotated_jpeg is None and annotated_image is not None and annotated_image.size > 0:
-        annotated_jpeg = encode_annotated_image_bytes(annotated_image)
 
     if compliance_alerts:
         story.append(Paragraph(f"<b>{COMPLIANCE_ALERT_TITLE}</b>", styles["Heading3"]))
@@ -341,18 +358,6 @@ def generate_pdf_bytes(
             story.append(Paragraph(f"• <b>{title}</b>{suffix}", styles["Normal"]))
             if detail:
                 story.append(Paragraph(f"&nbsp;&nbsp;{detail}", styles["Normal"]))
-
-    if annotated_jpeg:
-        story.append(PageBreak())
-        story.append(Paragraph("<b>Annotated Shelf Image</b>", styles["Heading3"]))
-        story.append(
-            Paragraph(
-                "<i>Detections rendered by the vision model (green = OK, red = mismatch).</i>",
-                styles["Normal"],
-            )
-        )
-        story.append(Spacer(1, 0.08 * inch))
-        story.append(_annotated_image_flowable(annotated_jpeg))
 
     doc.build(story)
     return base64.b64encode(buffer.getvalue()).decode("utf-8")

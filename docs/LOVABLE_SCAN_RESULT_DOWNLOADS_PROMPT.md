@@ -110,15 +110,39 @@ function downloadBase64Image(base64: string, filename: string) {
 
 ## STEP 4 — PDF includes annotated image (backend)
 
-No frontend change needed for PDF content — Railway now embeds annotated shelf image in every new scan PDF.
+No frontend change needed for PDF content — Railway embeds the **same JPEG bytes** as the annotated image download, placed **right after Executive Summary** in the PDF (not on the last page).
 
 For **old scans** without updated PDF: call `ensureScanAssets(scanId)` or POST `/scan/export-assets` then re-store PDF.
+
+## STEP 5 — Scan result page must match PDF image
+
+The annotated shelf image shown on the scan result page must be the **backend-generated image**, not a client-side re-draw:
+
+```tsx
+// GOOD — same image as PDF download and annotated_image_base64:
+const annotatedSrc =
+  downloads?.annotated_image_url ??
+  (rawPayload?.annotated_image_base64
+    ? `data:image/jpeg;base64,${rawPayload.annotated_image_base64}`
+    : null);
+
+{annotatedSrc && (
+  <img src={annotatedSrc} alt="Annotated shelf" className="w-full rounded-lg" />
+)}
+```
+
+```tsx
+// BAD — do NOT draw boxes/labels on canvas from products[] — labels will differ from PDF
+```
+
+Remove any canvas/SVG overlay that re-renders detections from `products` or `inventory` rows.
+Use `scan_images` kind=`annotated` signed URL when available; fall back to `raw_payload.annotated_image_base64`.
 
 ## TEST
 
 1. Complete a new scan → Downloads → Annotated image → file saves as `aislix-{id}-annotated.jpg` (not new tab)
 2. Annotated shelf viewer → Image button → same download behavior
-3. PDF report → open → contains "Annotated Shelf Image" section with green boxes
+3. PDF report → open → "Annotated Shelf Image" appears **after Executive Summary**, same boxes as on-screen image
 4. Mobile Safari/Chrome → download works (blob method, not window.open)
 
 Do not change Railway backend in Lovable.
