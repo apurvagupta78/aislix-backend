@@ -16,12 +16,17 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image as RLImage
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.scan_context import COMPLIANCE_ALERT_INTERPRETATION, COMPLIANCE_ALERT_TITLE
 
 MISMATCH_BOX_COLOR = (0, 0, 220)
 OK_BOX_COLOR = (0, 210, 0)
+
+# Fixed slot in the PDF summary — keeps page 1 layout stable for portrait shelf photos.
+PDF_PAGE_MARGIN = 0.75 * inch
+PDF_SUMMARY_IMAGE_WIDTH = 6.0 * inch
+PDF_SUMMARY_IMAGE_MAX_HEIGHT = 3.25 * inch
 
 
 import unicodedata
@@ -106,6 +111,11 @@ def encode_annotated_image_bytes(annotated: np.ndarray, *, quality: int = 95) ->
     return encoded.tobytes()
 
 
+def annotated_image_dimensions(annotated: np.ndarray) -> dict[str, int]:
+    height, width = annotated.shape[:2]
+    return {"width": int(width), "height": int(height)}
+
+
 def generate_csv_bytes(inventory: list[dict]) -> bytes:
     buffer = io.StringIO()
     fieldnames = [
@@ -152,38 +162,46 @@ def _logo_flowable(logo_path, width=1.85 * inch):
     return RLImage(str(logo_path), width=width, height=height)
 
 
+def _fit_image_size(
+    img_w: float,
+    img_h: float,
+    *,
+    max_width: float,
+    max_height: float,
+) -> tuple[float, float]:
+    if not img_w or not img_h:
+        raise ValueError("Annotated shelf image has invalid dimensions.")
+    scale = min(max_width / img_w, max_height / img_h)
+    return img_w * scale, img_h * scale
+
+
 def _annotated_image_flowable(
     jpeg_bytes: bytes,
     *,
-    max_width: float = 6.9 * inch,
-    max_height: float = 9.2 * inch,
+    max_width: float = PDF_SUMMARY_IMAGE_WIDTH,
+    max_height: float = PDF_SUMMARY_IMAGE_MAX_HEIGHT,
 ):
-    """Embed the exact annotated JPEG bytes (no re-encode) scaled to fit one PDF page."""
+    """Embed annotated JPEG scaled to a fixed summary slot (aspect ratio preserved)."""
     bio = io.BytesIO(jpeg_bytes)
     reader = ImageReader(bio)
     img_w, img_h = reader.getSize()
-    if not img_w or not img_h:
-        raise ValueError("Annotated shelf image has invalid dimensions.")
-    width = max_width
-    height = width * (img_h / float(img_w))
-    if height > max_height:
-        height = max_height
-        width = height * (img_w / float(img_h))
+    width, height = _fit_image_size(img_w, img_h, max_width=max_width, max_height=max_height)
     bio.seek(0)
     return RLImage(bio, width=width, height=height)
 
 
 def _append_annotated_shelf_section(story: list, styles, annotated_jpeg: bytes) -> None:
     """Insert annotated shelf image in the summary section (same JPEG as scan result download)."""
-    story.append(Paragraph("<b>Annotated Shelf Image</b>", styles["Heading3"]))
-    story.append(
+    section = [
+        Paragraph("<b>Annotated Shelf Image</b>", styles["Heading3"]),
         Paragraph(
             "<i>Detections rendered by the vision model (green = OK, red = mismatch).</i>",
             styles["Normal"],
-        )
-    )
-    story.append(Spacer(1, 0.08 * inch))
-    story.append(_annotated_image_flowable(annotated_jpeg))
+        ),
+        Spacer(1, 0.08 * inch),
+        _annotated_image_flowable(annotated_jpeg),
+    ]
+    story.append(KeepTogether(section))
     story.append(Spacer(1, 0.2 * inch))
 
 
@@ -202,7 +220,14 @@ def generate_pdf_bytes(
     annotated_image: np.ndarray | None = None,
 ) -> str:
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=PDF_PAGE_MARGIN,
+        rightMargin=PDF_PAGE_MARGIN,
+        topMargin=0.65 * inch,
+        bottomMargin=0.65 * inch,
+    )
     styles = getSampleStyleSheet()
     story = []
     alerts = alerts or []

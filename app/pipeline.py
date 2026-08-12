@@ -37,7 +37,13 @@ from app.metrics import (
     executive_summary,
 )
 from app.recognizer import classify_records
-from app.report_generator import generate_annotated_image, generate_csv_bytes, generate_pdf_bytes, encode_annotated_image_bytes
+from app.report_generator import (
+    annotated_image_dimensions,
+    encode_annotated_image_bytes,
+    generate_annotated_image,
+    generate_csv_bytes,
+    generate_pdf_bytes,
+)
 from app.scan_context import resolve_scan_context
 from app.subcategory_compliance import (
     analyze_subcategory_compliance,
@@ -211,7 +217,10 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
 
         annotated = generate_annotated_image(image, classified)
         annotated_jpeg = encode_annotated_image_bytes(annotated)
+        annotated_dims = annotated_image_dimensions(annotated)
         annotated_b64 = base64.b64encode(annotated_jpeg).decode("utf-8")
+        metrics["annotated_image_width"] = annotated_dims["width"]
+        metrics["annotated_image_height"] = annotated_dims["height"]
 
         pdf_b64 = generate_pdf_bytes(
             scan_id=scan_id,
@@ -246,6 +255,9 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             "subcategory_mismatches": subcategory_mismatches,
             "recommendations": recommendations,
             "annotated_image_base64": annotated_b64,
+            "annotated_image_mime": "image/jpeg",
+            "annotated_image_width": annotated_dims["width"],
+            "annotated_image_height": annotated_dims["height"],
             "planogram_compliance": planogram_compliance,
             "assignment_id": metadata.get("assignment_id"),
             "pdf_base64": pdf_b64,

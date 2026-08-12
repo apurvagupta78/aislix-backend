@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from io import BytesIO
 from pathlib import Path
 
 import cv2
@@ -39,10 +40,19 @@ def get_yolo_model():
 
 
 def load_image_bytes(data: bytes) -> np.ndarray:
-    image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
-    if image is None:
-        raise ValueError("Could not decode image bytes.")
-    return image
+    """Decode upload bytes and apply EXIF orientation so boxes align with the captured photo."""
+    from PIL import Image, ImageOps
+
+    try:
+        pil = Image.open(BytesIO(data))
+        pil = ImageOps.exif_transpose(pil)
+        rgb = np.array(pil.convert("RGB"))
+        return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    except Exception:
+        image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            raise ValueError("Could not decode image bytes.")
+        return image
 
 
 def load_image_from_url(url: str, timeout: int = 60) -> np.ndarray:

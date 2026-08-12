@@ -7,7 +7,14 @@ import base64
 import cv2
 import numpy as np
 
-from app.report_generator import encode_annotated_image_bytes, generate_annotated_image, generate_pdf_bytes
+from app.report_generator import (
+    PDF_SUMMARY_IMAGE_MAX_HEIGHT,
+    PDF_SUMMARY_IMAGE_WIDTH,
+    _fit_image_size,
+    encode_annotated_image_bytes,
+    generate_annotated_image,
+    generate_pdf_bytes,
+)
 
 
 def test_pdf_uses_same_jpeg_bytes_as_download():
@@ -99,3 +106,26 @@ def test_pdf_annotated_image_after_executive_summary():
     )
     assert pdf_with_image.startswith(b"%PDF")
     assert len(pdf_with_image) > len(pdf_without_image) + 5000
+
+
+def test_pdf_summary_image_fits_fixed_slot():
+    """Portrait shelf JPEG scales down into the PDF summary box without upscaling."""
+    width, height = _fit_image_size(
+        1200,
+        1600,
+        max_width=PDF_SUMMARY_IMAGE_WIDTH,
+        max_height=PDF_SUMMARY_IMAGE_MAX_HEIGHT,
+    )
+    assert width <= PDF_SUMMARY_IMAGE_WIDTH + 0.01
+    assert height <= PDF_SUMMARY_IMAGE_MAX_HEIGHT + 0.01
+    assert width < PDF_SUMMARY_IMAGE_WIDTH
+    assert height == PDF_SUMMARY_IMAGE_MAX_HEIGHT
+
+    landscape_w, landscape_h = _fit_image_size(
+        2000,
+        900,
+        max_width=PDF_SUMMARY_IMAGE_WIDTH,
+        max_height=PDF_SUMMARY_IMAGE_MAX_HEIGHT,
+    )
+    assert landscape_w == PDF_SUMMARY_IMAGE_WIDTH
+    assert landscape_h < PDF_SUMMARY_IMAGE_MAX_HEIGHT

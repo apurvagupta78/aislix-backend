@@ -127,7 +127,14 @@ const annotatedSrc =
     : null);
 
 {annotatedSrc && (
-  <img src={annotatedSrc} alt="Annotated shelf" className="w-full rounded-lg" />
+  <img
+    src={annotatedSrc}
+    alt="Annotated shelf"
+    width={metrics?.annotated_image_width ?? rawPayload?.annotated_image_width}
+    height={metrics?.annotated_image_height ?? rawPayload?.annotated_image_height}
+    className="w-full h-auto rounded-lg"
+    style={{ objectFit: "contain", maxHeight: "70vh" }}
+  />
 )}
 ```
 
@@ -137,6 +144,8 @@ const annotatedSrc =
 
 Remove any canvas/SVG overlay that re-renders detections from `products` or `inventory` rows.
 Use `scan_images` kind=`annotated` signed URL when available; fall back to `raw_payload.annotated_image_base64`.
+When uploading to Supabase storage, store JPEG bytes **as-is** — do not crop, resize, or re-encode the annotated image.
+Use `annotated_image_width` / `annotated_image_height` from metrics or raw_payload so the browser preserves aspect ratio (never force square `object-fit: cover`).
 
 ## TEST
 
