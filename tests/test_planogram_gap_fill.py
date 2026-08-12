@@ -84,6 +84,20 @@ def test_fill_detection_gaps_recovers_mocked_box():
     assert len(merged) >= len(boxes) + 1
 
 
+def test_dedupe_preserving_synthetics_keeps_slot_crops():
+    from app.planogram_gap_fill import _dedupe_preserving_synthetics
+
+    y1, y2 = 40.0, 200.0
+    originals = _synthetic_row_boxes(8, skip_index=4)
+    # Wide neighbor overlapping the empty slot region
+    originals[3] = np.array([originals[3][0], y1, originals[3][0] + 80.0 * 1.7, y2], dtype=np.float32)
+    synthetic = np.array([310.0, y1, 390.0, y2], dtype=np.float32)
+    merged = originals + [synthetic]
+    deduped, centers = _dedupe_preserving_synthetics(merged, len(originals), image_h=300)
+    assert len(deduped) == 8
+    assert len(centers) == 1
+
+
 def test_fill_detection_gaps_uses_synthetic_when_yolo_misses():
     image = np.zeros((300, 700, 3), dtype=np.uint8)
     boxes = _synthetic_row_boxes(8, skip_index=4)

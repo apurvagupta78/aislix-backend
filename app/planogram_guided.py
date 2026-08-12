@@ -561,6 +561,15 @@ def assign_planogram_slots(
                 slot_to_cand[si] = si
                 used_cands.add(si)
 
+    # Left-to-right positional fallback when OCR scores are weak (e.g. dark slot crops).
+    slot_order = sorted(range(n_slots), key=lambda si: _x_center_rec(slot_best[si]))
+    for rank, si in enumerate(slot_order):
+        if si in slot_to_cand:
+            continue
+        if rank < n_cand and rank not in used_cands:
+            slot_to_cand[si] = rank
+            used_cands.add(rank)
+
     learned = 0
     output: list[dict] = []
     for si, slot in enumerate(slots):

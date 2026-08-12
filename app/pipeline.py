@@ -144,7 +144,15 @@ def _detect_boxes_for_scan(
             boxes,
             expected_count=len(candidates),
         )
-        if shelf_mode == "single_row":
+        if gap_stats.get("gap_fill_regions"):
+            print(
+                "Gap-fill:",
+                f"regions={gap_stats.get('gap_fill_regions')}",
+                f"recovered={gap_stats.get('gap_fill_recovered')}",
+                f"synthetic={gap_stats.get('gap_fill_synthetic', 0)}",
+                f"final={gap_stats.get('gap_fill_final_boxes', len(boxes))}",
+            )
+        if shelf_mode == "single_row" and not gap_stats.get("gap_fill_synthetic"):
             boxes = merge_boxes_by_column(boxes)
         elif shelf_mode == "single_bin":
             boxes = cluster_boxes_x_slots(boxes)
@@ -164,6 +172,14 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             raise ValueError("No products detected in this shelf image.")
 
         records, work_dir = crop_products(image, boxes)
+        syn_centers = gap_stats.get("gap_fill_synthetic_centers") or []
+        if syn_centers and records:
+            widths = [float(r["x2"]) - float(r["x1"]) for r in records]
+            tol = (sorted(widths)[len(widths) // 2] if widths else 80.0) * 0.35
+            for rec in records:
+                cx = (float(rec["x1"]) + float(rec["x2"])) / 2.0
+                if any(abs(cx - float(sc)) <= tol for sc in syn_centers):
+                    rec["gap_fill_synthetic"] = True
         scan_context["shelf_mode"] = shelf_mode
         scan_context["shelf_layout"] = "single_row" if shelf_mode != "multi_row" else "multi_row"
         scan_category = scan_context.get("aislix_category") or metadata.get("category") or metadata.get("shelf_label")

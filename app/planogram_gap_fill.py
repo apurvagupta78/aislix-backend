@@ -361,11 +361,19 @@ def _synthetic_box_from_region(region: np.ndarray) -> np.ndarray:
     """Turn an empty planogram slot region into a facing box when YOLO finds nothing."""
     x1, y1, x2, y2 = map(float, region)
     w, h = max(x2 - x1, 1.0), max(y2 - y1, 1.0)
-    inset = 0.12
+    inset = 0.18
     return np.array(
         [x1 + w * inset, y1 + h * inset, x2 - w * inset, y2 - h * inset],
         dtype=np.float32,
     )
+
+
+def _center_too_close(box: np.ndarray, existing: list[np.ndarray], min_sep: float) -> bool:
+    cx = _x_center(box)
+    for other in existing:
+        if abs(cx - _x_center(other)) < min_sep:
+            return True
+    return False
 
 
 def _overlaps_existing(box: np.ndarray, existing: list[np.ndarray], med_w: float) -> bool:
@@ -397,10 +405,33 @@ def _synthetic_slot_boxes(
         if _region_recovered(region, recovered, med_w):
             continue
         box = _synthetic_box_from_region(region)
-        if _overlaps_existing(box, merged + synthetic, med_w):
+        if _center_too_close(box, merged + synthetic, med_w * 0.38):
             continue
         synthetic.append(box)
     return synthetic
+
+
+def _dedupe_preserving_synthetics(
+    merged: list[np.ndarray],
+    n_original: int,
+    image_h: int,
+) -> tuple[list[np.ndarray], list[float]]:
+    """Dedup YOLO boxes but keep planogram slot crops that fill empty facings."""
+    if len(merged) <= n_original:
+        return merged, []
+
+    med_w, _, _, _ = _row_metrics(merged, image_h)
+    originals = merged[:n_original]
+    synthetics = merged[n_original:]
+    deduped = deduplicate_boxes(originals, [1.0] * len(originals))
+    kept_centers: list[float] = []
+    for syn in synthetics:
+        if _center_too_close(syn, deduped, med_w * 0.24):
+            continue
+        deduped.append(syn)
+        kept_centers.append(_x_center(syn))
+    deduped.sort(key=_x_center)
+    return deduped, kept_centers
 
 
 def fill_detection_gaps(
@@ -428,6 +459,7 @@ def fill_detection_gaps(
     if not regions:
         return boxes, stats
 
+    n_original = len(boxes)
     recovered: list[np.ndarray] = []
     merged = list(boxes)
     for region in regions:
@@ -468,7 +500,7 @@ def fill_detection_gaps(
     if not recovered:
         return boxes, stats
 
-    confidences = [1.0] * len(merged)
-    deduped = deduplicate_boxes(merged, confidences)
+    deduped, syn_centers = _dedupe_preserving_synthetics(merged, n_original, image_h)
     stats["gap_fill_final_boxes"] = len(deduped)
+    stats["gap_fill_synthetic_centers"] = syn_centers
     return deduped, stats

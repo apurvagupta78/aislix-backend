@@ -296,6 +296,9 @@ def _drop_narrow_unknown_fragments(facings: list[dict]) -> list[dict]:
     min_w = median_w * 0.42
     kept: list[dict] = []
     for item in facings:
+        if item.get("gap_fill_synthetic"):
+            kept.append(item)
+            continue
         if _is_unknown(item) and _width(item) < min_w:
             continue
         kept.append(item)
@@ -316,6 +319,8 @@ def _merge_same_column_facings(facings: list[dict]) -> list[dict]:
             if drop[idx_b]:
                 continue
             b = facings[idx_b]
+            if a.get("gap_fill_synthetic") or b.get("gap_fill_synthetic"):
+                continue
             merge = _should_merge_boxes(a, b, median_h)
             if not merge and _same_column(a, b):
                 merge = (
@@ -359,6 +364,9 @@ def _deduplicate_row_slots(facings: list[dict]) -> list[dict]:
                 cluster.append((idx, item))
                 continue
             prev_idx, prev = cluster[-1]
+            if prev.get("gap_fill_synthetic") or item.get("gap_fill_synthetic"):
+                cluster.append((idx, item))
+                continue
             if _same_column(prev, item):
                 drop_idx = prev_idx if _pick_preferred(prev, item) == 0 else idx
                 drop[drop_idx] = True
@@ -388,6 +396,8 @@ def filter_nested_facings(
 
     # Pass 1: drop smaller facings nested inside a larger neighbor on the same row.
     for inner_idx, inner in enumerate(facings):
+        if inner.get("gap_fill_synthetic"):
+            continue
         inner_area = _area(inner)
         if inner_area <= 0:
             continue
@@ -415,6 +425,8 @@ def filter_nested_facings(
     # Pass 2: drop unknown bands in the same column as any labeled bottle.
     drop = [False] * len(survivors)
     for inner_idx, inner in enumerate(survivors):
+        if inner.get("gap_fill_synthetic"):
+            continue
         if not _is_unknown(inner):
             continue
         for outer_idx, outer in enumerate(survivors):
