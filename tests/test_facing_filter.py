@@ -208,6 +208,55 @@ def test_cluster_boxes_x_slots_merges_cap_and_body():
     assert len(merged) == 2
 
 
+def test_keeps_unknown_when_neighbor_label_low_confidence():
+    """Snack bags mislabeled at low confidence should not suppress Unknown facings."""
+    unknown_bag = {
+        "brand": "Unknown",
+        "product_name": "Unidentified SKU",
+        "confidence": 0.55,
+        "x1": 100,
+        "y1": 50,
+        "x2": 170,
+        "y2": 210,
+    }
+    wrong_label = {
+        "brand": "Haldiram",
+        "product_name": "Snacks",
+        "confidence": 0.68,
+        "x1": 102,
+        "y1": 55,
+        "x2": 168,
+        "y2": 205,
+    }
+    result = filter_nested_facings([unknown_bag, wrong_label])
+    assert len(result) == 1
+    assert result[0]["brand"] == "Unknown"
+
+
+def test_drops_unknown_cap_when_neighbor_high_confidence():
+    body = {
+        "brand": "Lays",
+        "product_name": "Potato Chips",
+        "confidence": 0.92,
+        "x1": 100,
+        "y1": 50,
+        "x2": 165,
+        "y2": 220,
+    }
+    cap = {
+        "brand": "Unknown",
+        "product_name": "Unidentified SKU",
+        "confidence": 0.35,
+        "x1": 108,
+        "y1": 50,
+        "x2": 158,
+        "y2": 98,
+    }
+    result = filter_nested_facings([body, cap])
+    assert len(result) == 1
+    assert result[0]["brand"] == "Lays"
+
+
 def test_merge_boxes_by_column_does_not_merge_across_shelf_rows():
     """Same x-column on row 1 and row 2 must stay separate (multi-row shelf)."""
     import numpy as np

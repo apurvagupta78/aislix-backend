@@ -27,7 +27,7 @@ from app.detector import (
 )
 from app.facing_filter import cluster_boxes_x_slots, filter_nested_facings, merge_boxes_by_column
 from app.shelf_layout import ShelfMode, detect_shelf_mode
-from app.inventory import aggregate_inventory, inventory_to_api_products
+from app.inventory import aggregate_inventory, inventory_to_api_products, normalize_classified_labels
 from app.metrics import (
     brand_share,
     build_alerts,
@@ -143,6 +143,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             scan_category=scan_category,
             scan_context=scan_context,
         )
+        classified = normalize_classified_labels(classified)
         classified = filter_nested_facings(classified, layout=shelf_mode)
         if scan_context.get("planogram_mode") and scan_context.get("planogram_candidates"):
             from app.planogram_guided import assign_planogram_slots

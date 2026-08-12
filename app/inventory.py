@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 
 LOW_STOCK_THRESHOLD = 2
@@ -15,17 +16,81 @@ BRAND_DISPLAY_ALIASES: dict[str, str] = {
     "l oreal": "L'Oreal",
     "head": "Head & Shoulders",
     "clinic": "Clinic Plus",
+    "crax": "Crax",
+    "lays": "Lays",
+    "lay's": "Lays",
+    "lay s": "Lays",
+    "bingo": "Bingo",
+    "bingo!": "Bingo",
+    "kurkure": "Kurkure",
+    "haldiram's": "Haldiram",
+    "haldirams": "Haldiram",
+    "pringles": "Pringles",
+}
+
+PRODUCT_DISPLAY_ALIASES: dict[str, str] = {
+    "rings": "Rings",
+    "curls": "Curls",
+    "potato chips": "Potato Chips",
+    "masala munch": "Masala Munch",
+    "tedhe medhe": "Tedhe Medhe",
+    "mad angles": "Mad Angles",
+    "snacks": "Snacks",
+    "wafers": "Wafers",
 }
 
 
 def _normalize_brand_key(brand: str, product: str = "") -> str:
-    brand_l = brand.lower().strip()
+    brand_l = re.sub(r"[^\w\s&']", "", brand.lower().strip())
+    brand_l = re.sub(r"\s+", " ", brand_l).strip()
     product_l = product.lower()
     if brand_l == "head" and "shoulder" in product_l:
         return "head & shoulders"
     if brand_l == "clinic" and "plus" in product_l:
         return "clinic plus"
     return BRAND_DISPLAY_ALIASES.get(brand_l, brand_l)
+
+
+def _normalize_product_key(product: str) -> str:
+    product_l = re.sub(r"\s+", " ", product.strip().lower())
+    return PRODUCT_DISPLAY_ALIASES.get(product_l, product_l)
+
+
+def _display_product_name(product: str) -> str:
+    product_l = re.sub(r"\s+", " ", product.strip().lower())
+    if product_l in PRODUCT_DISPLAY_ALIASES:
+        return PRODUCT_DISPLAY_ALIASES[product_l]
+    if product.isupper() and len(product) > 2:
+        return product.title()
+    return product.strip()
+
+
+def _display_brand_name(brand: str, brand_key: str) -> str:
+    if brand_key == "head & shoulders":
+        return "Head & Shoulders"
+    if brand_key == "clinic plus":
+        return "Clinic Plus"
+    alias_display = BRAND_DISPLAY_ALIASES.get(brand.lower().strip())
+    if alias_display:
+        return alias_display
+    alias_display = BRAND_DISPLAY_ALIASES.get(brand_key)
+    if alias_display:
+        return alias_display
+    return brand.strip()
+
+
+def normalize_classified_labels(classified: list[dict]) -> list[dict]:
+    """Canonical brand/product casing so facings aggregate into one SKU row."""
+    normalized: list[dict] = []
+    for item in classified:
+        row = dict(item)
+        brand = (row.get("brand") or "Unknown").strip()
+        product = (row.get("product_name") or "Unknown").strip()
+        brand_key = _normalize_brand_key(brand, product)
+        row["brand"] = _display_brand_name(brand, brand_key)
+        row["product_name"] = _display_product_name(product)
+        normalized.append(row)
+    return normalized
 
 
 def aggregate_inventory(classified: list[dict]) -> list[dict]:
@@ -37,15 +102,11 @@ def aggregate_inventory(classified: list[dict]) -> list[dict]:
         variant = (item.get("variant") or "").strip()
         sku = (item.get("sku") or "").strip()
         brand_key = _normalize_brand_key(brand, product)
-        key = (brand_key, product.lower(), variant.lower(), sku.lower())
+        product_key = _normalize_product_key(product)
+        key = (brand_key, product_key, variant.lower(), sku.lower())
         bucket = buckets[key]
-        display_brand = BRAND_DISPLAY_ALIASES.get(brand.lower(), brand)
-        if brand_key == "head & shoulders":
-            display_brand = "Head & Shoulders"
-        elif brand_key == "clinic plus":
-            display_brand = "Clinic Plus"
-        bucket["brand"] = display_brand
-        bucket["product_name"] = product
+        bucket["brand"] = _display_brand_name(brand, brand_key)
+        bucket["product_name"] = _display_product_name(product)
         bucket["variant"] = variant
         bucket["category"] = item.get("category") or "General"
         bucket["sku"] = item.get("sku") or ""

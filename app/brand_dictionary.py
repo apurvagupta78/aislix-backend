@@ -44,6 +44,14 @@ TEXT_ALIASES: dict[str, str] = {
     "parle g": "Parle",
     "haldiram's": "Haldiram",
     "surf excel": "Surf",
+    "lay's": "Lays",
+    "lays": "Lays",
+    "bingo!": "Bingo",
+    "crax": "Crax",
+    "kurkure": "Kurkure",
+    "tedhe medhe": "Bingo",
+    "mad angles": "Bingo",
+    "pringles": "Pringles",
 }
 
 # Single-token catalog brands that are usually variant words, not manufacturers.
@@ -109,7 +117,19 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bbritannia\b", "Britannia", ""),
     (r"\bparle(?:\s+-?\s*g)?\b", "Parle", ""),
     (r"\bmaggi\b", "Maggi", ""),
+    (r"\bcrax\b.*\brings\b|\brings\b.*\bcrax\b", "Crax", "Rings"),
+    (r"\bcrax\b.*\bcurls\b|\bcurls\b.*\bcrax\b", "Crax", "Curls"),
+    (r"\bcrax\b", "Crax", ""),
+    (r"\bbingo\b.*\btedhe\s+medhe\b|\btedhe\s+medhe\b", "Bingo", "Tedhe Medhe"),
+    (r"\bmad\s+angles\b", "Bingo", "Mad Angles"),
+    (r"\bbingo\b", "Bingo", ""),
+    (r"\bkurkure\b.*\bmasala\s+munch\b", "Kurkure", "Masala Munch"),
+    (r"\bkurkure\b", "Kurkure", ""),
+    (r"\blay(?:\'|s)?s\b.*\bpotato\s+chips\b", "Lays", "Potato Chips"),
+    (r"\blay(?:\'|s)?s\b.*\bclassic\b", "Lays", "Classic Salted Potato Chips"),
+    (r"\blay(?:\'|s)?s\b.*\bmasala\b", "Lays", "Indias Magic Masala Potato Chips"),
     (r"\blay(?:\'|s)?s\b", "Lays", ""),
+    (r"\bpringles\b", "Pringles", ""),
     (r"\bnescafe\b", "Nescafe", ""),
     (r"\bbru\b", "Bru", ""),
     (r"\bsprite\b", "Sprite", ""),
@@ -168,6 +188,11 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
         (r"\bdabur\b", "dabur"),
         (r"\bintense\s+repair\b", "dove"),
         (r"\bstrong\s*(?:&|and)\s*long\b", "clinic"),
+        (r"\blay(?:\'|s)?s\b", "lays"),
+        (r"\bbingo\b|\btedhe\s+medhe\b|\bmad\s+angles\b", "bingo"),
+        (r"\bcrax\b", "crax"),
+        (r"\bkurkure\b", "kurkure"),
+        (r"\bpringles\b", "pringles"),
     ]
     for pattern, hinted_brand in ocr_brand_hints:
         if re.search(pattern, text_l, flags=re.IGNORECASE):
@@ -189,6 +214,14 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
     if "pantene" in text_l and label_brand == "dove" and "conditioner" in product_l:
         return True
     if ("hair fall" in text_l or "hairfall" in text_l) and label_brand == "dove" and "conditioner" in product_l:
+        return True
+    if re.search(r"\blay(?:\'|s)?s\b", text_l) and label_brand in {"del", "haldiram", "britannia", "bingo", "pringles"}:
+        return True
+    if re.search(r"\bbingo\b|\btedhe\s+medhe\b|\bmad\s+angles\b", text_l) and label_brand == "pringles":
+        return True
+    if re.search(r"\bcrax\b", text_l) and label_brand not in {"", "crax", "unknown"}:
+        return True
+    if re.search(r"\bkurkure\b", text_l) and label_brand not in {"", "kurkure", "unknown"}:
         return True
 
     corrected = match_from_text(text)
@@ -429,11 +462,22 @@ def match_from_text(text: str) -> dict | None:
                     "recognition_source": "ocr",
                     "visible_text": text[:240],
                 }
-        product = match_product_for_brand(brand, text)
-        if product:
-            product["visible_text"] = text[:240]
-            product["confidence"] = max(float(product.get("confidence") or 0), 0.9)
-            return product
+        else:
+            product = match_product_for_brand(brand, text)
+            if product:
+                product["visible_text"] = text[:240]
+                product["confidence"] = max(float(product.get("confidence") or 0), 0.9)
+                return product
+        return {
+            "brand": display_brand_name(brand, product_name),
+            "product_name": product_name,
+            "variant": "",
+            "sku": "",
+            "category": "General",
+            "confidence": 0.92,
+            "recognition_source": "ocr",
+            "visible_text": text[:240],
+        }
 
     brand_match = match_brand_in_text(text)
     if not brand_match:

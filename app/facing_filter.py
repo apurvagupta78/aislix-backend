@@ -6,6 +6,8 @@ import numpy as np
 
 # Only run heavy row-slot dedup on dense multi-row shelves.
 ROW_SLOT_DEDUP_MIN_FACINGS = 20
+# Pass 2: only trust a labeled neighbor enough to drop a same-column Unknown.
+LABELED_NEIGHBOR_MIN_CONFIDENCE = 0.75
 
 
 def _as_box_dict(box) -> dict:
@@ -267,6 +269,10 @@ def _pick_preferred(a: dict, b: dict) -> int:
     a_unknown = _is_unknown(a)
     b_unknown = _is_unknown(b)
     if a_unknown != b_unknown:
+        labeled = b if a_unknown else a
+        labeled_conf = float(labeled.get("confidence") or 0)
+        if labeled_conf < LABELED_NEIGHBOR_MIN_CONFIDENCE:
+            return 1 if a_unknown else 0
         return 0 if a_unknown else 1
     a_conf = float(a.get("confidence") or 0)
     b_conf = float(b.get("confidence") or 0)
@@ -419,7 +425,9 @@ def filter_nested_facings(
             if not _same_column(inner, outer):
                 continue
             if _is_cap_fragment(inner, outer) or _area(inner) < _area(outer) * 0.55:
-                drop[inner_idx] = True
+                neighbor_conf = float(outer.get("confidence") or 0)
+                if neighbor_conf >= LABELED_NEIGHBOR_MIN_CONFIDENCE:
+                    drop[inner_idx] = True
 
     survivors = [item for idx, item in enumerate(survivors) if not drop[idx]]
     if len(survivors) <= 1:
