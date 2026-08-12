@@ -5,9 +5,10 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import numpy as np
-import pytest
 
 from app.planogram_gap_fill import (
+    _occupied_slots_by_center,
+    _slot_centers,
     fill_detection_gaps,
     infer_missing_slot_regions,
 )
@@ -30,9 +31,35 @@ def test_infer_missing_slot_one_gap_in_eight_slot_row():
     boxes = _synthetic_row_boxes(8, skip_index=4)
     regions = infer_missing_slot_regions(boxes, expected_count=8, image_w=700, image_h=300)
     assert len(regions) >= 1
-    # Missing slot is index 4 → center around x ≈ 20 + 4*80 + 40 = 360
     mid_x = (float(regions[0][0]) + float(regions[0][2])) / 2.0
     assert 300 <= mid_x <= 420
+
+
+def test_infer_missing_slot_wide_neighbor_does_not_block_empty_slot():
+    """Wide box overlapping next slot must not mark that slot as covered (TRESemmé case)."""
+    boxes = _synthetic_row_boxes(8, skip_index=1)
+    boxes[0][2] = boxes[0][0] + 80.0 * 1.75
+    regions = infer_missing_slot_regions(boxes, expected_count=8, image_w=700, image_h=300)
+    assert len(regions) >= 1
+    mid_x = (float(regions[0][0]) + float(regions[0][2])) / 2.0
+    assert 90 <= mid_x <= 190
+
+
+def test_infer_missing_two_gaps_in_seven_slot_row():
+    """Tea row: two dark cartons skipped in the middle of a 7-SKU planogram."""
+    boxes = _synthetic_row_boxes(7, skip_index=4)
+    boxes = [b for i, b in enumerate(_synthetic_row_boxes(7)) if i not in {4, 5}]
+    regions = infer_missing_slot_regions(boxes, expected_count=7, image_w=620, image_h=300)
+    assert len(regions) == 2
+
+
+def test_center_assignment_one_box_per_slot():
+    grid_x1, slot_width = 20.0, 80.0
+    centers = _slot_centers(grid_x1, slot_width, 8)
+    boxes = _synthetic_row_boxes(8, skip_index=1)
+    boxes[0][2] = boxes[0][0] + 80.0 * 1.75
+    occupied = _occupied_slots_by_center(boxes, centers, slot_width)
+    assert 1 not in occupied
 
 
 def test_infer_missing_slot_returns_empty_when_full():
