@@ -137,6 +137,24 @@ SUB_CATEGORY_BLOCKLIST: dict[str, set[str]] = {
         "colgate", "pepsodent", "sensodyne", "closeup", "oral-b", "oral b",
         "haldiram", "haldiram's", "britannia", "parle", "maggi", "lays", "rite",
     },
+    "chips": {
+        "bagrrys", "hersheys", "del", "knorr", "oetker", "dr oetker", "dr",
+        "lipton", "tetley", "tata", "brooke", "brooke bond", "taj", "taj mahal",
+        "nescafe", "bru", "coca", "pepsi", "sprite", "fanta", "dove", "pantene",
+        "colgate", "harpic", "surf", "ariel", "vim", "dettol",
+    },
+    "namkeen": {
+        "bagrrys", "hersheys", "del", "knorr", "oetker", "lipton", "tetley", "tata",
+        "dove", "pantene", "colgate", "harpic", "nescafe", "bru",
+    },
+    "biscuits": {
+        "lipton", "tetley", "tata", "dove", "pantene", "colgate", "harpic", "knorr",
+        "del", "bagrrys", "nescafe", "bru", "coca", "pepsi",
+    },
+    "noodles": {
+        "lipton", "tetley", "tata", "dove", "pantene", "colgate", "harpic", "hersheys",
+        "bagrrys", "del", "oetker", "nescafe", "bru",
+    },
 }
 
 NARROW_PC_SUBCATEGORIES = frozenset({"shampoo", "soap", "toothpaste", "deodorant", "skincare"})
@@ -146,6 +164,31 @@ SHAMPOO_REJECT_TEXT = (
     "tea bags", "tea bag", "taj mahal", "red label", "yellow label", "green tea",
     "antiseptic liquid", "soap bar", "bathing bar", "namkeen", "biscuit",
 )
+
+# Product-text tokens that should not appear on a focused sub-category audit.
+SUB_CATEGORY_REJECT_TEXT: dict[str, tuple[str, ...]] = {
+    "shampoo": SHAMPOO_REJECT_TEXT,
+    "chips": (
+        "muesli", "olive", "mayonnaise", "mayo", "kisses", "cup soup", "cup_soup",
+        "funfoods", "oetker", "shampoo", "conditioner", "toothpaste", "tea bag",
+        "green tea", "detergent", "harpic", "namkeen", "bhujia",
+    ),
+    "namkeen": (
+        "muesli", "olive", "mayonnaise", "kisses", "shampoo", "conditioner",
+        "toothpaste", "tea bag", "green tea", "detergent", "potato chips",
+    ),
+    "biscuits": (
+        "shampoo", "conditioner", "toothpaste", "olive", "muesli", "detergent",
+        "tea bag", "green tea", "namkeen", "bhujia",
+    ),
+    "noodles": (
+        "shampoo", "olive", "muesli", "kisses", "detergent", "toothpaste", "tea bag",
+    ),
+    "tea": (
+        "shampoo", "conditioner", "toothpaste", "namkeen", "bhujia", "detergent",
+        "harpic", "potato chips", "mayonnaise",
+    ),
+}
 
 # Expected brands when a narrow sub-category is selected (OCR can override).
 SUB_CATEGORY_BRAND_HINTS: dict[str, dict[str, set[str]]] = {
@@ -275,6 +318,61 @@ def _infer_product_type(text: str) -> str | None:
             best_score = score
             best_type = ptype
     return best_type if best_score > 0 else None
+
+
+SNACK_PRODUCT_TYPES = frozenset({"chips", "namkeen", "biscuits", "noodles", "chocolates"})
+
+
+def compatible_product_types(left: str, right: str) -> bool:
+    """True when two inferred product types can coexist on the same snack-facing audit."""
+    if left == right:
+        return True
+    if left in SNACK_PRODUCT_TYPES and right in SNACK_PRODUCT_TYPES:
+        return True
+    return False
+
+
+def infer_product_type(text: str) -> str | None:
+    """Public wrapper for product-type inference from label or OCR text."""
+    return _infer_product_type(text)
+
+
+def product_type_matches_sub_category(
+    sub_category: str,
+    label: dict,
+    ocr_text: str = "",
+) -> bool:
+    """Return True when a proposed label fits the scan sub-category."""
+    sub = _slug_key(sub_category)
+    if not sub or sub == "others":
+        return True
+
+    label_text = " ".join(
+        [
+            label.get("brand") or "",
+            label.get("product_name") or "",
+            label.get("variant") or "",
+            label.get("sku") or "",
+        ]
+    )
+    label_type = _infer_product_type(label_text)
+    ocr_type = _infer_product_type(ocr_text) if ocr_text and len(ocr_text.strip()) >= 3 else None
+
+    if ocr_type and label_type and not compatible_product_types(ocr_type, label_type):
+        return False
+
+    if label_type and label_type != sub and not compatible_product_types(label_type, sub):
+        return False
+
+    if ocr_type and ocr_type != sub and not compatible_product_types(ocr_type, sub):
+        if label_type not in {None, sub} and not compatible_product_types(label_type, sub):
+            return False
+
+    return True
+
+
+def strict_subcategory_gates_enabled() -> bool:
+    return os.getenv("STRICT_SUBCATEGORY_GATES", "true").lower() in {"1", "true", "yes"}
 
 
 def propagation_type_conflict(ref_label: dict, probe_text: str) -> bool:
@@ -488,9 +586,10 @@ def sub_category_blocks_brand(
     if brand_l in blocklist:
         return True
 
-    if sub == "shampoo":
-        haystack = f"{ocr_text} {product_name}".lower()
-        if any(token in haystack for token in SHAMPOO_REJECT_TEXT):
+    reject_tokens = SUB_CATEGORY_REJECT_TEXT.get(sub, ())
+    if reject_tokens:
+        haystack = f"{ocr_text} {product_name} {brand}".lower()
+        if any(token in haystack for token in reject_tokens):
             return True
 
     aislix_key = _normalize_key(context.get("aislix_category") or "")

@@ -224,6 +224,21 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
     if re.search(r"\bkurkure\b", text_l) and label_brand not in {"", "kurkure", "unknown"}:
         return True
 
+    label_text = " ".join(
+        [
+            label.get("brand") or "",
+            label.get("product_name") or "",
+            label.get("variant") or "",
+            label.get("sku") or "",
+        ]
+    )
+    from app.scan_context import compatible_product_types, infer_product_type
+
+    label_type = infer_product_type(label_text)
+    ocr_type = infer_product_type(text)
+    if label_type and ocr_type and not compatible_product_types(label_type, ocr_type):
+        return True
+
     corrected = match_from_text(text)
     if not corrected:
         return False

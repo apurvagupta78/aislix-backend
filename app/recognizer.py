@@ -24,7 +24,13 @@ from app.clip_embeddings import embed_pil_images
 from app.faiss_matcher import is_ready, match_embeddings_batch
 from app.learned_catalog import learn_sku, metadata_to_sku
 from app.ocr_reader import classify_with_ocr, read_packaging_text
-from app.scan_context import gpt_context_prompt, propagation_type_conflict, sub_category_blocks_brand
+from app.scan_context import (
+    gpt_context_prompt,
+    product_type_matches_sub_category,
+    propagation_type_conflict,
+    strict_subcategory_gates_enabled,
+    sub_category_blocks_brand,
+)
 
 load_dotenv()
 
@@ -437,6 +443,8 @@ def _accept_faiss_fusion(
     brand = match.get("brand") or ""
     if label_conflicts_with_tea_pack(match, ocr_text):
         return False
+    if label_conflicts_with_pack_text(match, ocr_text):
+        return False
     if sub_category_blocks_brand(
         scan_context,
         brand,
@@ -444,6 +452,29 @@ def _accept_faiss_fusion(
         product_name=match.get("product_name") or "",
     ):
         return False
+
+    sub = (scan_context or {}).get("sub_category")
+    if sub and sub != "others" and strict_subcategory_gates_enabled():
+        if not product_type_matches_sub_category(sub, match, ocr_text):
+            return False
+        if ocr_text and len(ocr_text.strip()) >= 3 and not ocr_agrees_with_label(match, ocr_text):
+            from app.scan_context import compatible_product_types, infer_product_type
+
+            label_text = " ".join(
+                [
+                    match.get("brand") or "",
+                    match.get("product_name") or "",
+                    match.get("variant") or "",
+                    match.get("sku") or "",
+                ]
+            )
+            label_type = infer_product_type(label_text)
+            if not label_type or (
+                label_type != sub and not compatible_product_types(label_type, sub)
+            ):
+                return False
+        return True
+
     if ocr_text and len(ocr_text.strip()) >= 3:
         if not ocr_agrees_with_label(match, ocr_text) and score < FAISS_HIGH_CONFIDENCE:
             return False

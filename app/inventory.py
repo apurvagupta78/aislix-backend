@@ -39,6 +39,33 @@ PRODUCT_DISPLAY_ALIASES: dict[str, str] = {
     "wafers": "Wafers",
 }
 
+VARIANT_PLACEHOLDERS = frozenset({
+    "",
+    "unknown",
+    "unidentified",
+    "unidentified sku",
+    "n/a",
+    "na",
+    "none",
+})
+
+
+def _normalize_variant_key(variant: str) -> str:
+    v = re.sub(r"\s+", " ", (variant or "").strip().lower())
+    if v in VARIANT_PLACEHOLDERS:
+        return ""
+    return v
+
+
+def _display_variant(variant: str, existing: str = "") -> str:
+    """Prefer a concrete variant string over placeholder values."""
+    if existing and _normalize_variant_key(existing):
+        return existing.strip()
+    cleaned = (variant or "").strip()
+    if _normalize_variant_key(cleaned):
+        return cleaned
+    return existing.strip() if existing else ""
+
 
 def _normalize_brand_key(brand: str, product: str = "") -> str:
     brand_l = re.sub(r"[^\w\s&']", "", brand.lower().strip())
@@ -89,6 +116,7 @@ def normalize_classified_labels(classified: list[dict]) -> list[dict]:
         brand_key = _normalize_brand_key(brand, product)
         row["brand"] = _display_brand_name(brand, brand_key)
         row["product_name"] = _display_product_name(product)
+        row["variant"] = _display_variant(row.get("variant") or "")
         normalized.append(row)
     return normalized
 
@@ -103,11 +131,12 @@ def aggregate_inventory(classified: list[dict]) -> list[dict]:
         sku = (item.get("sku") or "").strip()
         brand_key = _normalize_brand_key(brand, product)
         product_key = _normalize_product_key(product)
-        key = (brand_key, product_key, variant.lower(), sku.lower())
+        variant_key = _normalize_variant_key(variant)
+        key = (brand_key, product_key, variant_key, sku.lower())
         bucket = buckets[key]
         bucket["brand"] = _display_brand_name(brand, brand_key)
         bucket["product_name"] = _display_product_name(product)
-        bucket["variant"] = variant
+        bucket["variant"] = _display_variant(variant, bucket.get("variant") or "")
         bucket["category"] = item.get("category") or "General"
         bucket["sku"] = item.get("sku") or ""
         bucket["quantity"] += 1
