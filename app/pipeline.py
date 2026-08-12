@@ -113,35 +113,63 @@ def _detect_adaptive_boxes(image: np.ndarray) -> tuple[list, ShelfMode]:
     return boxes, mode
 
 
+def _detect_boxes_for_scan(
+    image: np.ndarray,
+    metadata: dict,
+    scan_context: dict,
+) -> tuple[list, ShelfMode, dict]:
+    """Adaptive YOLO plus optional planogram-guided gap-fill second pass."""
+    boxes, shelf_mode = _detect_adaptive_boxes(image)
+    gap_stats: dict = {}
+
+    planogram_items = metadata.get("planogram_items") or []
+    candidates: list = []
+    if planogram_items:
+        from app.planogram_guided import prepare_planogram_candidates
+
+        candidates = prepare_planogram_candidates(
+            planogram_items,
+            metadata.get("assignment_scope_type"),
+            metadata.get("assignment_scope_values") or {},
+            scan_context,
+        )
+        if candidates:
+            scan_context["planogram_mode"] = True
+            scan_context["planogram_candidates"] = candidates
+
+    if candidates and len(boxes) < len(candidates):
+        from app.planogram_gap_fill import fill_detection_gaps
+
+        boxes, gap_stats = fill_detection_gaps(
+            image,
+            boxes,
+            expected_count=len(candidates),
+        )
+        if shelf_mode == "single_row":
+            boxes = merge_boxes_by_column(boxes)
+        elif shelf_mode == "single_bin":
+            boxes = cluster_boxes_x_slots(boxes)
+
+    return boxes, shelf_mode, gap_stats
+
+
 def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata: dict | None = None) -> dict:
     started = time.time()
     scan_id = scan_id or uuid.uuid4().hex[:8]
     metadata = metadata or {}
     work_dir = None
     try:
-        boxes, shelf_mode = _detect_adaptive_boxes(image)
+        scan_context = resolve_scan_context(metadata)
+        boxes, shelf_mode, gap_stats = _detect_boxes_for_scan(image, metadata, scan_context)
         if not boxes:
             raise ValueError("No products detected in this shelf image.")
 
         records, work_dir = crop_products(image, boxes)
-        scan_context = resolve_scan_context(metadata)
         scan_context["shelf_mode"] = shelf_mode
         scan_context["shelf_layout"] = "single_row" if shelf_mode != "multi_row" else "multi_row"
         scan_category = scan_context.get("aislix_category") or metadata.get("category") or metadata.get("shelf_label")
 
         planogram_items = metadata.get("planogram_items") or []
-        if planogram_items:
-            from app.planogram_guided import prepare_planogram_candidates
-
-            candidates = prepare_planogram_candidates(
-                planogram_items,
-                metadata.get("assignment_scope_type"),
-                metadata.get("assignment_scope_values") or {},
-                scan_context,
-            )
-            if candidates:
-                scan_context["planogram_mode"] = True
-                scan_context["planogram_candidates"] = candidates
 
         classified, recognition_engine_stats = classify_records(
             records,
@@ -201,6 +229,9 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         if scan_context.get("planogram_mode"):
             metrics["planogram_guided_recognition"] = True
             metrics["planogram_candidate_count"] = len(scan_context.get("planogram_candidates") or [])
+        if gap_stats:
+            metrics.update({k: v for k, v in gap_stats.items() if k != "gap_fill_enabled"})
+            metrics["planogram_gap_fill"] = bool(gap_stats.get("gap_fill_recovered"))
         if planogram_compliance:
             metrics["planogram_compliance_percent"] = planogram_compliance.get("compliance_percent")
             metrics["planogram_summary"] = planogram_compliance.get("summary")
