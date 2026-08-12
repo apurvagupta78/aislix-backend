@@ -84,6 +84,20 @@ def test_fill_detection_gaps_recovers_mocked_box():
     assert len(merged) >= len(boxes) + 1
 
 
+def test_fill_detection_gaps_uses_synthetic_when_yolo_misses():
+    image = np.zeros((300, 700, 3), dtype=np.uint8)
+    boxes = _synthetic_row_boxes(8, skip_index=4)
+
+    with patch("app.planogram_gap_fill.detect_products") as mock_detect:
+        mock_detect.return_value = ([], 0)
+        with patch("app.planogram_gap_fill.get_boxes") as mock_boxes:
+            mock_boxes.return_value = []
+            merged, stats = fill_detection_gaps(image, boxes, expected_count=8)
+
+    assert stats["gap_fill_synthetic"] >= 1
+    assert len(merged) == 8
+
+
 def test_fill_detection_gaps_noop_without_planogram_shortfall():
     boxes = _synthetic_row_boxes(8)
     image = np.zeros((300, 700, 3), dtype=np.uint8)

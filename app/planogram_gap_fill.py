@@ -16,6 +16,11 @@ PLANOGRAM_GAP_FILL_ENABLED = os.getenv("PLANOGRAM_GAP_FILL_ENABLED", "true").low
     "true",
     "yes",
 }
+PLANOGRAM_GAP_FILL_SYNTHETIC = os.getenv("PLANOGRAM_GAP_FILL_SYNTHETIC", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 GAP_SLOT_CENTER_MAX = float(os.getenv("PLANOGRAM_GAP_SLOT_CENTER_MAX", "0.62"))
 GAP_INTERBOX_CENTER_FACTOR = float(os.getenv("PLANOGRAM_GAP_INTERBOX_CENTER_FACTOR", "1.18"))
 GAP_INTERBOX_GAP_FACTOR = float(os.getenv("PLANOGRAM_GAP_INTERBOX_GAP_FACTOR", "0.12"))
@@ -352,6 +357,52 @@ def _recover_from_row_strip(
     return recovered
 
 
+def _synthetic_box_from_region(region: np.ndarray) -> np.ndarray:
+    """Turn an empty planogram slot region into a facing box when YOLO finds nothing."""
+    x1, y1, x2, y2 = map(float, region)
+    w, h = max(x2 - x1, 1.0), max(y2 - y1, 1.0)
+    inset = 0.12
+    return np.array(
+        [x1 + w * inset, y1 + h * inset, x2 - w * inset, y2 - h * inset],
+        dtype=np.float32,
+    )
+
+
+def _overlaps_existing(box: np.ndarray, existing: list[np.ndarray], med_w: float) -> bool:
+    for other in existing:
+        ix1 = max(float(box[0]), float(other[0]))
+        ix2 = min(float(box[2]), float(other[2]))
+        if ix2 - ix1 > med_w * 0.32:
+            return True
+    return False
+
+
+def _region_recovered(region: np.ndarray, recovered: list[np.ndarray], med_w: float) -> bool:
+    rcx = (float(region[0]) + float(region[2])) / 2.0
+    for box in recovered:
+        if abs(_x_center(box) - rcx) <= med_w * 0.45:
+            return True
+    return False
+
+
+def _synthetic_slot_boxes(
+    regions: list[np.ndarray],
+    recovered: list[np.ndarray],
+    merged: list[np.ndarray],
+    med_w: float,
+) -> list[np.ndarray]:
+    """Last resort for assigned audits: crop the slot region even without a YOLO hit."""
+    synthetic: list[np.ndarray] = []
+    for region in regions:
+        if _region_recovered(region, recovered, med_w):
+            continue
+        box = _synthetic_box_from_region(region)
+        if _overlaps_existing(box, merged + synthetic, med_w):
+            continue
+        synthetic.append(box)
+    return synthetic
+
+
 def fill_detection_gaps(
     image: np.ndarray,
     boxes: list[np.ndarray],
@@ -366,6 +417,7 @@ def fill_detection_gaps(
         "gap_fill_regions": 0,
         "gap_fill_recovered": 0,
         "gap_fill_row_strip": 0,
+        "gap_fill_synthetic": 0,
     }
     if not PLANOGRAM_GAP_FILL_ENABLED or expected_count <= len(boxes):
         return boxes, stats
@@ -401,6 +453,16 @@ def fill_detection_gaps(
             merged.append(box)
             recovered.append(box)
             stats["gap_fill_row_strip"] += 1
+            stats["gap_fill_recovered"] += 1
+
+    med_w, _, _, _ = _row_metrics(merged, image_h)
+    if PLANOGRAM_GAP_FILL_SYNTHETIC and len(merged) < expected_count:
+        synthetics = _synthetic_slot_boxes(regions, recovered, merged, med_w)
+        need = expected_count - len(merged)
+        for box in synthetics[:need]:
+            merged.append(box)
+            recovered.append(box)
+            stats["gap_fill_synthetic"] += 1
             stats["gap_fill_recovered"] += 1
 
     if not recovered:
