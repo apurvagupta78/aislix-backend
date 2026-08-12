@@ -2,6 +2,18 @@
 
 FastAPI shelf-audit API: YOLO detection → FAISS catalog match → GPT Vision fallback.
 
+## Production
+
+| Service | URL |
+|---------|-----|
+| **Frontend (live)** | https://aislix.com |
+| **API (Railway)** | https://aislix-backend-production.up.railway.app |
+| **Health check** | `GET /health` |
+
+Railway `CORS_ORIGINS` must include `https://aislix.com`, `https://www.aislix.com`, and `https://app.aislix.com` (plus Lovable preview URLs for staging).
+
+Lovable secret `AISLIX_AI_API_URL` = Railway API URL above (no trailing slash).
+
 ## Local setup
 
 ```bash
@@ -25,7 +37,7 @@ uvicorn main:app --reload --port 8000
 ## Railway env vars
 
 - `OPENAI_API_KEY`
-- `CORS_ORIGINS=https://aislix.lovable.app,https://id-preview--449a1800-6064-43d4-9afe-f713a920d0d4.lovable.app`
+- `CORS_ORIGINS=https://aislix.lovable.app,https://id-preview--449a1800-6064-43d4-9afe-f713a920d0d4.lovable.app,https://app.aislix.com,https://aislix.com,https://www.aislix.com`
 - `FAISS_SIMILARITY_THRESHOLD=0.92` (default in v2 — was 0.85)
 - `GPT_MAX_FALLBACKS=80` (smart cap in v2 — was 12)
 - `RECOGNITION_V2=true` (OCR-first pipeline; set `false` to revert to v1)

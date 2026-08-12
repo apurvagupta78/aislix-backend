@@ -62,7 +62,11 @@ def on_startup():
 
 @app.get("/")
 def home():
-    return {"message": "Aislix Backend is running", "version": "1.0.0"}
+    return {
+        "message": "Aislix Backend is running",
+        "version": "1.0.0",
+        "frontend": "https://aislix.com",
+    }
 
 
 @app.get("/health")

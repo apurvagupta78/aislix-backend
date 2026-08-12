@@ -124,7 +124,7 @@ await supabase.from('organization_members').upsert({
 - Trigger: after successful upsert OR dedicated RPC
 - Use Resend (or Supabase auth invite) with:
   - Subject: "You're invited to {orgName} on Aislix"
-  - Body: role, inviter name, link `https://aislix.lovable.app/accept-invite?org={orgId}&email={email}`
+  - Body: role, inviter name, link `https://aislix.com/accept-invite?org={orgId}&email={email}`
 - On accept/login: match `invited_email` → set `user_id`, `status=active`
 
 Show **Pending invites** table: email, role, invited_at, Resend button.
