@@ -370,26 +370,41 @@ def classify_records_planogram_guided(
 ) -> tuple[list[dict], dict]:
     """Recognize crops using only planogram candidate SKUs."""
     from app.clip_embeddings import embed_pil_images
-    from app.faiss_matcher import is_ready, match_embeddings_batch
-    from app.recognizer import GPT_MAX_FALLBACKS, _unknown_label
+    from app.faiss_matcher import is_ready, match_embeddings_batch, match_embeddings_batch_topk
+    from app.recognizer import GPT_MAX_FALLBACKS, _unknown_label, recognition_v3_enabled
 
     scan_context = scan_context or {}
     candidates: list[dict] = scan_context.get("planogram_candidates") or []
     if not records or not candidates:
-        from app.recognizer import classify_records_v2
-        return classify_records_v2(records, scan_id=scan_id, scan_category=scan_category, scan_context=scan_context)
+        from app.recognizer import classify_records_v3, classify_records_v2, recognition_v3_enabled as v3_on
+
+        classify_fn = classify_records_v3 if v3_on() else classify_records_v2
+        return classify_fn(records, scan_id=scan_id, scan_category=scan_category, scan_context=scan_context)
 
     images = [Image.open(record["image_path"]).convert("RGB") for record in records]
     embeddings = embed_pil_images(images)
     classified: list[dict | None] = [None] * len(records)
     stats = {"ocr": 0, "gpt": 0, "faiss": 0, "planogram": 0, "none": 0, "gpt_calls": 0}
+    v3 = recognition_v3_enabled()
+    ocr_texts: list[str] = [read_packaging_text(img) for img in images]
 
-    pending: list[int] = []
-    ocr_texts: list[str] = [""] * len(records)
+    if v3 and is_ready():
+        topk = match_embeddings_batch_topk(embeddings)
+        for index, row_candidates in enumerate(topk):
+            for match, score in row_candidates:
+                if score < 0.78:
+                    break
+                snapped = snap_label_to_planogram(match, candidates, ocr_texts[index])
+                if snapped:
+                    snapped["confidence"] = max(snapped["confidence"], float(score) * 0.95)
+                    classified[index] = _merge_record(records[index], snapped)
+                    stats["faiss"] += 1
+                    break
 
-    for index in range(len(records)):
-        pack_text = read_packaging_text(images[index])
-        ocr_texts[index] = pack_text
+    pending: list[int] = [index for index in range(len(records)) if classified[index] is None]
+
+    for index in pending:
+        pack_text = ocr_texts[index]
 
         match = best_candidate_from_text(pack_text, candidates)
         if match:
@@ -408,9 +423,11 @@ def classify_records_planogram_guided(
             stats["ocr"] += 1
             continue
 
-        pending.append(index)
+        classified[index] = None
 
-    if pending and is_ready():
+    pending = [index for index in range(len(records)) if classified[index] is None]
+
+    if pending and is_ready() and not v3:
         pending_embeddings = embeddings[pending]
         matches = match_embeddings_batch(pending_embeddings, threshold=0.78)
         still: list[int] = []
@@ -424,6 +441,26 @@ def classify_records_planogram_guided(
                     stats["faiss"] += 1
                     continue
             still.append(index)
+        pending = still
+    elif pending and is_ready() and v3:
+        pending_embeddings = embeddings[pending]
+        topk = match_embeddings_batch_topk(pending_embeddings)
+        still: list[int] = []
+        for local_i, index in enumerate(pending):
+            snapped_label = None
+            for match, score in topk[local_i]:
+                if score < 0.78:
+                    break
+                snapped = snap_label_to_planogram(match, candidates, ocr_texts[index])
+                if snapped:
+                    snapped["confidence"] = max(snapped["confidence"], float(score) * 0.95)
+                    snapped_label = snapped
+                    break
+            if snapped_label:
+                classified[index] = _merge_record(records[index], snapped_label)
+                stats["faiss"] += 1
+            else:
+                still.append(index)
         pending = still
 
     gpt_cap = min(GPT_MAX_FALLBACKS, len(pending))

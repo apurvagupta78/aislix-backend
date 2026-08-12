@@ -17,6 +17,43 @@ INDEX_PATH = BASE_DIR / "data" / "faiss.index"
 DEFAULT_THRESHOLD = float(os.getenv("FAISS_SIMILARITY_THRESHOLD", "0.92"))
 FAISS_SEARCH_K = int(os.getenv("FAISS_SEARCH_K", "5"))
 
+
+def _entry_from_catalog(catalog: list[dict], idx: int, score: float) -> dict:
+    entry = dict(catalog[int(idx)])
+    entry["confidence"] = round(min(0.99, float(score)), 4)
+    entry["recognition_source"] = "faiss"
+    return entry
+
+
+def match_embeddings_batch_topk(
+    embeddings: np.ndarray,
+    k: int | None = None,
+) -> list[list[tuple[dict, float]]]:
+    """Return top-K FAISS catalog matches per embedding (scores descending)."""
+    if len(embeddings) == 0:
+        return []
+    index, catalog = _load()
+    vecs = np.asarray(embeddings, dtype=np.float32)
+    import faiss
+
+    faiss.normalize_L2(vecs)
+    k = min(k or FAISS_SEARCH_K, index.ntotal)
+    scores, ids = index.search(vecs, k)
+    batch: list[list[tuple[dict, float]]] = []
+    for row in range(len(vecs)):
+        row_candidates: list[tuple[dict, float]] = []
+        for idx, score in zip(ids[row], scores[row]):
+            if idx < 0:
+                continue
+            row_candidates.append((_entry_from_catalog(catalog, int(idx), float(score)), float(score)))
+        learned_match, learned_score = _match_with_learned(vecs[row], threshold=0.78)
+        if learned_match and learned_score > 0:
+            row_candidates.append((learned_match, learned_score))
+            row_candidates.sort(key=lambda item: item[1], reverse=True)
+            row_candidates = row_candidates[:k]
+        batch.append(row_candidates)
+    return batch
+
 _index: Any | None = None
 _catalog: list[dict] | None = None
 

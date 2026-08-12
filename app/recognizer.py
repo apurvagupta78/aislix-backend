@@ -1,4 +1,4 @@
-"""Product recognition v2: OCR first, GPT for ambiguous crops, strict FAISS last."""
+"""Product recognition: v3 FAISS-first, v2 OCR-first, v1 legacy."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from app.brand_dictionary import (
     reconcile_label_with_text,
 )
 from app.clip_embeddings import embed_pil_images
-from app.faiss_matcher import is_ready, match_embeddings_batch
+from app.faiss_matcher import is_ready, match_embeddings_batch, match_embeddings_batch_topk
 from app.learned_catalog import learn_sku, metadata_to_sku
 from app.ocr_reader import classify_with_ocr, read_packaging_text
 from app.scan_context import (
@@ -38,6 +38,8 @@ _client: OpenAI | None = None
 GPT_MODEL = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini")
 GPT_MAX_FALLBACKS = int(os.getenv("GPT_MAX_FALLBACKS", "80"))
 RECOGNITION_V2 = os.getenv("RECOGNITION_V2", "true").lower() in {"1", "true", "yes"}
+RECOGNITION_V3 = os.getenv("RECOGNITION_V3", "false").lower() in {"1", "true", "yes"}
+FAISS_TIE_MARGIN = float(os.getenv("FAISS_TIE_MARGIN", "0.05"))
 FAISS_THRESHOLD = float(os.getenv("FAISS_SIMILARITY_THRESHOLD", "0.92"))
 FAISS_THRESHOLD_CONTEXT = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_CONTEXT", "0.88"))
 FAISS_THRESHOLD_RETRY = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_RETRY", "0.82"))
@@ -481,6 +483,306 @@ def _accept_faiss_fusion(
     return True
 
 
+def recognition_v3_enabled() -> bool:
+    return RECOGNITION_V3
+
+
+def _brands_match(a: dict, b: dict) -> bool:
+    from app.inventory import _normalize_brand_key
+
+    ak = _normalize_brand_key(a.get("brand") or "")
+    bk = _normalize_brand_key(b.get("brand") or "")
+    return bool(ak and bk and ak == bk)
+
+
+def _ocr_disambiguate(
+    candidates: list[tuple[dict, float]],
+    ocr_text: str,
+    scan_category: str | None,
+    scan_context: dict | None,
+) -> dict | None:
+    """Pick among FAISS top-K using OCR when scores are close or conflicting."""
+    if not candidates:
+        return None
+    text_match = match_from_text(ocr_text) if ocr_text else None
+    best_match: dict | None = None
+    best_score = -1.0
+    for match, score in candidates:
+        if not _accept_faiss_match(match, scan_category, scan_context=scan_context):
+            continue
+        if ocr_text and (
+            label_conflicts_with_tea_pack(match, ocr_text)
+            or label_conflicts_with_pack_text(match, ocr_text)
+        ):
+            continue
+        bonus = 0.0
+        if ocr_text and ocr_agrees_with_label(match, ocr_text):
+            bonus += 0.08
+        if text_match and _brands_match(match, text_match):
+            bonus += 0.15
+        combined = score + bonus
+        if combined > best_score:
+            best_score = combined
+            best_match = match
+    if best_match is not None:
+        result = dict(best_match)
+        result["confidence"] = round(min(0.99, best_score), 4)
+        result["recognition_source"] = "faiss+ocr"
+        return result
+    if text_match and _is_valid_label(text_match) and _accept_ocr_label(text_match, scan_context):
+        text_match = dict(text_match)
+        text_match["recognition_source"] = "ocr"
+        return text_match
+    return None
+
+
+def _resolve_faiss_v3(
+    candidates: list[tuple[dict, float]],
+    ocr_text: str,
+    scan_category: str | None,
+    scan_context: dict | None,
+    threshold: float | None = None,
+) -> dict | None:
+    """Accept FAISS top-1 or OCR-disambiguate when margin is tight or OCR conflicts."""
+    if not candidates:
+        return None
+    faiss_cutoff = threshold if threshold is not None else _faiss_threshold(scan_context)
+    match, score = candidates[0]
+    second_score = candidates[1][1] if len(candidates) > 1 else 0.0
+    margin = score - second_score
+
+    if not _accept_faiss_match(match, scan_category, scan_context=scan_context):
+        return _ocr_disambiguate(candidates, ocr_text, scan_category, scan_context)
+
+    if ocr_text and (
+        label_conflicts_with_tea_pack(match, ocr_text)
+        or label_conflicts_with_pack_text(match, ocr_text)
+    ):
+        dis = _ocr_disambiguate(candidates, ocr_text, scan_category, scan_context)
+        if dis:
+            return dis
+        text_match = match_from_text(ocr_text)
+        if text_match and _is_valid_label(text_match) and _accept_ocr_label(text_match, scan_context):
+            text_match = dict(text_match)
+            text_match["recognition_source"] = "ocr"
+            return text_match
+        return None
+
+    if sub_category_blocks_brand(
+        scan_context,
+        match.get("brand") or "",
+        ocr_text,
+        product_name=match.get("product_name") or "",
+    ):
+        return _ocr_disambiguate(candidates, ocr_text, scan_category, scan_context)
+
+    if score >= FAISS_HIGH_CONFIDENCE:
+        result = dict(match)
+        result["confidence"] = round(min(0.99, score), 4)
+        result["recognition_source"] = match.get("recognition_source") or "faiss"
+        return result
+
+    if score >= faiss_cutoff:
+        if margin >= FAISS_TIE_MARGIN:
+            if not ocr_text or len(ocr_text.strip()) < 3 or ocr_agrees_with_label(match, ocr_text):
+                result = dict(match)
+                result["confidence"] = round(min(0.99, score), 4)
+                result["recognition_source"] = match.get("recognition_source") or "faiss"
+                return result
+            return _ocr_disambiguate(candidates, ocr_text, scan_category, scan_context)
+        return _ocr_disambiguate(candidates, ocr_text, scan_category, scan_context) or None
+
+    if score >= FAISS_THRESHOLD_RETRY:
+        return _ocr_disambiguate(candidates, ocr_text, scan_category, scan_context)
+
+    return None
+
+
+def _reconcile_conflicts_only(row: dict, pack_text: str) -> dict:
+    """Adjust label only when pack OCR clearly conflicts with the assigned SKU."""
+    if not pack_text or len(pack_text.strip()) < 3:
+        return row
+    if label_conflicts_with_tea_pack(row, pack_text) or label_conflicts_with_pack_text(row, pack_text):
+        return reconcile_label_with_text(row, pack_text)
+    if not ocr_agrees_with_label(row, pack_text, strict=True):
+        text_match = match_from_text(pack_text)
+        if text_match and _is_valid_label(text_match) and not _brands_match(row, text_match):
+            return reconcile_label_with_text(row, pack_text)
+    return row
+
+
+def classify_records_v3(
+    records: list[dict],
+    scan_id: str | None = None,
+    scan_category: str | None = None,
+    scan_context: dict | None = None,
+) -> tuple[list[dict], dict]:
+    """FAISS primary → propagate → OCR tie-break → GPT → low FAISS → propagate → unknown."""
+    if not records:
+        return [], {}
+
+    images = [Image.open(record["image_path"]).convert("RGB") for record in records]
+    embeddings = embed_pil_images(images)
+    classified: list[dict | None] = [None] * len(records)
+    stats = {"ocr": 0, "gpt": 0, "faiss": 0, "learned": 0, "propagate": 0, "none": 0}
+    learned_new = 0
+    ocr_texts: list[str] = [read_packaging_text(img) for img in images]
+    faiss_cutoff = _faiss_threshold(scan_context)
+
+    def _count_source(label: dict) -> None:
+        source = label.get("recognition_source") or "faiss"
+        if source == "learned":
+            stats["learned"] += 1
+        elif source.startswith("ocr"):
+            stats["ocr"] += 1
+        else:
+            stats["faiss"] += 1
+
+    def _apply_faiss_v3(indices: list[int], threshold: float | None = None) -> list[int]:
+        if not indices or not is_ready():
+            return indices
+        topk = match_embeddings_batch_topk(embeddings[indices])
+        still: list[int] = []
+        for local_idx, candidates in enumerate(topk):
+            global_idx = indices[local_idx]
+            resolved = _resolve_faiss_v3(
+                candidates,
+                ocr_texts[global_idx],
+                scan_category,
+                scan_context,
+                threshold=threshold,
+            )
+            if resolved:
+                merged = _merge_label(records[global_idx], resolved)
+                merged["_index"] = global_idx
+                _count_source(resolved)
+                classified[global_idx] = merged
+            else:
+                still.append(global_idx)
+        return still
+
+    pending = list(range(len(records)))
+
+    pending = _apply_faiss_v3(pending, faiss_cutoff)
+    pending = _apply_faiss_v3(pending, FAISS_THRESHOLD_RETRY)
+
+    for _ in range(2):
+        if not pending:
+            break
+        pending, round_prop = _propagate_shelf_labels(
+            records,
+            classified,
+            embeddings,
+            images,
+            pending,
+            scan_context=scan_context,
+            ocr_texts=ocr_texts,
+            use_ocr=True,
+        )
+        stats["propagate"] += round_prop
+
+    ocr_pending: list[int] = []
+    for index in pending:
+        pack_text = ocr_texts[index]
+        ocr_label = classify_with_ocr(images[index], raw_text=pack_text)
+        if not ocr_label or not _is_valid_label(ocr_label):
+            ocr_label = match_from_text(pack_text)
+        if ocr_label and _is_valid_label(ocr_label) and _accept_ocr_label(ocr_label, scan_context):
+            if sub_category_blocks_brand(
+                scan_context,
+                ocr_label.get("brand") or "",
+                pack_text,
+                product_name=ocr_label.get("product_name") or "",
+            ):
+                ocr_pending.append(index)
+                continue
+            row = _merge_label(records[index], ocr_label)
+            row["_index"] = index
+            classified[index] = row
+            stats["ocr"] += 1
+            if _should_learn(ocr_label) and learn_sku(embeddings[index], ocr_label, scan_id=scan_id):
+                learned_new += 1
+            continue
+        ocr_pending.append(index)
+
+    pending = ocr_pending
+    for _ in range(2):
+        if not pending:
+            break
+        pending, round_prop = _propagate_shelf_labels(
+            records,
+            classified,
+            embeddings,
+            images,
+            pending,
+            scan_context=scan_context,
+            ocr_texts=ocr_texts,
+            use_ocr=True,
+        )
+        stats["propagate"] += round_prop
+
+    gpt_cap = _smart_gpt_cap(len(pending))
+    gpt_used = 0
+    faiss_retry_queue: list[int] = []
+    pending.sort(key=lambda idx: (0 if ocr_texts[idx].strip() else 1, idx))
+    for index in pending:
+        if gpt_used < gpt_cap:
+            label = classify_with_gpt(
+                images[index],
+                ocr_hint=ocr_texts[index],
+                scan_context=scan_context,
+            )
+            gpt_used += 1
+            if _is_valid_label(label):
+                row = _merge_label(records[index], label)
+                row["_index"] = index
+                classified[index] = row
+                stats["gpt"] += 1
+                if _should_learn(label) and learn_sku(embeddings[index], label, scan_id=scan_id):
+                    learned_new += 1
+                continue
+        faiss_retry_queue.append(index)
+
+    faiss_retry_queue = _apply_faiss_v3(faiss_retry_queue, 0.78)
+
+    for _ in range(2):
+        if not faiss_retry_queue:
+            break
+        faiss_retry_queue, propagated = _propagate_shelf_labels(
+            records,
+            classified,
+            embeddings,
+            images,
+            faiss_retry_queue,
+            scan_context=scan_context,
+            ocr_texts=ocr_texts,
+            use_ocr=True,
+        )
+        stats["propagate"] += propagated
+
+    for index in faiss_retry_queue:
+        if classified[index] is None:
+            classified[index] = _merge_label(records[index], _unknown_label())
+            stats["none"] += 1
+
+    if learned_new:
+        print(f"Learned {learned_new} new SKU(s) (scan={scan_id})")
+
+    for index, row in enumerate(classified):
+        if row:
+            classified[index] = _reconcile_conflicts_only(row, ocr_texts[index])
+
+    stats["gpt_calls"] = gpt_used
+    stats["unknown_count"] = stats["none"]
+    output: list[dict] = []
+    for row in classified:
+        if not row:
+            continue
+        cleaned = {k: v for k, v in row.items() if k != "_index"}
+        output.append(cleaned)
+    return output, stats
+
+
 def classify_records_v2(
     records: list[dict],
     scan_id: str | None = None,
@@ -673,6 +975,43 @@ def classify_records(
     scan_category: str | None = None,
     scan_context: dict | None = None,
 ) -> tuple[list[dict], dict]:
+    if RECOGNITION_V3:
+        if scan_context and scan_context.get("planogram_candidates"):
+            from app.planogram_guided import classify_records_planogram_guided
+
+            classified, stats = classify_records_planogram_guided(
+                records,
+                scan_id=scan_id,
+                scan_category=scan_category,
+                scan_context=scan_context,
+            )
+            print(
+                "Recognition v3 planogram-guided:",
+                f"planogram={stats.get('planogram', 0)}",
+                f"faiss={stats.get('faiss', 0)}",
+                f"ocr={stats.get('ocr', 0)}",
+                f"gpt={stats.get('gpt', 0)}",
+                f"unknown={stats.get('none', 0)}",
+                f"candidates={stats.get('planogram_candidates', 0)}",
+            )
+            return classified, stats
+        classified, stats = classify_records_v3(
+            records,
+            scan_id=scan_id,
+            scan_category=scan_category,
+            scan_context=scan_context,
+        )
+        print(
+            "Recognition v3:",
+            f"faiss={stats.get('faiss', 0)}",
+            f"ocr={stats.get('ocr', 0)}",
+            f"gpt={stats.get('gpt', 0)}",
+            f"learned={stats.get('learned', 0)}",
+            f"propagate={stats.get('propagate', 0)}",
+            f"unknown={stats.get('none', 0)}",
+            f"gpt_calls={stats.get('gpt_calls', 0)}",
+        )
+        return classified, stats
     if RECOGNITION_V2:
         if scan_context and scan_context.get("planogram_candidates"):
             from app.planogram_guided import classify_records_planogram_guided
