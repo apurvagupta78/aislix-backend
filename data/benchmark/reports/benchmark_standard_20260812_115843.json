@@ -1,0 +1,19 @@
+{
+  "mode": "standard",
+  "generated_at": "2026-08-12T11:58:43.862167+00:00",
+  "iou_threshold": 0.5,
+  "summary": {
+    "cases": 0
+  },
+  "cases": [],
+  "skipped": [
+    {
+      "id": "shampoo_a1z",
+      "reason": "missing image: C:\\Users\\Apaar\\PycharmProjects\\aislix-backend\\data\\benchmark\\images\\shampoo_a1z.jpg"
+    },
+    {
+      "id": "tea_a1s",
+      "reason": "missing image: C:\\Users\\Apaar\\PycharmProjects\\aislix-backend\\data\\benchmark\\images\\tea_a1s.jpg"
+    }
+  ]
+}

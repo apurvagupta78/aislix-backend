@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "description": "Held-out Indian shelf benchmark for facing count + SKU ID. Add phone photos under images/ and box labels under facings[].box [x1,y1,x2,y2].",
+  "cases": [
+    {
+      "id": "shampoo_a1z",
+      "location": "A-1-Z",
+      "category": "Personal Care · Shampoo",
+      "image": "images/shampoo_a1z.jpg",
+      "expected_facing_count": 8,
+      "notes": "8-SKU single row; TRESemmé dark bottle 2nd from left is a hard detection case.",
+      "facings": []
+    },
+    {
+      "id": "tea_a1s",
+      "location": "A-1-S",
+      "category": "Beverages · Tea",
+      "image": "images/tea_a1s.jpg",
+      "expected_facing_count": 7,
+      "notes": "7 tea cartons; Taj Maharaja (black) and Vahdam (dark green) often missed.",
+      "facings": []
+    }
+  ]
+}

@@ -20,11 +20,10 @@ from app.detector import (
     YOLO_CONF_SINGLE_ROW,
     YOLO_CONF_SINGLE_ROW_RETRY,
     crop_products,
-    detect_products,
-    get_boxes,
     load_image_bytes,
     load_image_from_url,
 )
+from app.sahi_detector import detection_mode_enabled, run_detection
 from app.facing_filter import cluster_boxes_x_slots, filter_nested_facings, merge_boxes_by_column
 from app.shelf_layout import ShelfMode, detect_shelf_mode
 from app.inventory import aggregate_inventory, inventory_to_api_products, normalize_classified_labels
@@ -82,35 +81,35 @@ def _recognition_stats(classified: list[dict]) -> dict:
     }
 
 
-def _detect_adaptive_boxes(image: np.ndarray) -> tuple[list, ShelfMode]:
+def _detect_adaptive_boxes(image: np.ndarray) -> tuple[list, ShelfMode, dict]:
     """Pick YOLO confidence from shelf mode — close-up bin vs rack."""
     image_h, image_w = image.shape[:2]
-    max_x = image_w
+    detection_stats: dict = {"detection_mode": "sahi" if detection_mode_enabled() else "standard"}
 
-    probe_results, pad_x = detect_products(image, conf=YOLO_CONF_MULTI_ROW)
-    probe_boxes = get_boxes(probe_results, pad_x=pad_x, max_x=max_x)
+    probe_boxes, probe_stats = run_detection(image, conf=YOLO_CONF_MULTI_ROW)
+    detection_stats.update(probe_stats)
     mode = detect_shelf_mode(probe_boxes, image_h, image_w)
 
     if mode == "single_bin":
         conf = YOLO_CONF_SINGLE_BIN
-        results, pad_x = detect_products(image, conf=conf)
-        boxes = get_boxes(results, pad_x=pad_x, max_x=max_x)
+        boxes, pass_stats = run_detection(image, conf=conf)
+        detection_stats.update(pass_stats)
         if len(boxes) > 10:
-            results, pad_x = detect_products(image, conf=YOLO_CONF_SINGLE_BIN_RETRY)
-            boxes = get_boxes(results, pad_x=pad_x, max_x=max_x)
+            boxes, retry_stats = run_detection(image, conf=YOLO_CONF_SINGLE_BIN_RETRY)
+            detection_stats.update(retry_stats)
         boxes = cluster_boxes_x_slots(boxes)
     elif mode == "single_row":
         conf = YOLO_CONF_SINGLE_ROW
-        results, pad_x = detect_products(image, conf=conf)
-        boxes = get_boxes(results, pad_x=pad_x, max_x=max_x)
+        boxes, pass_stats = run_detection(image, conf=conf)
+        detection_stats.update(pass_stats)
         if len(boxes) > 12:
-            results, pad_x = detect_products(image, conf=YOLO_CONF_SINGLE_ROW_RETRY)
-            boxes = get_boxes(results, pad_x=pad_x, max_x=max_x)
+            boxes, retry_stats = run_detection(image, conf=YOLO_CONF_SINGLE_ROW_RETRY)
+            detection_stats.update(retry_stats)
         boxes = merge_boxes_by_column(boxes)
     else:
         boxes = merge_boxes_by_column(probe_boxes)
 
-    return boxes, mode
+    return boxes, mode, detection_stats
 
 
 def _detect_boxes_for_scan(
@@ -119,8 +118,8 @@ def _detect_boxes_for_scan(
     scan_context: dict,
 ) -> tuple[list, ShelfMode, dict]:
     """Adaptive YOLO plus optional planogram-guided gap-fill second pass."""
-    boxes, shelf_mode = _detect_adaptive_boxes(image)
-    gap_stats: dict = {}
+    boxes, shelf_mode, detection_stats = _detect_adaptive_boxes(image)
+    gap_stats: dict = dict(detection_stats)
 
     planogram_items = metadata.get("planogram_items") or []
     candidates: list = []
@@ -232,6 +231,10 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         if gap_stats:
             metrics.update({k: v for k, v in gap_stats.items() if k != "gap_fill_enabled"})
             metrics["planogram_gap_fill"] = bool(gap_stats.get("gap_fill_recovered"))
+            if gap_stats.get("sahi_enabled"):
+                metrics["detection_mode"] = "sahi"
+            elif gap_stats.get("detection_mode"):
+                metrics["detection_mode"] = gap_stats["detection_mode"]
         if planogram_compliance:
             metrics["planogram_compliance_percent"] = planogram_compliance.get("compliance_percent")
             metrics["planogram_summary"] = planogram_compliance.get("summary")

@@ -47,6 +47,8 @@ uvicorn main:app --reload --port 8000
 - `LEARN_MIN_CONFIDENCE=0.7` (only OCR/GPT labels above this are learned)
 - `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (optional — for Supabase-backed learned SKU sync; Lovable can persist without these)
 - `LEARNED_CATALOG_BUCKET=catalog-data` (optional — Supabase storage bucket name)
+- `DETECTION_MODE=standard` (set to `sahi` for slicing-aided tiled YOLO — see `data/benchmark/README.md`)
+- `SAHI_TILE_SIZE=640` / `SAHI_OVERLAP_RATIO=0.25` (optional SAHI tuning)
 
 ### RetailKLIP on Railway (bundled in Docker)
 
