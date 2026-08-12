@@ -7,10 +7,10 @@ import base64
 import cv2
 import numpy as np
 
-from app.report_generator import generate_annotated_image, generate_pdf_bytes
+from app.report_generator import encode_annotated_image_bytes, generate_annotated_image, generate_pdf_bytes
 
 
-def test_pdf_includes_annotated_shelf_image():
+def test_pdf_uses_same_jpeg_bytes_as_download():
     image = np.full((240, 320, 3), 255, dtype=np.uint8)
     classified = [
         {
@@ -24,6 +24,7 @@ def test_pdf_includes_annotated_shelf_image():
         }
     ]
     annotated = generate_annotated_image(image, classified)
+    jpeg_bytes = encode_annotated_image_bytes(annotated)
     metrics = {
         "total_products": 1,
         "unique_skus": 1,
@@ -37,11 +38,12 @@ def test_pdf_includes_annotated_shelf_image():
     }
 
     pdf_without = base64.b64decode(
-        generate_pdf_bytes("scan-test", metrics, [], [], [], annotated_image=None)
+        generate_pdf_bytes("scan-test", metrics, [], [], [], annotated_jpeg=None)
     )
     pdf_with = base64.b64decode(
-        generate_pdf_bytes("scan-test", metrics, [], [], [], annotated_image=annotated)
+        generate_pdf_bytes("scan-test", metrics, [], [], [], annotated_jpeg=jpeg_bytes)
     )
 
     assert pdf_with.startswith(b"%PDF")
     assert len(pdf_with) > len(pdf_without) + 5000
+    assert jpeg_bytes[:2] == b"\xff\xd8"

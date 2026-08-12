@@ -16,7 +16,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image as RLImage
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.scan_context import COMPLIANCE_ALERT_INTERPRETATION, COMPLIANCE_ALERT_TITLE
 
@@ -97,6 +97,15 @@ def generate_annotated_image(image: np.ndarray, classified: list[dict]) -> np.nd
     return annotated
 
 
+def encode_annotated_image_bytes(annotated: np.ndarray, *, quality: int = 95) -> bytes:
+    """Encode annotated shelf image once — shared by download JPEG and PDF embed."""
+    rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+    ok, encoded = cv2.imencode(".jpg", rgb, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    if not ok:
+        raise ValueError("Could not encode annotated shelf image.")
+    return encoded.tobytes()
+
+
 def generate_csv_bytes(inventory: list[dict]) -> bytes:
     buffer = io.StringIO()
     fieldnames = [
@@ -143,20 +152,20 @@ def _logo_flowable(logo_path, width=1.85 * inch):
     return RLImage(str(logo_path), width=width, height=height)
 
 
-def _annotated_image_flowable(annotated: np.ndarray, max_width: float = 6.5 * inch):
-    """Scale annotated shelf JPEG to fit an A4 page width."""
-    rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
-    ok, encoded = cv2.imencode(".jpg", rgb, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
-    if not ok:
-        raise ValueError("Could not encode annotated shelf image for PDF.")
-    bio = io.BytesIO(encoded.tobytes())
+def _annotated_image_flowable(
+    jpeg_bytes: bytes,
+    *,
+    max_width: float = 6.9 * inch,
+    max_height: float = 9.2 * inch,
+):
+    """Embed the exact annotated JPEG bytes (no re-encode) scaled to fit one PDF page."""
+    bio = io.BytesIO(jpeg_bytes)
     reader = ImageReader(bio)
     img_w, img_h = reader.getSize()
     if not img_w or not img_h:
         raise ValueError("Annotated shelf image has invalid dimensions.")
     width = max_width
     height = width * (img_h / float(img_w))
-    max_height = 8.0 * inch
     if height > max_height:
         height = max_height
         width = height * (img_w / float(img_h))
@@ -175,6 +184,7 @@ def generate_pdf_bytes(
     subcategory_mismatches: list[dict] | None = None,
     executive_summary: str | None = None,
     logo_path=None,
+    annotated_jpeg: bytes | None = None,
     annotated_image: np.ndarray | None = None,
 ) -> str:
     buffer = io.BytesIO()
@@ -227,17 +237,8 @@ def generate_pdf_bytes(
     story.append(table)
     story.append(Spacer(1, 0.2 * inch))
 
-    if annotated_image is not None and annotated_image.size > 0:
-        story.append(Paragraph("<b>Annotated Shelf Image</b>", styles["Heading3"]))
-        story.append(
-            Paragraph(
-                "<i>Detections rendered by the vision model (green = OK, red = mismatch).</i>",
-                styles["Normal"],
-            )
-        )
-        story.append(Spacer(1, 0.08 * inch))
-        story.append(_annotated_image_flowable(annotated_image))
-        story.append(Spacer(1, 0.2 * inch))
+    if annotated_jpeg is None and annotated_image is not None and annotated_image.size > 0:
+        annotated_jpeg = encode_annotated_image_bytes(annotated_image)
 
     if compliance_alerts:
         story.append(Paragraph(f"<b>{COMPLIANCE_ALERT_TITLE}</b>", styles["Heading3"]))
@@ -340,6 +341,18 @@ def generate_pdf_bytes(
             story.append(Paragraph(f"• <b>{title}</b>{suffix}", styles["Normal"]))
             if detail:
                 story.append(Paragraph(f"&nbsp;&nbsp;{detail}", styles["Normal"]))
+
+    if annotated_jpeg:
+        story.append(PageBreak())
+        story.append(Paragraph("<b>Annotated Shelf Image</b>", styles["Heading3"]))
+        story.append(
+            Paragraph(
+                "<i>Detections rendered by the vision model (green = OK, red = mismatch).</i>",
+                styles["Normal"],
+            )
+        )
+        story.append(Spacer(1, 0.08 * inch))
+        story.append(_annotated_image_flowable(annotated_jpeg))
 
     doc.build(story)
     return base64.b64encode(buffer.getvalue()).decode("utf-8")

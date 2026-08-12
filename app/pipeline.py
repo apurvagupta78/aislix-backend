@@ -37,7 +37,7 @@ from app.metrics import (
     executive_summary,
 )
 from app.recognizer import classify_records
-from app.report_generator import generate_annotated_image, generate_csv_bytes, generate_pdf_bytes
+from app.report_generator import generate_annotated_image, generate_csv_bytes, generate_pdf_bytes, encode_annotated_image_bytes
 from app.scan_context import resolve_scan_context
 from app.subcategory_compliance import (
     analyze_subcategory_compliance,
@@ -210,8 +210,8 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         learned_updates = pop_learned_updates()
 
         annotated = generate_annotated_image(image, classified)
-        _, encoded = cv2.imencode(".jpg", annotated)
-        annotated_b64 = base64.b64encode(encoded.tobytes()).decode("utf-8")
+        annotated_jpeg = encode_annotated_image_bytes(annotated)
+        annotated_b64 = base64.b64encode(annotated_jpeg).decode("utf-8")
 
         pdf_b64 = generate_pdf_bytes(
             scan_id=scan_id,
@@ -224,7 +224,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             subcategory_mismatches=subcategory_mismatches,
             executive_summary=summary_text,
             logo_path=LOGO_PATH if LOGO_PATH.exists() else None,
-            annotated_image=annotated,
+            annotated_jpeg=annotated_jpeg,
         )
         csv_b64 = base64.b64encode(generate_csv_bytes(inventory)).decode("utf-8")
 
