@@ -224,6 +224,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             subcategory_mismatches=subcategory_mismatches,
             executive_summary=summary_text,
             logo_path=LOGO_PATH if LOGO_PATH.exists() else None,
+            annotated_image=annotated,
         )
         csv_b64 = base64.b64encode(generate_csv_bytes(inventory)).decode("utf-8")
 

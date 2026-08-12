@@ -143,6 +143,27 @@ def _logo_flowable(logo_path, width=1.85 * inch):
     return RLImage(str(logo_path), width=width, height=height)
 
 
+def _annotated_image_flowable(annotated: np.ndarray, max_width: float = 6.5 * inch):
+    """Scale annotated shelf JPEG to fit an A4 page width."""
+    rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+    ok, encoded = cv2.imencode(".jpg", rgb, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+    if not ok:
+        raise ValueError("Could not encode annotated shelf image for PDF.")
+    bio = io.BytesIO(encoded.tobytes())
+    reader = ImageReader(bio)
+    img_w, img_h = reader.getSize()
+    if not img_w or not img_h:
+        raise ValueError("Annotated shelf image has invalid dimensions.")
+    width = max_width
+    height = width * (img_h / float(img_w))
+    max_height = 8.0 * inch
+    if height > max_height:
+        height = max_height
+        width = height * (img_w / float(img_h))
+    bio.seek(0)
+    return RLImage(bio, width=width, height=height)
+
+
 def generate_pdf_bytes(
     scan_id: str,
     metrics: dict,
@@ -154,6 +175,7 @@ def generate_pdf_bytes(
     subcategory_mismatches: list[dict] | None = None,
     executive_summary: str | None = None,
     logo_path=None,
+    annotated_image: np.ndarray | None = None,
 ) -> str:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
@@ -204,6 +226,18 @@ def generate_pdf_bytes(
     )
     story.append(table)
     story.append(Spacer(1, 0.2 * inch))
+
+    if annotated_image is not None and annotated_image.size > 0:
+        story.append(Paragraph("<b>Annotated Shelf Image</b>", styles["Heading3"]))
+        story.append(
+            Paragraph(
+                "<i>Detections rendered by the vision model (green = OK, red = mismatch).</i>",
+                styles["Normal"],
+            )
+        )
+        story.append(Spacer(1, 0.08 * inch))
+        story.append(_annotated_image_flowable(annotated_image))
+        story.append(Spacer(1, 0.2 * inch))
 
     if compliance_alerts:
         story.append(Paragraph(f"<b>{COMPLIANCE_ALERT_TITLE}</b>", styles["Heading3"]))
