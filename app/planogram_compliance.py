@@ -7,6 +7,7 @@ from typing import Any
 
 from app.inventory import _normalize_brand_key
 from app.planogram_csv import build_match_key
+from app.scan_context import normalize_sub_category_id, sub_categories_match
 
 ISSUE_CORRECT = "correct"
 ISSUE_MISSING = "missing"
@@ -105,8 +106,15 @@ def filter_planogram_by_scope(
         return [i for i in items if _norm(i.get("category") or "") == cat or cat in _norm(i.get("category") or "")]
 
     if scope_type == "sub_category":
-        sub = _norm(scope_values.get("sub_category") or scan_context.get("sub_category") or "")
-        return [i for i in items if _norm(i.get("sub_category") or "") == sub]
+        sub = normalize_sub_category_id(
+            scope_values.get("sub_category") or scan_context.get("sub_category") or "",
+            scan_context.get("aislix_category"),
+        )
+        cat_name = scan_context.get("aislix_category")
+        return [
+            i for i in items
+            if sub_categories_match(i.get("sub_category"), sub, cat_name)
+        ]
 
     if scope_type == "location":
         aisle = _norm(scope_values.get("aisle") or scope_values.get("location") or scan_context.get("shelf_label") or "")
@@ -256,9 +264,14 @@ def compare_planogram(
         act_product = actual.get("product_name") or actual.get("name") or ""
 
         wrong_cat = False
-        exp_sub = _norm(expected.get("sub_category") or "")
-        act_sub = _norm(scan_context.get("sub_category") or actual.get("sub_category") or "")
-        if exp_sub and act_sub and exp_sub != act_sub:
+        cat_name = (scan_context or {}).get("aislix_category") or expected.get("category")
+        exp_sub = expected.get("sub_category") or ""
+        act_sub = (
+            (scan_context or {}).get("sub_category")
+            or actual.get("sub_category")
+            or ""
+        )
+        if exp_sub and act_sub and not sub_categories_match(exp_sub, act_sub, cat_name):
             wrong_cat = True
 
         wrong_loc_row = _wrong_location_check(actual, full_store, current_aisle)

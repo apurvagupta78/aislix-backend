@@ -174,6 +174,81 @@ def test_qty_over_expected_is_mismatch():
     assert result["lines"][0]["actual_qty"] == 2
 
 
+def test_sub_categories_match_across_all_label_and_id_formats():
+    from app.scan_context import sub_categories_match
+
+    pairs = [
+        ("ice_cream", "Ice cream"),
+        ("soft_drinks", "Soft drinks"),
+        ("tea", "Tea"),
+        ("shampoo", "Shampoo"),
+        ("hair_fall_control", "Hair Fall Control"),  # unknown → slug match
+        ("frozen_vegetables", "Frozen vegetables"),
+    ]
+    for a, b in pairs:
+        assert sub_categories_match(a, b), f"{a!r} should match {b!r}"
+
+
+def test_planogram_tea_label_with_tea_id_scan_context():
+    expected = [{
+        "brand": "Tata",
+        "product_name": "Tea Premium",
+        "expected_qty": 1,
+        "sub_category": "Tea",
+        "category": "Beverages",
+        "location": "A-1-S",
+    }]
+    inventory = [{"brand": "Tata", "product_name": "Tea Premium", "quantity": 1}]
+    result = compare_planogram(
+        expected,
+        inventory,
+        scan_context={"sub_category": "tea", "aislix_category": "Beverages", "shelf_label": "A-1-S"},
+    )
+    assert result["lines"][0]["issue_type"] == ISSUE_CORRECT
+
+
+def test_ice_cream_subcategory_label_matches_slug():
+    """Planogram rows use label 'Ice cream'; scan sends sub_category id ice_cream."""
+    expected = [{
+        "brand": "Amul",
+        "product_name": "Kulfi",
+        "expected_qty": 1,
+        "sub_category": "Ice cream",
+        "category": "Frozen Foods & Ice Cream",
+        "location": "A-1-S",
+    }]
+    inventory = [{"brand": "Amul", "product_name": "Kulfi", "quantity": 1}]
+    result = compare_planogram(
+        expected,
+        inventory,
+        scan_context={"sub_category": "ice_cream", "shelf_label": "A-1-S"},
+    )
+    assert result["lines"][0]["issue_type"] == ISSUE_CORRECT
+    assert result["compliance_percent"] == 100.0
+
+
+def test_ice_cream_subcategory_compliance_not_cross_aisle():
+    from app.subcategory_compliance import analyze_subcategory_compliance
+
+    classified = [{
+        "brand": "Amul",
+        "product_name": "Kulfi",
+        "category": "Frozen Foods & Ice Cream",
+        "confidence": 0.9,
+        "x1": 0, "y1": 0, "x2": 10, "y2": 10,
+    }]
+    ctx = {
+        "aislix_category": "Frozen Foods & Ice Cream",
+        "sub_category": "ice_cream",
+        "sub_category_label": "Ice cream",
+        "catalog_categories": ["dairy", "general"],
+        "brand_hints": {"amul", "baskin robbins", "brooklyn"},
+    }
+    out = analyze_subcategory_compliance(classified, ctx)
+    assert out["misplaced_facings"] == 0
+    assert classified[0].get("subcategory_match") is True
+
+
 def test_shampoo_row_realistic_inventory_compliance():
     """Simulate Hello's scan inventory vs 8-bottle fixture — should beat 13%."""
     expected = _load_fixture_items()

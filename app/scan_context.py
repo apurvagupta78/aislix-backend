@@ -54,6 +54,10 @@ AISLE_BRAND_HINTS: dict[str, set[str]] = {
     "dairy & chilled": {
         "amul", "mother dairy", "nestle", "britannia", "go", "epigamia", "yakult", "sofit",
     },
+    "frozen foods & ice cream": {
+        "amul", "baskin robbins", "brooklyn", "kwality", "walls", "havmor", "vadilal",
+        "cream bell", "go", "mother dairy",
+    },
     "grocery & staples": {
         "india gate", "fortune", "saffola", "aashirvaad", "pillsbury", "mdh", "everest",
         "tata sampann", "patanjali", "24 mantra",
@@ -217,6 +221,12 @@ SUB_CATEGORY_BRAND_HINTS: dict[str, dict[str, set[str]]] = {
         "soft_drinks": {"coca cola", "pepsi", "sprite", "fanta", "mirinda", "7up", "mountain dew"},
         "juices": {"real", "tropicana", "paper boat", "b natural", "minute maid", "frooti", "maaza"},
     },
+    "frozen foods & ice cream": {
+        "ice_cream": {
+            "amul", "baskin robbins", "brooklyn", "kwality", "walls", "havmor", "vadilal",
+            "cream bell", "go", "mother dairy",
+        },
+    },
 }
 
 # Product-type keywords for sub-category inference (compliance / mismatch detection).
@@ -234,6 +244,7 @@ SUB_CATEGORY_PRODUCT_KEYWORDS: dict[str, list[str]] = {
     "soft_drinks": ["cola", "coke", "pepsi", "sprite", "fanta", "mirinda", "soft drink", "soda"],
     "juices": ["juice", "mango drink", "fruit drink", "nectar"],
     "water": ["mineral water", "packaged water", "drinking water"],
+    "ice_cream": ["ice cream", "kulfi", "funwich", "frozen dessert", "sorbet", "gelato", "cone", "sandwich"],
     "energy_drinks": ["energy drink", "red bull", "monster"],
     "sports_drinks": ["sports drink", "electrolyte", "isotonic"],
     "detergent": ["detergent", "washing powder", "laundry"],
@@ -427,6 +438,7 @@ COMPLIANCE_ALERT_INTERPRETATION = "Likely Putaway / Shelf Placement Violation"
 
 _categories: list[dict] | None = None
 _name_index: dict[str, dict] | None = None
+_subcategory_index: dict[str, str] | None = None
 
 
 def _normalize_key(text: str) -> str:
@@ -437,19 +449,87 @@ def _slug_key(text: str) -> str:
     return re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", text.lower().strip())).strip("_")
 
 
+def _index_subcategories() -> dict[str, str]:
+    """Map sub-category ids, labels, and slug variants → canonical subcategory id."""
+    index: dict[str, str] = {}
+    for cat in _categories or []:
+        for sub in cat.get("subcategories") or []:
+            sid = str(sub.get("id") or "").strip()
+            if not sid:
+                continue
+            label = str(sub.get("label") or "").strip()
+            for alias in (sid, label, sid.replace("_", " "), label.replace(" ", "_")):
+                if alias:
+                    index[_slug_key(alias)] = sid
+                    index[_normalize_key(alias)] = sid
+    return index
+
+
+def normalize_sub_category_id(raw: str | None, category_name: str | None = None) -> str:
+    """
+    Canonical sub-category id from API id, label, or planogram CSV text.
+    Examples: 'Ice cream' → ice_cream, 'ice_cream' → ice_cream, 'Soft drinks' → soft_drinks.
+    """
+    if not raw or not str(raw).strip():
+        return ""
+    load_aislix_categories()
+    key = _slug_key(str(raw))
+    idx = _subcategory_index or {}
+    if key in idx:
+        return idx[key]
+    if category_name:
+        cat = resolve_aislix_category(category_name)
+        if cat:
+            for sub in cat.get("subcategories") or []:
+                sid = str(sub.get("id") or "")
+                label = str(sub.get("label") or "")
+                if key in {_slug_key(sid), _slug_key(label)}:
+                    return sid
+    return key
+
+
+def sub_categories_match(a: str | None, b: str | None, category_name: str | None = None) -> bool:
+    """True when two sub-category values refer to the same subcategory (id or label)."""
+    left = normalize_sub_category_id(a, category_name)
+    right = normalize_sub_category_id(b, category_name)
+    if not left or not right:
+        return not left and not right
+    return left == right
+
+
+def aisle_category_matches(item_category: str | None, aislix_category: str | None) -> bool:
+    """True when recognizer/planogram category label matches the scan aisle category."""
+    if not item_category or not aislix_category:
+        return False
+    item_key = _normalize_key(item_category)
+    aisle_key = _normalize_key(aislix_category)
+    if item_key == aisle_key:
+        return True
+    resolved = resolve_aislix_category(aislix_category)
+    if resolved:
+        names = {
+            _normalize_key(resolved.get("name") or ""),
+            _normalize_key(resolved.get("id") or ""),
+        }
+        return item_key in names
+    return False
+
+
 def load_aislix_categories() -> list[dict]:
-    global _categories, _name_index
+    global _categories, _name_index, _subcategory_index
     if _categories is not None:
         return _categories
     if not CATEGORIES_PATH.exists():
         _categories = []
         _name_index = {}
+        _subcategory_index = {}
         return _categories
     with open(CATEGORIES_PATH, encoding="utf-8") as handle:
         data = json.load(handle)
     _categories = data if isinstance(data, list) else []
     _name_index = {_normalize_key(item.get("name") or ""): item for item in _categories}
     _name_index.update({_normalize_key(item.get("id") or ""): item for item in _categories})
+    _subcategory_index = _index_subcategories()
     return _categories
 
 
@@ -534,7 +614,7 @@ def _resolve_sub_category(metadata: dict, category: dict | None) -> tuple[str | 
     label = (metadata.get("sub_category_label") or "").strip() or None
 
     if raw and str(raw).strip():
-        sub_id = _slug_key(str(raw))
+        sub_id = normalize_sub_category_id(str(raw), (category or {}).get("name"))
         if not label:
             label = resolve_subcategory_label(category, sub_id)
         return sub_id, label, custom
@@ -705,6 +785,10 @@ def sku_allowed_in_context(
 
     if _cross_aisle_sku_conflict(aislix_key, brand_l, sku_l):
         return False
+
+    entry_cat_norm = _normalize_key(entry_category or "")
+    if entry_cat_norm and aisle_category_matches(entry_category, context.get("aislix_category")):
+        return True
 
     sku_cat = (entry_category or infer_category(sku or brand_l)).lower()
 

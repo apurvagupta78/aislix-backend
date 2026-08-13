@@ -7,6 +7,8 @@ import io
 import re
 from typing import Any
 
+from app.scan_context import normalize_sub_category_id
+
 REQUIRED_FIELDS = ("location", "category", "sub_category", "brand", "product_name", "expected_qty")
 
 HEADER_ALIASES: dict[str, str] = {
@@ -96,6 +98,7 @@ def normalize_planogram_row(row: dict[str, Any], row_num: int = 0) -> tuple[dict
     if errors:
         return None, errors
 
+    sub_category = normalize_sub_category_id(sub_category, category)
     variant = str(row.get("variant") or "").strip()
     sku = str(row.get("sku") or "").strip()
     normalized = {

@@ -12,8 +12,10 @@ from app.scan_context import (
     COMPLIANCE_ALERT_TITLE,
     SUB_CATEGORY_BRAND_HINTS,
     SUB_CATEGORY_PRODUCT_KEYWORDS,
+    aisle_category_matches,
     resolve_subcategory_label,
     sku_allowed_in_context,
+    sub_categories_match,
 )
 
 MIN_COMPLIANCE_CONFIDENCE = 0.5
@@ -154,7 +156,9 @@ def _evaluate_compliance(
 
     allowed_catalog = [c.lower() for c in (scan_context.get("catalog_categories") or [])]
     item_cat = (item.get("category") or "General").strip().lower()
-    if allowed_catalog and item_cat not in {"", "general"} and item_cat not in allowed_catalog:
+    if aisle_category_matches(item.get("category"), scan_context.get("aislix_category")):
+        pass
+    elif allowed_catalog and item_cat not in {"", "general"} and item_cat not in allowed_catalog:
         if aislix_key == "personal care" and _pc_brand_in_context(brand, scan_context):
             pass
         else:
@@ -167,7 +171,8 @@ def _evaluate_compliance(
         return False, foreign[0], foreign[1]
 
     detected = infer_detected_subcategory(item, scan_context)
-    if detected and detected != selected:
+    cat_name = scan_context.get("aislix_category")
+    if detected and not sub_categories_match(detected, selected, cat_name):
         if _sibling_pc_subcategory(selected, detected):
             return True, selected, selected_label
         return False, detected, _subcategory_label(scan_context, detected)
