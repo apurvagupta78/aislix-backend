@@ -1,0 +1,227 @@
+---
+description: Aislix core product definition, AI requirements, and product vision
+alwaysApply: true
+---
+
+# Aislix — Core Product Definition & AI Requirements
+
+## 1. What is Aislix?
+
+Aislix is an **AI-powered retail shelf auditing and product recognition system**.
+
+The core idea is simple:
+
+**Take a photo → Upload to Aislix → AI understands the shelf → Detect products → Identify products → Count quantities → Audit the shelf → Generate actionable insights.**
+
+Aislix uses computer vision and AI to analyze photographs taken by users on their phones. The system should be capable of analyzing a retail shelf, rack, bin, display, or other product-facing area and extracting structured product-level information from the image.
+
+---
+
+## 2. Core User Workflow
+
+The primary workflow is:
+
+1. The user takes a photo of a shelf, rack, bin, or product display using their phone.
+2. The user uploads the image to Aislix.
+3. Aislix's AI model analyzes the entire image.
+4. The AI detects all visible products.
+5. The AI identifies each product.
+6. The AI counts the physical quantity of each product visible in the image.
+7. Aislix returns structured results for the detected products.
+8. The system can optionally compare the actual shelf against a predefined planogram.
+9. Aislix generates an actionable shelf audit.
+
+---
+
+## 3. Product Information Aislix Should Identify
+
+Depending on what is visible and identifiable in the image, Aislix should return information such as:
+
+* Product name
+* Brand
+* Variant
+* Pack size
+* Quantity
+* Product category
+* Shelf/rack/bin position
+* Product location within the image
+* Confidence score
+* Product bounding box
+* Facings, where applicable
+* Planogram compliance, when a planogram is available
+
+The system should distinguish between **unique product identification** and **physical quantity**.
+
+For example, if the same product appears five times on the shelf, Aislix should identify it as one product/SKU and report:
+
+**Product: XYZ
+Brand: ABC
+Variant: Original
+Quantity: 5**
+
+The system must not incorrectly treat every physical instance as a completely different product.
+
+---
+
+## 4. Two Core Operating Modes
+
+### Mode 1 — Without Planogram
+
+Aislix should be able to analyze a shelf without requiring a planogram.
+
+The AI should answer:
+
+* What products are present?
+* Which brands are present?
+* Which variants are present?
+* How many units are visible?
+* Where are the products located?
+* What is the shelf/product mix?
+* What other useful shelf-level insights can be generated?
+
+This mode is useful for general shelf audits, inventory visibility, retail intelligence, and local-store audits.
+
+---
+
+### Mode 2 — With Planogram
+
+Aislix should also support planogram-based shelf auditing.
+
+When a planogram is available, Aislix should compare:
+
+**Expected shelf arrangement vs. Actual shelf arrangement**
+
+The system should identify issues such as:
+
+* Missing products
+* Incorrect products
+* Incorrect product placement
+* Incorrect shelf position
+* Incorrect number of facings
+* Products placed in the wrong location
+* Planogram compliance
+* Shelf-space deviations
+* Other relevant execution issues
+
+The planogram should therefore be treated as an optional intelligence layer rather than a requirement for basic Aislix shelf analysis.
+
+---
+
+## 5. Product Category Coverage
+
+Aislix is intended to work across **all retail product categories**, rather than being limited to a single category.
+
+The underlying architecture should therefore be designed to support different product categories, packaging formats, brands, SKUs, variants, sizes, and visual appearances.
+
+The model should be capable of continuously expanding its product recognition capability as new datasets and product categories are introduced.
+
+---
+
+## 6. Target Customers
+
+Aislix is built for:
+
+### Supermarkets
+
+For shelf audits, inventory visibility, planogram compliance, merchandising execution, and store operations.
+
+### Dark Stores
+
+For automated shelf/bin audits, product counting, inventory visibility, and operational monitoring.
+
+### Warehouses
+
+For product identification, quantity verification, and visual inventory audits.
+
+### FMCG Companies
+
+For monitoring product visibility, shelf share, distribution, merchandising execution, planogram compliance, and field-force performance.
+
+### Distributors
+
+For monitoring product availability and shelf execution across retail outlets.
+
+### Local/Kirana Stores
+
+For digitizing physical shelves, understanding product availability, creating store-level planograms, and improving shelf organization.
+
+---
+
+## 7. AI Model Accuracy Goal
+
+Aislix's primary AI development goal is to achieve **95%+ accuracy in real-world shelf analysis**.
+
+The 95%+ target should be treated as a major product and model-performance objective.
+
+Accuracy should be continuously improved across:
+
+* Product detection
+* Product identification
+* Brand identification
+* Variant identification
+* Quantity/count detection
+* Shelf/product position detection
+* Planogram compliance
+* Facings detection
+* Other relevant shelf-audit outputs
+
+However, model performance should be measured realistically because accuracy can be affected by:
+
+* Image quality
+* Lighting
+* Product visibility
+* Occlusion
+* Product overlap
+* Camera angle
+* Distance from shelf
+* Packaging changes
+* Similar-looking SKUs
+* Product category
+* Resolution
+* Partial visibility of products
+
+The development process should therefore focus on achieving **95%+ performance on representative real-world retail images**, rather than only achieving high accuracy on controlled test images.
+
+---
+
+## 8. Continuous AI Improvement
+
+Aislix should be designed as a continuously improving AI system.
+
+The workflow should support:
+
+**Image → Detection → Prediction → Human validation/correction → Annotated dataset → Model improvement → Retraining → Better predictions**
+
+Incorrect predictions should be captured and used to improve the model over time.
+
+Annotation and correction tools such as CVAT can be used as part of the internal model-training and continuous-learning pipeline.
+
+This annotation/correction workflow is **not the customer-facing inference experience**. It is part of the internal AI improvement system.
+
+---
+
+## 9. Important Product Principle
+
+Aislix should not be thought of simply as an image-recognition tool.
+
+It is a **retail intelligence system that converts a simple shelf photograph into structured, actionable retail data.**
+
+The long-term objective is:
+
+**Physical Shelf → Image → AI Understanding → Structured Retail Data → Audit → Insights → Action**
+
+The user should not need to manually count every product or enter every SKU. Aislix should automate as much of this process as possible.
+
+---
+
+## 10. Core Product Vision
+
+The long-term vision for Aislix is to make retail shelf auditing as simple as taking a photograph.
+
+A user should be able to walk into a store, take a picture, upload it to Aislix, and receive a reliable understanding of what is physically present on that shelf.
+
+The ultimate goal is:
+
+**95%+ accurate AI-powered retail shelf intelligence across product categories, with or without a planogram.**
+
+All future Aislix product, AI, database, UI, workflow, and architecture decisions should be aligned with this core definition unless the product requirements are explicitly changed.
