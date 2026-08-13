@@ -35,7 +35,17 @@ Severity colors: green=correct, red=critical, yellow=warning, blue=info
 
 ### Two input tabs
 1. **Upload CSV** — call Railway `POST /planogram/parse-csv`, show preview table; highlight invalid rows
-2. **Add manually** — form fields: Location, Aisle, Category, Sub-category (dropdown from `/categories`), Brand, Product, Expected Qty, optional SKU, Shelf position; **Save & add another**
+2. **Add manually** — form fields (in order):
+   - **Required:** Location, Category, Sub-category, Brand, Product Name, Expected Qty
+   - **Optional:** Variant, SKU, Shelf position
+   - **Save & add another**
+
+**Location** = shelf/aisle code (e.g. `A-1-Z`), not the store name.
+
+**CSV template header:**
+`location,category,sub_category,brand,product_name,variant,expected_qty,sku,shelf_position`
+
+Download template: `GET /planogram/csv-template`
 
 Both write to Supabase `planogram_items` under a `planogram_versions` row with `status=draft`.
 

@@ -1,9 +1,9 @@
-location,aisle,category,sub_category,brand,product_name,expected_qty
-Store 01,A-1-Z,Personal Care,Shampoo,Dove,Intense Repair Shampoo,1
-Store 01,A-1-Z,Personal Care,Shampoo,Head & Shoulders,Classic Clean Shampoo,1
-Store 01,A-1-Z,Personal Care,Shampoo,Sunsilk,Long & Healthy Growth Shampoo,1
-Store 01,A-1-Z,Personal Care,Shampoo,Pantene,Hair Fall Control Shampoo,1
-Store 01,A-1-Z,Personal Care,Shampoo,Tresemme,Smooth & Shine Shampoo,1
-Store 01,A-1-Z,Personal Care,Shampoo,L'Oreal,Total Repair 5 Shampoo,1
-Store 01,A-1-Z,Personal Care,Shampoo,Himalaya,Anti-Hair Fall Shampoo,1
-Store 01,A-1-Z,Personal Care,Shampoo,Clinic Plus,Strong & Long Shampoo,1
+location,category,sub_category,brand,product_name,variant,expected_qty,sku,shelf_position
+A-1-Z,Personal Care,Shampoo,Dove,Intense Repair Shampoo,340ml,1,,1
+A-1-Z,Personal Care,Shampoo,Head & Shoulders,Classic Clean Shampoo,340ml,1,,2
+A-1-Z,Personal Care,Shampoo,Sunsilk,Long & Healthy Growth Shampoo,180ml,1,,3
+A-1-Z,Personal Care,Shampoo,Pantene,Hair Fall Control Shampoo,340ml,1,,4
+A-1-Z,Personal Care,Shampoo,Tresemme,Smooth & Shine Shampoo,580ml,1,,5
+A-1-Z,Personal Care,Shampoo,L'Oreal,Total Repair 5 Shampoo,340ml,1,,6
+A-1-Z,Personal Care,Shampoo,Himalaya,Anti-Hair Fall Shampoo,200ml,1,,7
+A-1-Z,Personal Care,Shampoo,Clinic Plus,Strong & Long Shampoo,175ml,1,,8

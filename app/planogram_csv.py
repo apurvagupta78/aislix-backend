@@ -7,7 +7,7 @@ import io
 import re
 from typing import Any
 
-REQUIRED_FIELDS = ("category", "brand", "product_name", "expected_qty")
+REQUIRED_FIELDS = ("location", "category", "sub_category", "brand", "product_name", "expected_qty")
 
 HEADER_ALIASES: dict[str, str] = {
     "location": "location",
@@ -20,6 +20,9 @@ HEADER_ALIASES: dict[str, str] = {
     "brand": "brand",
     "product": "product_name",
     "product name": "product_name",
+    "variant": "variant",
+    "size": "variant",
+    "pack size": "variant",
     "expected qty": "expected_qty",
     "expected quantity": "expected_qty",
     "qty": "expected_qty",
@@ -30,15 +33,30 @@ HEADER_ALIASES: dict[str, str] = {
 }
 
 
+def csv_template_header() -> str:
+    """Canonical planogram CSV header for downloads and docs."""
+    return (
+        "location,category,sub_category,brand,product_name,variant,"
+        "expected_qty,sku,shelf_position"
+    )
+
+
 def _normalize_header(header: str) -> str:
     key = re.sub(r"\s+", " ", header.strip().lower())
     return HEADER_ALIASES.get(key, key.replace(" ", "_"))
 
 
-def build_match_key(brand: str, product_name: str, sku: str = "", sub_category: str = "") -> str:
+def build_match_key(
+    brand: str,
+    product_name: str,
+    sku: str = "",
+    sub_category: str = "",
+    variant: str = "",
+) -> str:
     parts = [
         brand.lower().strip(),
         product_name.lower().strip(),
+        variant.lower().strip(),
         sku.lower().strip(),
         sub_category.lower().strip(),
     ]
@@ -52,13 +70,19 @@ def normalize_planogram_row(row: dict[str, Any], row_num: int = 0) -> tuple[dict
     brand = str(row.get("brand") or "").strip()
     product_name = str(row.get("product_name") or row.get("product") or "").strip()
     category = str(row.get("category") or "").strip()
+    location = str(row.get("location") or "").strip()
+    sub_category = str(row.get("sub_category") or "").strip()
 
+    if not location:
+        errors.append(f"{prefix}location is required")
     if not brand:
         errors.append(f"{prefix}brand is required")
     if not product_name:
         errors.append(f"{prefix}product_name is required")
     if not category:
         errors.append(f"{prefix}category is required")
+    if not sub_category:
+        errors.append(f"{prefix}sub_category is required")
 
     qty_raw = row.get("expected_qty", row.get("quantity", 1))
     try:
@@ -72,19 +96,20 @@ def normalize_planogram_row(row: dict[str, Any], row_num: int = 0) -> tuple[dict
     if errors:
         return None, errors
 
-    sub_category = str(row.get("sub_category") or "").strip()
+    variant = str(row.get("variant") or "").strip()
     sku = str(row.get("sku") or "").strip()
     normalized = {
-        "location": str(row.get("location") or "").strip(),
+        "location": location,
         "aisle": str(row.get("aisle") or "").strip(),
         "category": category,
         "sub_category": sub_category,
         "brand": brand,
         "product_name": product_name,
+        "variant": variant,
         "sku": sku,
         "expected_qty": expected_qty,
         "shelf_position": str(row.get("shelf_position") or "").strip(),
-        "match_key": build_match_key(brand, product_name, sku, sub_category),
+        "match_key": build_match_key(brand, product_name, sku, sub_category, variant),
     }
     return normalized, []
 
@@ -103,12 +128,22 @@ def parse_csv_text(content: str, delimiter: str | None = None) -> dict[str, Any]
 
     field_map = {_normalize_header(h): h for h in reader.fieldnames if h}
     header_errors: list[str] = []
-    if "brand" not in field_map:
-        header_errors.append("Missing required column: brand")
-    if "product_name" not in field_map:
-        header_errors.append("Missing required column: product / product_name")
-    if "category" not in field_map:
-        header_errors.append("Missing required column: category")
+    required_headers = {
+        "location": "location",
+        "category": "category",
+        "sub_category": "sub_category",
+        "brand": "brand",
+        "product_name": "product / product_name",
+        "expected_qty": "expected_qty / qty / quantity",
+    }
+    for canon, label in required_headers.items():
+        if canon not in field_map and not (canon == "product_name" and "product" in field_map):
+            if canon == "expected_qty" and not any(
+                k in field_map for k in ("expected_qty", "qty", "quantity")
+            ):
+                header_errors.append(f"Missing required column: {label}")
+            elif canon != "expected_qty":
+                header_errors.append(f"Missing required column: {label}")
     if header_errors:
         return {"rows": [], "errors": header_errors, "valid_count": 0, "error_count": len(header_errors)}
 

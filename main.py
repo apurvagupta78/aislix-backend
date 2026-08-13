@@ -314,3 +314,28 @@ async def planogram_normalize_row(request: Request):
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     return {"row": row}
+
+
+@app.get("/planogram/csv-template")
+async def planogram_csv_template():
+    """Downloadable planogram CSV header + example row."""
+    from app.planogram_csv import csv_template_header
+
+    header = csv_template_header()
+    example = (
+        "A-1-Z,Personal Care,Shampoo,Dove,Intense Repair Shampoo,340ml,1,,1"
+    )
+    return {
+        "header": header,
+        "example_row": example,
+        "csv_text": f"{header}\n{example}\n",
+        "required_columns": [
+            "location",
+            "category",
+            "sub_category",
+            "brand",
+            "product_name",
+            "expected_qty",
+        ],
+        "optional_columns": ["variant", "sku", "shelf_position"],
+    }

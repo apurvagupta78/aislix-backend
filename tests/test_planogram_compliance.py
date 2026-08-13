@@ -37,10 +37,29 @@ def test_normalize_manual_row():
         "sub_category": "Shampoo",
         "brand": "Dove",
         "product_name": "Intense Repair Shampoo",
+        "variant": "340ml",
         "expected_qty": 1,
     })
     assert not errors
     assert row["match_key"].startswith("dove|")
+    assert row["variant"] == "340ml"
+
+
+def test_normalize_requires_location_and_sub_category():
+    _, errors = normalize_planogram_row({
+        "category": "Personal Care",
+        "brand": "Dove",
+        "product_name": "Shampoo",
+        "expected_qty": 1,
+    })
+    assert any("location is required" in e for e in errors)
+    assert any("sub_category is required" in e for e in errors)
+
+
+def test_parse_csv_missing_required_header():
+    parsed = parse_csv_text("brand,product_name,expected_qty\nDove,Shampoo,1\n")
+    assert parsed["valid_count"] == 0
+    assert any("location" in e.lower() for e in parsed["errors"])
 
 
 def test_compare_all_correct():
