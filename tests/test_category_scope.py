@@ -28,6 +28,15 @@ def _shampoo_context() -> dict:
     }
 
 
+def test_resolve_combined_lovable_category_string():
+    from app.scan_context import resolve_scan_context
+
+    ctx = resolve_scan_context({"category": "Beverages · Tea", "location": "A-1-S"})
+    assert ctx["aislix_category_id"] == "beverages"
+    assert ctx["sub_category"] == "tea"
+    assert ctx["aislix_category"] == "Beverages"
+
+
 def test_effective_entry_ids_from_category_label():
     entry = {"brand": "TajMahal", "category": "Beverages · Tea"}
     enrich_learned_entry(entry)

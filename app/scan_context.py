@@ -572,9 +572,27 @@ def build_shelf_label(
     return " · ".join(parts)
 
 
+def _split_combined_category(metadata: dict) -> dict:
+    """Lovable often sends 'Beverages · Tea' as category without a separate sub_category."""
+    meta = dict(metadata)
+    raw = meta.get("category") or meta.get("aislix_category") or ""
+    raw_str = str(raw).strip()
+    if "·" not in raw_str:
+        return meta
+    parts = [p.strip() for p in raw_str.replace("\u00b7", "·").split("·") if p.strip()]
+    if len(parts) < 2:
+        return meta
+    meta["category"] = parts[0]
+    if not meta.get("sub_category"):
+        meta["sub_category"] = normalize_sub_category_id(parts[1], parts[0])
+    if not meta.get("sub_category_label"):
+        meta["sub_category_label"] = parts[1]
+    return meta
+
+
 def resolve_scan_context(metadata: dict | None) -> dict:
     """Normalize scan metadata from API / Lovable into a recognition context dict."""
-    metadata = metadata or {}
+    metadata = _split_combined_category(metadata or {})
     category_raw = metadata.get("category") or metadata.get("aislix_category")
     resolved = resolve_aislix_category(category_raw)
     aislix_name = (resolved or {}).get("name") or (str(category_raw).strip() if category_raw else "")
