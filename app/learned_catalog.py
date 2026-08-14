@@ -113,6 +113,8 @@ def load_learned() -> int:
 
 def import_learned_catalog(entries: list[dict]) -> int:
     """Merge learned SKUs sent from Lovable (no Railway Supabase key required)."""
+    from app.category_scope import enrich_learned_entry
+
     global _loaded
     if not entries:
         return count_learned()
@@ -138,7 +140,6 @@ def import_learned_catalog(entries: list[dict]) -> int:
             norm = np.linalg.norm(vector)
             if norm > 0:
                 vector = vector / norm
-            from app.category_scope import enrich_learned_entry
 
             row = {
                 "sku": sku,
