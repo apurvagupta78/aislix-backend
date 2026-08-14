@@ -195,19 +195,29 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         classified = normalize_classified_labels(classified)
         classified = filter_nested_facings(classified, layout=shelf_mode)
         if scan_context.get("planogram_mode") and scan_context.get("planogram_candidates"):
-            from app.planogram_guided import assign_planogram_slots, should_use_planogram_slots
+            from app.planogram_guided import (
+                assign_planogram_shelf_rows,
+                assign_planogram_slots,
+                should_use_planogram_shelf_rows,
+                should_use_planogram_slots,
+            )
 
-            if should_use_planogram_slots(
-                classified,
-                scan_context["planogram_candidates"],
-                scan_context,
-            ):
+            planogram_candidates = scan_context["planogram_candidates"]
+            if should_use_planogram_slots(classified, planogram_candidates, scan_context):
                 classified = assign_planogram_slots(
                     classified,
-                    scan_context["planogram_candidates"],
+                    planogram_candidates,
                     scan_id=scan_id,
                     scan_context=scan_context,
                 )
+            elif should_use_planogram_shelf_rows(classified, planogram_candidates, scan_context):
+                classified = assign_planogram_shelf_rows(
+                    classified,
+                    planogram_candidates,
+                    scan_id=scan_id,
+                    scan_context=scan_context,
+                )
+                scan_context["planogram_shelf_rows"] = True
             else:
                 scan_context["planogram_slot_skipped"] = True
         compliance = analyze_subcategory_compliance(classified, scan_context)
@@ -256,6 +266,8 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         if scan_context.get("planogram_mode"):
             metrics["planogram_guided_recognition"] = True
             metrics["planogram_candidate_count"] = len(scan_context.get("planogram_candidates") or [])
+            if scan_context.get("planogram_shelf_rows"):
+                metrics["planogram_shelf_rows"] = True
         if gap_stats:
             metrics.update({k: v for k, v in gap_stats.items() if k != "gap_fill_enabled"})
             metrics["planogram_gap_fill"] = bool(gap_stats.get("gap_fill_recovered"))

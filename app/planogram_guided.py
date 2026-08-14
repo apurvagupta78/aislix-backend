@@ -32,8 +32,8 @@ _PLANOGRAM_PRODUCT_KEYWORDS: dict[str, tuple[str, ...]] = {
         "ice cream", "kulfi", "rajbhog", "rajwadi", "rabdi", "sandwich", "funwich", "funwith",
         "tricone", "sorbet", "gelato", "raspberry", "rasberry", "chocolate", "brooklyn", "baskin",
     ),
-    "chips": ("chips", "crisps", "wafers", "nacho", "masala", "barbecue", "classic", "limon", "limón"),
-    "potato_chips": ("chips", "crisps", "wafers", "potato", "classic", "barbecue", "salted", "magic masala"),
+    "chips": ("chips", "crisps", "wafers", "nacho", "masala", "barbecue", "classic", "limon", "limón", "tomato", "tango", "cream", "onion"),
+    "potato_chips": ("chips", "crisps", "wafers", "potato", "classic", "barbecue", "salted", "magic masala", "tomato", "tango", "cream", "onion"),
     "tortilla_chips": ("doritos", "nacho", "tortilla", "sweet chili", "sweet chilli", "cheese"),
     "extruded_snacks": ("kurkure", "cheetos", "bingo", "masala munch", "chatka", "angles", "crunchem"),
     "namkeen": ("namkeen", "bhujia", "balaji", "haldiram", "mast", "masti"),
@@ -42,6 +42,30 @@ _PLANOGRAM_PRODUCT_KEYWORDS: dict[str, tuple[str, ...]] = {
 
 def _x_center_rec(record: dict) -> float:
     return (float(record["x1"]) + float(record["x2"])) / 2.0
+
+
+def _y_center_rec(record: dict) -> float:
+    return (float(record["y1"]) + float(record["y2"])) / 2.0
+
+
+def _record_height(record: dict) -> float:
+    return max(0.0, float(record["y2"]) - float(record["y1"]))
+
+
+_SHELF_POSITION_RE = re.compile(r"shelf\s*(\d+)", re.IGNORECASE)
+
+
+def parse_shelf_number(shelf_position: str | None) -> int | None:
+    """Extract shelf index from planogram shelf_position (e.g. 'Shelf 2 / Position 1-2')."""
+    if not shelf_position:
+        return None
+    match = _SHELF_POSITION_RE.search(str(shelf_position))
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
 
 
 def _same_bottle_column_records(a: dict, b: dict) -> bool:
@@ -74,6 +98,63 @@ def cluster_records_by_column(records: list[dict]) -> list[list[dict]]:
         else:
             clusters.append([rec])
     return clusters
+
+
+def _same_shelf_row_records(a: dict, b: dict, median_h: float) -> bool:
+    """True when two facings sit on the same horizontal shelf row."""
+    threshold = max(median_h * 0.42, 18.0)
+    return abs(_y_center_rec(a) - _y_center_rec(b)) <= threshold
+
+
+def cluster_records_by_shelf_row(records: list[dict]) -> list[list[dict]]:
+    """Group facings into shelf rows top-to-bottom (multi-row snack racks)."""
+    if not records:
+        return []
+    if len(records) == 1:
+        return [records]
+    ordered = sorted(records, key=_y_center_rec)
+    heights = sorted(_record_height(r) for r in records if _record_height(r) > 0)
+    median_h = heights[len(heights) // 2] if heights else 80.0
+    clusters: list[list[dict]] = [[ordered[0]]]
+    for rec in ordered[1:]:
+        if _same_shelf_row_records(clusters[-1][-1], rec, median_h):
+            clusters[-1].append(rec)
+        else:
+            clusters.append([rec])
+    return [sorted(row, key=_x_center_rec) for row in clusters]
+
+
+def planogram_products_by_shelf(candidates: list[dict]) -> dict[int, dict]:
+    """Map planogram shelf number → representative SKU row."""
+    by_shelf: dict[int, dict] = {}
+    for row in candidates:
+        shelf_num = parse_shelf_number(row.get("shelf_position"))
+        if shelf_num is None or shelf_num in by_shelf:
+            continue
+        by_shelf[shelf_num] = row
+    return by_shelf
+
+
+def align_shelf_clusters_to_planogram(n_clusters: int, shelf_numbers: list[int]) -> dict[int, int]:
+    """
+    Map visual row cluster index (0=top) to planogram shelf number.
+    Bottom-align when the photo includes an extra partial row above the planogram.
+    """
+    if n_clusters <= 0 or not shelf_numbers:
+        return {}
+    shelf_numbers = sorted(shelf_numbers)
+    mapping: dict[int, int] = {}
+    if n_clusters == len(shelf_numbers):
+        for idx, shelf_num in enumerate(shelf_numbers):
+            mapping[idx] = shelf_num
+    elif n_clusters > len(shelf_numbers):
+        offset = n_clusters - len(shelf_numbers)
+        for idx, shelf_num in enumerate(shelf_numbers):
+            mapping[offset + idx] = shelf_num
+    else:
+        for idx in range(n_clusters):
+            mapping[idx] = shelf_numbers[idx]
+    return mapping
 
 
 def _union_record_box(records: list[dict]) -> dict:
@@ -468,7 +549,12 @@ def classify_records_planogram_guided(
     classified: list[dict | None] = [None] * len(records)
     stats = {"ocr": 0, "gpt": 0, "faiss": 0, "planogram": 0, "none": 0, "gpt_calls": 0}
     v3 = recognition_v3_enabled()
-    ocr_texts: list[str] = [read_packaging_text(img) for img in images]
+    ocr_texts: list[str] = []
+    for img in images:
+        pack_text = read_packaging_text(img)
+        if len(pack_text.strip()) < 3:
+            pack_text = read_packaging_text(img, aggressive=True)
+        ocr_texts.append(pack_text)
 
     if v3 and is_ready():
         topk = match_embeddings_batch_topk(embeddings, scan_context=scan_context)
@@ -584,6 +670,119 @@ def classify_records_planogram_guided(
 
     output = [{k: v for k, v in row.items() if k != "_index"} for row in classified if row]
     return output, stats
+
+
+def should_use_planogram_shelf_rows(
+    records: list[dict],
+    candidates: list[dict],
+    scan_context: dict | None = None,
+) -> bool:
+    """Multi-row snack racks: assign SKUs by horizontal shelf row (Y position)."""
+    if not records or not candidates:
+        return False
+    scan_context = scan_context or {}
+    if scan_context.get("shelf_mode") != "multi_row":
+        return False
+    if not planogram_products_by_shelf(candidates):
+        return False
+    from app.scan_context import CHIPS_RACK_SUBCATEGORIES, effective_sub_category
+
+    sub = effective_sub_category(scan_context)
+    if sub not in CHIPS_RACK_SUBCATEGORIES:
+        return False
+    return len(records) >= 4
+
+
+def assign_planogram_shelf_rows(
+    records: list[dict],
+    candidates: list[dict],
+    scan_id: str | None = None,
+    scan_context: dict | None = None,
+) -> list[dict]:
+    """Label every facing on a multi-row rack from planogram shelf_position rows."""
+    if not records or not candidates:
+        return records
+
+    shelf_products = planogram_products_by_shelf(candidates)
+    if not shelf_products:
+        return records
+
+    row_clusters = cluster_records_by_shelf_row(records)
+    if not row_clusters:
+        return records
+
+    cluster_to_shelf = align_shelf_clusters_to_planogram(
+        len(row_clusters),
+        sorted(shelf_products.keys()),
+    )
+    if not cluster_to_shelf:
+        return records
+
+    output: list[dict] = []
+    assigned = 0
+    for cluster_idx, row in enumerate(row_clusters):
+        shelf_num = cluster_to_shelf.get(cluster_idx)
+        if shelf_num is None:
+            output.extend(row)
+            continue
+
+        shelf_candidates = [
+            c
+            for c in candidates
+            if parse_shelf_number(c.get("shelf_position")) == shelf_num
+        ] or [shelf_products[shelf_num]]
+        default_candidate = shelf_products[shelf_num]
+
+        row_ocrs: list[str] = []
+        for rec in row:
+            path = rec.get("image_path")
+            if path:
+                img = Image.open(path).convert("RGB")
+                text = read_packaging_text(img)
+                if len(text.strip()) < 3:
+                    text = read_packaging_text(img, aggressive=True)
+                row_ocrs.append(text)
+            else:
+                row_ocrs.append("")
+
+        merged_ocr = " ".join(token for token in row_ocrs if token.strip())
+        text_match = best_candidate_from_text(
+            merged_ocr,
+            shelf_candidates,
+            min_score=PLANOGRAM_MATCH_MIN_SCORE * 0.85,
+        )
+        row_candidate = text_match[0] if text_match else default_candidate
+        text_score = text_match[1] if text_match else 0.0
+
+        for rec, ocr in zip(row, row_ocrs):
+            if not _is_unknown_record(rec):
+                existing = best_candidate_from_label(
+                    rec,
+                    shelf_candidates,
+                    ocr_text=ocr or merged_ocr,
+                    min_score=0.45,
+                )
+                if existing and existing[0].get("product_name") == row_candidate.get("product_name"):
+                    output.append(rec)
+                    continue
+
+            per_match = best_candidate_from_text(ocr, shelf_candidates, min_score=PLANOGRAM_MATCH_MIN_SCORE * 0.8)
+            candidate = per_match[0] if per_match else row_candidate
+            score = per_match[1] if per_match else text_score
+            conf = max(0.74, score, float(rec.get("confidence") or 0) * 0.5)
+            if ocr.strip() and re.search(r"lay'?s\b", ocr, flags=re.IGNORECASE):
+                conf = max(conf, 0.84)
+            source = "planogram_shelf_row_ocr" if score >= PLANOGRAM_SLOT_MIN_SCORE else "planogram_shelf_row"
+            label = label_from_candidate(candidate, conf, source, ocr)
+            output.append(_merge_record(rec, label))
+            assigned += 1
+
+    if assigned:
+        print(
+            f"Planogram shelf-row assignment: {assigned}/{len(records)} facings "
+            f"({len(row_clusters)} rows, scan={scan_id})"
+        )
+    return output if output else records
 
 
 def should_use_planogram_slots(

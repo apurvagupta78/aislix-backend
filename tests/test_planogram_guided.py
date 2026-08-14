@@ -4,15 +4,21 @@ from pathlib import Path
 
 from app.planogram_csv import parse_csv_text
 from app.planogram_guided import (
+    align_shelf_clusters_to_planogram,
+    assign_planogram_shelf_rows,
     assign_planogram_slots,
     best_candidate_from_text,
+    cluster_records_by_shelf_row,
     label_from_candidate,
+    parse_shelf_number,
     prepare_planogram_candidates,
     score_text_against_candidate,
+    should_use_planogram_shelf_rows,
     snap_label_to_planogram,
 )
 
 FIXTURE = Path(__file__).resolve().parents[1] / "data" / "fixtures" / "planogram_shampoo_row.csv"
+LAYS_FIXTURE = Path(__file__).resolve().parents[1] / "data" / "fixtures" / "planogram_lays_a1l.csv"
 
 
 def _candidates() -> list[dict]:
@@ -123,3 +129,97 @@ def test_ocr_brand_conflict_blocks_baskin_for_amul_text():
     assert match[0]["brand"] == "Amul"
     blocked = best_candidate_from_text("Amul Rajbhog Kulfi stick", cands)
     assert blocked[0]["brand"] != "Baskin Robbins"
+
+
+def _lays_candidates() -> list[dict]:
+    parsed = parse_csv_text(LAYS_FIXTURE.read_text(encoding="utf-8"))
+    items = [row["data"] for row in parsed["rows"] if row.get("valid")]
+    return prepare_planogram_candidates(
+        items,
+        scope_type="location",
+        scope_values={"location": "A-1-L", "aisle": "A-1-L"},
+        scan_context={
+            "sub_category": "chips",
+            "aislix_category": "Packaged Food & Snacks",
+            "shelf_label": "A-1-L",
+        },
+    )
+
+
+def test_parse_shelf_number_from_position():
+    assert parse_shelf_number("Shelf 2 / Position 1-2") == 2
+    assert parse_shelf_number("shelf 6 / position 5-6") == 6
+    assert parse_shelf_number("") is None
+
+
+def test_cluster_records_by_shelf_row():
+    records = []
+    for row_idx, y in enumerate([50, 180, 310, 440, 570]):
+        for col in range(6):
+            records.append({
+                "x1": col * 90,
+                "y1": y,
+                "x2": col * 90 + 70,
+                "y2": y + 100,
+                "brand": "Unknown",
+                "product_name": "Unidentified SKU",
+            })
+    rows = cluster_records_by_shelf_row(records)
+    assert len(rows) == 5
+    assert len(rows[0]) == 6
+
+
+def test_align_shelf_clusters_bottom_aligns_extra_top_row():
+    mapping = align_shelf_clusters_to_planogram(6, [2, 3, 4, 5, 6])
+    assert mapping[1] == 2
+    assert mapping[5] == 6
+    assert 0 not in mapping
+
+
+def test_should_use_planogram_shelf_rows_for_chips_multi_row():
+    cands = _lays_candidates()
+    records = [{"x1": 0, "y1": 0, "x2": 10, "y2": 10}] * 8
+    ctx = {"shelf_mode": "multi_row", "sub_category": "chips"}
+    assert should_use_planogram_shelf_rows(records, cands, ctx) is True
+
+
+def test_assign_planogram_shelf_rows_labels_unknown_facings_by_row():
+    cands = _lays_candidates()
+    records = []
+    # 5 shelf rows matching planogram shelves 2–6
+    row_products = [
+        "India's Magic Masala",
+        "India's Magic Masala",
+        "Tomato Tango",
+        "American Style Cream & Onion",
+        "American Style Cream & Onion",
+    ]
+    for row_idx, y in enumerate([120, 250, 380, 510, 640]):
+        for col in range(7):
+            records.append({
+                "x1": col * 90,
+                "y1": y,
+                "x2": col * 90 + 70,
+                "y2": y + 100,
+                "brand": "Unknown",
+                "product_name": "Unidentified SKU",
+                "confidence": 0.35,
+            })
+
+    assigned = assign_planogram_shelf_rows(
+        records,
+        cands,
+        scan_context={"shelf_mode": "multi_row", "sub_category": "chips"},
+    )
+    assert len(assigned) == len(records)
+    products = {r["product_name"] for r in assigned}
+    assert "India's Magic Masala" in products
+    assert "Tomato Tango" in products
+    assert "American Style Cream & Onion" in products
+    assert all(r.get("planogram_guided") for r in assigned)
+    masala = sum(1 for r in assigned if r["product_name"] == "India's Magic Masala")
+    tomato = sum(1 for r in assigned if r["product_name"] == "Tomato Tango")
+    cream = sum(1 for r in assigned if r["product_name"] == "American Style Cream & Onion")
+    assert masala == 14
+    assert tomato == 7
+    assert cream == 14
