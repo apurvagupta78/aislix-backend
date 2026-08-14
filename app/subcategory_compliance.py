@@ -84,6 +84,14 @@ def _sibling_pc_subcategory(selected: str, detected: str | None) -> bool:
 
 def _infer_foreign_aisle(haystack: str, scan_aisle_key: str) -> tuple[str, str] | None:
     """Return (aisle_key, display_name) when product text belongs to another aisle."""
+    haystack_l = haystack.lower()
+    tea_on_beverage_scan = (
+        scan_aisle_key == "beverages"
+        and any(token in haystack_l for token in ("masala chai", "tulsi masala", "tulsi chai", "organic india"))
+    )
+    if tea_on_beverage_scan:
+        return None
+
     best_score = 0
     best_aisle = ""
     for aisle_key, keywords in AISLE_PRODUCT_KEYWORDS.items():
@@ -94,6 +102,13 @@ def _infer_foreign_aisle(haystack: str, scan_aisle_key: str) -> tuple[str, str] 
             best_score = score
             best_aisle = aisle_key
     if best_score > 0 and best_aisle:
+        if (
+            scan_aisle_key == "beverages"
+            and best_aisle == "grocery & staples"
+            and "masala" in haystack_l
+            and _keyword_score(haystack, ["tea", "chai", "tulsi"]) > 0
+        ):
+            return None
         return best_aisle, AISLE_DISPLAY_NAMES.get(best_aisle, best_aisle.title())
     return None
 

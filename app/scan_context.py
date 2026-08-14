@@ -239,7 +239,7 @@ SUB_CATEGORY_PRODUCT_KEYWORDS: dict[str, list[str]] = {
     "skincare": ["face wash", "facewash", "moistur", "lotion", "cream", "serum", "sunscreen", "spf"],
     "cosmetics": ["lipstick", "kajal", "mascara", "foundation", "compact", "nail polish"],
     "shaving": ["razor", "shaving", "aftershave", "shave gel", "shave foam"],
-    "tea": ["tea", "chai", "green tea", "tea bags", "tea bag", "premix"],
+    "tea": ["tea", "chai", "green tea", "tea bags", "tea bag", "premix", "tulsi", "masala chai", "organic india", "darjeeling"],
     "coffee": ["coffee", "nescafe", "instant coffee", "filter coffee"],
     "soft_drinks": ["cola", "coke", "pepsi", "sprite", "fanta", "mirinda", "soft drink", "soda"],
     "juices": ["juice", "mango drink", "fruit drink", "nectar"],

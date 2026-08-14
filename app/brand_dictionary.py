@@ -206,6 +206,7 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
         (r"\borganic\s+india\b", "organic india"),
         (r"\btata\s+tea\b|\btata\s+premium\b|\bdesh\s+ki\s+chai\b", "tata"),
         (r"\btwinings\b", "twinings"),
+        (r"\byellow\s+label\b", "lipton"),
         (r"\btatva\b|\btandoori\s+masala\b", "organic"),
         (r"\bwhole\s+truth\b|\bprotein\s+bar\b", "the"),
     ]
@@ -237,6 +238,10 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
     if re.search(r"\bcrax\b", text_l) and label_brand not in {"", "crax", "unknown"}:
         return True
     if re.search(r"\bkurkure\b", text_l) and label_brand not in {"", "kurkure", "unknown"}:
+        return True
+    if re.search(r"yellow\s+label", text_l) and "darjeeling" in product_l:
+        return True
+    if re.search(r"\bdarjeeling\b", text_l) and "yellow label" in product_l:
         return True
 
     label_text = " ".join(
