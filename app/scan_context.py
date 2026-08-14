@@ -804,8 +804,25 @@ def sku_allowed_in_context(
     if _cross_aisle_sku_conflict(aislix_key, brand_l, sku_l):
         return False
 
+    from app.category_scope import effective_entry_ids
+
+    pseudo = {
+        "brand": brand,
+        "product_name": "",
+        "variant": "",
+        "sku": sku,
+        "category": entry_category or "",
+    }
+    inferred_cat, _ = effective_entry_ids(pseudo)
+    scan_cat_id = context.get("aislix_category_id")
+    if scan_cat_id and inferred_cat and inferred_cat not in {"", "others"}:
+        if inferred_cat != scan_cat_id:
+            return False
+
     entry_cat_norm = _normalize_key(entry_category or "")
     if entry_cat_norm and aisle_category_matches(entry_category, context.get("aislix_category")):
+        if scan_cat_id and inferred_cat and inferred_cat not in {"", "others"}:
+            return inferred_cat == scan_cat_id
         return True
 
     sku_cat = (entry_category or infer_category(sku or brand_l)).lower()

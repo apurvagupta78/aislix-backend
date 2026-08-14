@@ -245,6 +245,39 @@ def analyze_subcategory_compliance(
         is_match, detected_id, detected_label = _evaluate_compliance(
             item, scan_context, selected, selected_label
         )
+        if not is_match:
+            pack_text = (item.get("pack_text") or "").strip()
+            if pack_text:
+                from app.brand_dictionary import match_from_text, category_allows_brand
+
+                ocr_label = match_from_text(pack_text)
+                brand = (ocr_label or {}).get("brand") or ""
+                product = (ocr_label or {}).get("product_name") or ""
+                if (
+                    ocr_label
+                    and brand.strip()
+                    and product.strip()
+                    and brand.lower() not in {"unknown", "n/a"}
+                    and category_allows_brand(
+                        None,
+                        brand,
+                        ocr_label.get("sku") or "",
+                        ocr_label.get("category") or "",
+                        scan_context=scan_context,
+                    )
+                ):
+                    probe = dict(item)
+                    probe.update(ocr_label)
+                    retry_match, retry_id, retry_label = _evaluate_compliance(
+                        probe, scan_context, selected, selected_label
+                    )
+                    if retry_match:
+                        item.update(ocr_label)
+                        item["recognition_source"] = "ocr+compliance"
+                        is_match = True
+                        detected_id = retry_id
+                        detected_label = retry_label
+
         if is_match:
             item["subcategory_match"] = True
             item["expected_sub_category"] = selected

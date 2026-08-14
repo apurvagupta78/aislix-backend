@@ -124,6 +124,27 @@ def test_mislabeled_lovable_entry_rejected_on_tea_scan():
         "category_id": "beverages",
         "sub_category_id": "tea",
     }
+    assert not catalog_entry_in_scope(entry, _tea_context())
+
+
+def test_sku_allowed_rejects_mislabeled_beverage_category():
+    from app.scan_context import sku_allowed_in_context
+
+    ctx = _tea_context()
+    assert not sku_allowed_in_context(
+        "The",
+        sku="the_whole_truth_cranberry_protein_bar_52_gms",
+        entry_category="Beverages · Tea",
+        context=ctx,
+    )
+    assert sku_allowed_in_context(
+        "Tetley",
+        sku="tetley_green_tea_regular_25_bags",
+        entry_category="Beverages · Tea",
+        context=ctx,
+    )
+
+
 def test_filter_scoped_candidates_returns_none_when_only_cross_category():
     catalog = [
         {"brand": "Nivea", "category_id": "personal_care", "sub_category_id": "skincare"},

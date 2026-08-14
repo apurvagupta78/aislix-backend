@@ -554,45 +554,27 @@ def _resolve_faiss_v3(
     second_score = candidates[1][1] if len(candidates) > 1 else 0.0
     margin = score - second_score
 
-    if not _accept_faiss_match(match, scan_category, scan_context=scan_context):
-        return _ocr_disambiguate(candidates, ocr_text, scan_category, scan_context)
-
-    if ocr_text and (
-        label_conflicts_with_tea_pack(match, ocr_text)
-        or label_conflicts_with_pack_text(match, ocr_text)
-    ):
+    if not _accept_faiss_fusion(match, score, ocr_text, scan_category, scan_context):
         dis = _ocr_disambiguate(candidates, ocr_text, scan_category, scan_context)
         if dis:
             return dis
-        text_match = match_from_text(ocr_text)
-        if text_match and _is_valid_label(text_match) and _accept_ocr_label(text_match, scan_context):
-            text_match = dict(text_match)
-            text_match["recognition_source"] = "ocr"
-            return text_match
+        if ocr_text and (
+            label_conflicts_with_tea_pack(match, ocr_text)
+            or label_conflicts_with_pack_text(match, ocr_text)
+        ):
+            text_match = match_from_text(ocr_text)
+            if text_match and _is_valid_label(text_match) and _accept_ocr_label(text_match, scan_context):
+                text_match = dict(text_match)
+                text_match["recognition_source"] = "ocr"
+                return text_match
         return None
-
-    if sub_category_blocks_brand(
-        scan_context,
-        match.get("brand") or "",
-        ocr_text,
-        product_name=match.get("product_name") or "",
-    ):
-        return _ocr_disambiguate(candidates, ocr_text, scan_category, scan_context)
-
-    if score >= FAISS_HIGH_CONFIDENCE:
-        result = dict(match)
-        result["confidence"] = round(min(0.99, score), 4)
-        result["recognition_source"] = match.get("recognition_source") or "faiss"
-        return result
 
     if score >= faiss_cutoff:
         if margin >= FAISS_TIE_MARGIN:
-            if not ocr_text or len(ocr_text.strip()) < 3 or ocr_agrees_with_label(match, ocr_text):
-                result = dict(match)
-                result["confidence"] = round(min(0.99, score), 4)
-                result["recognition_source"] = match.get("recognition_source") or "faiss"
-                return result
-            return _ocr_disambiguate(candidates, ocr_text, scan_category, scan_context)
+            result = dict(match)
+            result["confidence"] = round(min(0.99, score), 4)
+            result["recognition_source"] = match.get("recognition_source") or "faiss"
+            return result
         return _ocr_disambiguate(candidates, ocr_text, scan_category, scan_context) or None
 
     if score >= FAISS_THRESHOLD_RETRY:
@@ -774,6 +756,8 @@ def classify_records_v3(
     for index, row in enumerate(classified):
         if row:
             classified[index] = _reconcile_conflicts_only(row, ocr_texts[index])
+            if ocr_texts[index].strip():
+                classified[index]["pack_text"] = ocr_texts[index]
 
     stats["gpt_calls"] = gpt_used
     stats["unknown_count"] = stats["none"]

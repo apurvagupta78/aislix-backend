@@ -60,6 +60,28 @@ def count_learned() -> int:
     return len(_learned_catalog)
 
 
+def _is_cross_aisle_pollution(entry: dict) -> bool:
+    """True for Lovable/GPT rows mis-tagged as beverages but inferred as another aisle."""
+    from app.category_scope import effective_entry_ids
+
+    raw_cat = str(entry.get("category") or "").lower()
+    inferred_cat, _ = effective_entry_ids(entry)
+    if "beverage" in raw_cat and inferred_cat and inferred_cat not in {"beverages", "others", ""}:
+        return True
+    return False
+
+
+def _prune_cross_aisle_pollution() -> int:
+    global _learned_catalog
+    before = len(_learned_catalog)
+    _learned_catalog = [entry for entry in _learned_catalog if not _is_cross_aisle_pollution(entry)]
+    removed = before - len(_learned_catalog)
+    if removed:
+        print(f"Pruned {removed} cross-aisle learned SKU(s)")
+        _rebuild_index_unlocked()
+    return removed
+
+
 def load_learned() -> int:
     global _learned_index, _learned_catalog, _loaded
     with _lock:
@@ -82,6 +104,7 @@ def load_learned() -> int:
         for entry in _learned_catalog:
             enrich_learned_entry(entry)
 
+        _prune_cross_aisle_pollution()
         _rebuild_index_unlocked()
         _loaded = True
         print(f"Loaded {len(_learned_catalog)} learned SKUs")
@@ -94,6 +117,7 @@ def import_learned_catalog(entries: list[dict]) -> int:
     if not entries:
         return count_learned()
     with _lock:
+        _prune_cross_aisle_pollution()
         added = 0
         for raw in entries:
             sku = (raw.get("sku") or "").strip()
@@ -103,6 +127,10 @@ def import_learned_catalog(entries: list[dict]) -> int:
             if any(entry.get("sku") == sku for entry in _learned_catalog):
                 for entry in _learned_catalog:
                     if entry.get("sku") == sku:
+                        if raw.get("product_name"):
+                            entry["product_name"] = raw.get("product_name")
+                        if raw.get("brand"):
+                            entry["brand"] = raw.get("brand")
                         enrich_learned_entry(entry)
                         break
                 continue
@@ -126,6 +154,10 @@ def import_learned_catalog(entries: list[dict]) -> int:
                 "recognition_source": "learned",
             }
             enrich_learned_entry(row)
+            raw_category = str(raw.get("category") or "").lower()
+            inferred_cat = str(row.get("category_id") or "")
+            if "beverage" in raw_category and inferred_cat and inferred_cat not in {"beverages", "others", ""}:
+                continue
             _learned_catalog.append(row)
             added += 1
         if added:
