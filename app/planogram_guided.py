@@ -124,6 +124,53 @@ def cluster_records_by_shelf_row(records: list[dict]) -> list[list[dict]]:
     return [sorted(row, key=_x_center_rec) for row in clusters]
 
 
+def _product_key(row: dict) -> tuple[str, str]:
+    return (
+        _norm(row.get("brand") or ""),
+        _norm(row.get("product_name") or row.get("product") or ""),
+    )
+
+
+def unique_planogram_products_in_order(candidates: list[dict]) -> list[dict]:
+    """Unique planogram SKUs in CSV/API order (slot-level duplicates collapsed)."""
+    seen: set[tuple[str, str]] = set()
+    ordered: list[dict] = []
+    for row in candidates:
+        key = _product_key(row)
+        if not key[0] or key in seen:
+            continue
+        seen.add(key)
+        ordered.append(row)
+    return ordered
+
+
+def planogram_visual_rows(candidates: list[dict]) -> list[dict]:
+    """
+    One representative SKU per physical shelf band, top to bottom.
+    Uses shelf_position when present; otherwise consecutive product runs or unique SKUs.
+    """
+    if not candidates:
+        return []
+    by_shelf: dict[int, dict] = {}
+    for row in candidates:
+        shelf_num = parse_shelf_number(row.get("shelf_position"))
+        if shelf_num is not None and shelf_num not in by_shelf:
+            by_shelf[shelf_num] = row
+    if len(by_shelf) >= 2:
+        return [by_shelf[k] for k in sorted(by_shelf.keys())]
+
+    visual: list[dict] = []
+    prev_key: tuple[str, str] | None = None
+    for row in candidates:
+        key = _product_key(row)
+        if key != prev_key and key[0]:
+            visual.append(row)
+            prev_key = key
+    if len(visual) >= 2:
+        return visual
+    return unique_planogram_products_in_order(candidates)
+
+
 def planogram_products_by_shelf(candidates: list[dict]) -> dict[int, dict]:
     """Map planogram shelf number → representative SKU row."""
     by_shelf: dict[int, dict] = {}
@@ -133,6 +180,48 @@ def planogram_products_by_shelf(candidates: list[dict]) -> dict[int, dict]:
             continue
         by_shelf[shelf_num] = row
     return by_shelf
+
+
+def _expected_qty_for_product(candidates: list[dict], product_row: dict) -> int:
+    key = _product_key(product_row)
+    total = sum(
+        int(row.get("expected_qty") or 1)
+        for row in candidates
+        if _product_key(row) == key
+    )
+    return max(total, 1)
+
+
+def allocate_cluster_candidates(candidates: list[dict], n_clusters: int) -> list[dict | None]:
+    """Map each detected shelf-row cluster to a planogram candidate (bottom-aligned)."""
+    if n_clusters <= 0:
+        return []
+    visual = planogram_visual_rows(candidates)
+    if not visual:
+        return [None] * n_clusters
+
+    if len(visual) == n_clusters:
+        return visual
+
+    if len(visual) > n_clusters:
+        offset = len(visual) - n_clusters
+        return visual[offset:]
+
+    weights = [_expected_qty_for_product(candidates, row) for row in visual]
+    total_w = sum(weights) or len(visual)
+    allocation: list[dict] = []
+    remaining = n_clusters
+    for i, (row, weight) in enumerate(zip(visual, weights)):
+        if i == len(visual) - 1:
+            count = max(1, remaining)
+        else:
+            count = max(1, round(n_clusters * weight / total_w))
+            remaining -= count
+        allocation.extend([row] * count)
+
+    if len(allocation) < n_clusters:
+        allocation.extend([visual[-1]] * (n_clusters - len(allocation)))
+    return allocation[:n_clusters]
 
 
 def align_shelf_clusters_to_planogram(n_clusters: int, shelf_numbers: list[int]) -> dict[int, int]:
@@ -680,8 +769,7 @@ def should_use_planogram_shelf_rows(
     """Multi-row snack racks: assign SKUs by horizontal shelf row (Y position)."""
     if not records or not candidates:
         return False
-    shelf_products = planogram_products_by_shelf(candidates)
-    if len(shelf_products) < 2:
+    if len(planogram_visual_rows(candidates)) < 2:
         return False
     from app.scan_context import CHIPS_RACK_SUBCATEGORIES, effective_sub_category
 
@@ -690,7 +778,6 @@ def should_use_planogram_shelf_rows(
         return False
     if len(records) < 4:
         return False
-    # Planogram CSV with Shelf N positions — use row assignment even if layout heuristics disagree.
     return True
 
 
@@ -700,39 +787,42 @@ def assign_planogram_shelf_rows(
     scan_id: str | None = None,
     scan_context: dict | None = None,
 ) -> list[dict]:
-    """Label every facing on a multi-row rack from planogram shelf_position rows."""
+    """Label every facing on a multi-row rack from planogram shelf rows or product order."""
     if not records or not candidates:
-        return records
-
-    shelf_products = planogram_products_by_shelf(candidates)
-    if not shelf_products:
         return records
 
     row_clusters = cluster_records_by_shelf_row(records)
     if not row_clusters:
         return records
 
-    cluster_to_shelf = align_shelf_clusters_to_planogram(
-        len(row_clusters),
-        sorted(shelf_products.keys()),
-    )
-    if not cluster_to_shelf:
+    cluster_candidates = allocate_cluster_candidates(candidates, len(row_clusters))
+    if not cluster_candidates:
         return records
 
     output: list[dict] = []
     assigned = 0
     for cluster_idx, row in enumerate(row_clusters):
-        shelf_num = cluster_to_shelf.get(cluster_idx)
-        if shelf_num is None:
+        default_candidate = (
+            cluster_candidates[cluster_idx]
+            if cluster_idx < len(cluster_candidates)
+            else None
+        )
+        if default_candidate is None:
             output.extend(row)
             continue
 
+        product_key = _product_key(default_candidate)
+        shelf_num = parse_shelf_number(default_candidate.get("shelf_position"))
         shelf_candidates = [
             c
             for c in candidates
-            if parse_shelf_number(c.get("shelf_position")) == shelf_num
-        ] or [shelf_products[shelf_num]]
-        default_candidate = shelf_products[shelf_num]
+            if shelf_num is not None
+            and parse_shelf_number(c.get("shelf_position")) == shelf_num
+        ]
+        if not shelf_candidates:
+            shelf_candidates = [c for c in candidates if _product_key(c) == product_key]
+        if not shelf_candidates:
+            shelf_candidates = [default_candidate]
 
         row_ocrs: list[str] = []
         for rec in row:

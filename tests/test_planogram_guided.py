@@ -11,6 +11,7 @@ from app.planogram_guided import (
     cluster_records_by_shelf_row,
     label_from_candidate,
     parse_shelf_number,
+    planogram_visual_rows,
     prepare_planogram_candidates,
     score_text_against_candidate,
     should_use_planogram_shelf_rows,
@@ -183,18 +184,60 @@ def test_should_use_planogram_shelf_rows_for_chips_multi_row():
     assert should_use_planogram_shelf_rows(records, cands, ctx) is True
 
 
+def test_assign_planogram_shelf_rows_without_shelf_position():
+    """Frontend planogram JSON often omits shelf_position — row assignment must still work."""
+    cands = _lays_candidates()
+    for row in cands:
+        row.pop("shelf_position", None)
+
+    records = []
+    row_y = [120, 250, 380, 510, 640]
+    for y in row_y:
+        for col in range(7):
+            records.append({
+                "x1": col * 90,
+                "y1": y,
+                "x2": col * 90 + 70,
+                "y2": y + 100,
+                "brand": "Unknown",
+                "product_name": "Unidentified SKU",
+                "confidence": 0.35,
+            })
+
+    assigned = assign_planogram_shelf_rows(
+        records,
+        cands,
+        scan_context={"shelf_mode": "multi_row", "sub_category": "chips"},
+    )
+    products = {r["product_name"] for r in assigned}
+    assert "India's Magic Masala" in products
+    assert "Tomato Tango" in products
+    assert "American Style Cream & Onion" in products
+    unknown = sum(1 for r in assigned if (r.get("brand") or "").lower() == "unknown")
+    assert unknown <= len(row_y)
+
+
+def test_allocate_cluster_candidates_expands_three_products_to_six_rows():
+    cands = _lays_candidates()
+    for row in cands:
+        row.pop("shelf_position", None)
+    visual = planogram_visual_rows(cands)
+    assert len(visual) == 3
+    from app.planogram_guided import allocate_cluster_candidates
+
+    allocated = allocate_cluster_candidates(cands, 6)
+    assert len(allocated) == 6
+    names = [r["product_name"] for r in allocated]
+    assert names.count("India's Magic Masala") >= 2
+    assert "Tomato Tango" in names
+    assert "American Style Cream & Onion" in names
+
+
 def test_assign_planogram_shelf_rows_labels_unknown_facings_by_row():
     cands = _lays_candidates()
     records = []
     # 5 shelf rows matching planogram shelves 2–6
-    row_products = [
-        "India's Magic Masala",
-        "India's Magic Masala",
-        "Tomato Tango",
-        "American Style Cream & Onion",
-        "American Style Cream & Onion",
-    ]
-    for row_idx, y in enumerate([120, 250, 380, 510, 640]):
+    for y in [120, 250, 380, 510, 640]:
         for col in range(7):
             records.append({
                 "x1": col * 90,

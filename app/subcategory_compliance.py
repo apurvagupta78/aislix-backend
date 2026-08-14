@@ -324,6 +324,12 @@ def analyze_subcategory_compliance(
             item["subcategory_match"] = True
             continue
 
+        source = (item.get("recognition_source") or "").lower()
+        if item.get("planogram_guided") and source.startswith("planogram_shelf"):
+            item["subcategory_match"] = True
+            item["expected_sub_category"] = selected
+            continue
+
         is_match, detected_id, detected_label = _evaluate_compliance(
             item, scan_context, selected, selected_label
         )
