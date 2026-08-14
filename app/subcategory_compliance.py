@@ -279,6 +279,21 @@ def _subcategory_label(scan_context: dict, sub_id: str) -> str:
     return resolve_subcategory_label(category, sub_id) or sub_id.replace("_", " ").title()
 
 
+def _planogram_label_trusted_for_audit(item: dict, scan_context: dict) -> bool:
+    """Closed-vocabulary planogram labels are on-assignment — skip cross-aisle mismatch."""
+    if not item.get("planogram_guided"):
+        return False
+    if not scan_context.get("planogram_candidates") and not scan_context.get("planogram_mode"):
+        return False
+    brand = (item.get("brand") or "").strip().lower()
+    product = (item.get("product_name") or "").strip().lower()
+    if brand in {"", "unknown", "n/a"}:
+        return False
+    if product in {"", "unknown", "unidentified sku", "n/a"}:
+        return False
+    return True
+
+
 def analyze_subcategory_compliance(
     classified: list[dict],
     scan_context: dict | None,
@@ -324,8 +339,7 @@ def analyze_subcategory_compliance(
             item["subcategory_match"] = True
             continue
 
-        source = (item.get("recognition_source") or "").lower()
-        if item.get("planogram_guided") and source.startswith("planogram_shelf"):
+        if _planogram_label_trusted_for_audit(item, scan_context):
             item["subcategory_match"] = True
             item["expected_sub_category"] = selected
             continue

@@ -445,15 +445,24 @@ def label_from_candidate(
     confidence: float,
     source: str,
     ocr_text: str = "",
+    scan_context: dict | None = None,
 ) -> dict:
     product = candidate.get("product_name") or ""
     brand = candidate.get("brand") or ""
+    category = (candidate.get("category") or "").strip()
+    if not category or category.lower() in {"general", "others"}:
+        category = (scan_context or {}).get("aislix_category") or category or "General"
+    sub_category = (candidate.get("sub_category") or "").strip()
+    if not sub_category and scan_context:
+        from app.scan_context import effective_sub_category
+
+        sub_category = effective_sub_category(scan_context) or ""
     return {
         "brand": brand,
         "product_name": product,
         "variant": "",
-        "category": candidate.get("category") or "General",
-        "sub_category": candidate.get("sub_category") or "",
+        "category": category,
+        "sub_category": sub_category,
         "confidence": round(float(confidence), 4),
         "recognition_source": source,
         "sku": metadata_to_sku(brand, product, ""),
@@ -466,6 +475,7 @@ def snap_label_to_planogram(
     label: dict | None,
     candidates: list[dict],
     ocr_text: str = "",
+    scan_context: dict | None = None,
 ) -> dict | None:
     """Map an open-vocabulary label to the nearest planogram row, or None."""
     if not label or not candidates:
@@ -486,7 +496,7 @@ def snap_label_to_planogram(
             candidate, score = ocr_match
     conf = max(float(label.get("confidence") or 0.5), score)
     source = label.get("recognition_source") or "planogram_snap"
-    return label_from_candidate(candidate, conf, source, ocr_text)
+    return label_from_candidate(candidate, conf, source, ocr_text, scan_context=scan_context)
 
 
 def planogram_gpt_prompt_block(candidates: list[dict]) -> str:
@@ -585,6 +595,7 @@ def classify_with_planogram_gpt(
                 float(result.get("confidence") or 0.82),
                 "gpt_planogram",
                 ocr_hint,
+                scan_context=scan_context,
             )
         return {
             "brand": "Unknown",
@@ -655,7 +666,7 @@ def classify_records_planogram_guided(
             for match, score in row_candidates:
                 if score < 0.78:
                     break
-                snapped = snap_label_to_planogram(match, candidates, pack_text)
+                snapped = snap_label_to_planogram(match, candidates, pack_text, scan_context)
                 if snapped and (pack_text.strip() or score >= 0.92):
                     snapped["confidence"] = max(snapped["confidence"], float(score) * 0.95)
                     classified[index] = _merge_record(records[index], snapped)
@@ -672,13 +683,15 @@ def classify_records_planogram_guided(
             candidate, score = match
             classified[index] = _merge_record(
                 records[index],
-                label_from_candidate(candidate, max(0.72, score), "planogram_ocr", pack_text),
+                label_from_candidate(
+                    candidate, max(0.72, score), "planogram_ocr", pack_text, scan_context=scan_context
+                ),
             )
             stats["planogram"] += 1
             continue
 
         ocr_label = classify_with_ocr(images[index], raw_text=pack_text)
-        snapped = snap_label_to_planogram(ocr_label, candidates, pack_text)
+        snapped = snap_label_to_planogram(ocr_label, candidates, pack_text, scan_context)
         if snapped:
             classified[index] = _merge_record(records[index], snapped)
             stats["ocr"] += 1
@@ -695,7 +708,7 @@ def classify_records_planogram_guided(
         for local_i, index in enumerate(pending):
             match, score = matches[local_i]
             if match:
-                snapped = snap_label_to_planogram(match, candidates, ocr_texts[index])
+                snapped = snap_label_to_planogram(match, candidates, ocr_texts[index], scan_context)
                 if snapped:
                     snapped["confidence"] = max(snapped["confidence"], float(score) * 0.95)
                     classified[index] = _merge_record(records[index], snapped)
@@ -712,7 +725,7 @@ def classify_records_planogram_guided(
             for match, score in topk[local_i]:
                 if score < 0.78:
                     break
-                snapped = snap_label_to_planogram(match, candidates, ocr_texts[index])
+                snapped = snap_label_to_planogram(match, candidates, ocr_texts[index], scan_context)
                 if snapped:
                     snapped["confidence"] = max(snapped["confidence"], float(score) * 0.95)
                     snapped_label = snapped
@@ -748,7 +761,9 @@ def classify_records_planogram_guided(
                 candidate, score = match
                 classified[index] = _merge_record(
                     records[index],
-                    label_from_candidate(candidate, score, "planogram_fallback", pack_text),
+                    label_from_candidate(
+                        candidate, score, "planogram_fallback", pack_text, scan_context=scan_context
+                    ),
                 )
                 stats["planogram"] += 1
                 continue
@@ -867,7 +882,7 @@ def assign_planogram_shelf_rows(
             if ocr.strip() and re.search(r"lay'?s\b", ocr, flags=re.IGNORECASE):
                 conf = max(conf, 0.84)
             source = "planogram_shelf_row_ocr" if score >= PLANOGRAM_SLOT_MIN_SCORE else "planogram_shelf_row"
-            label = label_from_candidate(candidate, conf, source, ocr)
+            label = label_from_candidate(candidate, conf, source, ocr, scan_context=scan_context)
             output.append(_merge_record(rec, label))
             assigned += 1
 
@@ -1092,7 +1107,7 @@ def assign_planogram_slots(
         text_score = score_text_against_candidate(ocr, candidate)
         conf = max(0.58, text_score, float(best.get("confidence") or 0) * 0.85)
         source = "planogram_slot_ocr" if text_score >= PLANOGRAM_SLOT_MIN_SCORE else "planogram_slot"
-        label = label_from_candidate(candidate, conf, source, ocr)
+        label = label_from_candidate(candidate, conf, source, ocr, scan_context=scan_context)
         merged = _merge_record(_union_record_box(slot), label)
 
         if (

@@ -85,6 +85,22 @@ def test_label_from_candidate_marks_guided():
     assert label["brand"]
 
 
+def test_label_from_candidate_fills_category_from_scan_context():
+    candidate = {
+        "brand": "Lay's",
+        "product_name": "India's Magic Masala",
+        "category": "",
+        "sub_category": "",
+    }
+    ctx = {
+        "aislix_category": "Packaged Food & Snacks",
+        "sub_category": "chips",
+    }
+    label = label_from_candidate(candidate, 0.85, "planogram_ocr", scan_context=ctx)
+    assert label["category"] == "Packaged Food & Snacks"
+    assert label["sub_category"] == "chips"
+
+
 def test_assign_planogram_slots_one_per_column():
     cands = _candidates()
     records = []

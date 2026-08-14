@@ -200,4 +200,36 @@ def test_balaji_namkeen_compliant_on_chips_audit():
     assert result["misplaced_facings"] == 0
 
 
+def test_planogram_guided_lays_not_misplaced_on_chips_audit():
+    """Planogram OCR/GPT labels with category=General must not flag cross-aisle."""
+    ctx = {
+        "aislix_category": "Packaged Food & Snacks",
+        "sub_category": "chips",
+        "sub_category_label": "Chips",
+        "catalog_categories": ["snacks", "bakery & biscuits"],
+        "brand_hints": {"lays", "kurkure", "bingo"},
+        "planogram_mode": True,
+        "planogram_candidates": [
+            {"brand": "Lay's", "product_name": "India's Magic Masala", "sub_category": "chips"},
+        ],
+    }
+    classified = [
+        _facing(
+            "Lays",
+            "India's Magic Masala",
+            category="General",
+            planogram_guided=True,
+            recognition_source="planogram_ocr",
+        ),
+        _facing(
+            "Lays",
+            "Tomato Tango",
+            category="General",
+            planogram_guided=True,
+            recognition_source="gpt_planogram",
+        ),
+    ]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 0
+    assert all(item["subcategory_match"] is True for item in classified)
 
