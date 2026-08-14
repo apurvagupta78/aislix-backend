@@ -7,7 +7,11 @@ from typing import Any
 
 from app.inventory import _normalize_brand_key
 from app.planogram_csv import build_match_key
-from app.scan_context import normalize_sub_category_id, sub_categories_match
+from app.scan_context import (
+    normalize_planogram_category,
+    normalize_sub_category_id,
+    sub_categories_match,
+)
 
 ISSUE_CORRECT = "correct"
 ISSUE_MISSING = "missing"
@@ -40,6 +44,11 @@ _SUB_CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
     "conditioner": ("conditioner", "conditioning"),
     "ice cream": ("ice cream", "kulfi", "sandwich", "funwich", "sorbet", "gelato"),
     "ice_cream": ("ice cream", "kulfi", "sandwich", "funwich", "sorbet", "gelato"),
+    "chips": ("chips", "crisps", "wafers", "nacho", "potato"),
+    "potato_chips": ("chips", "crisps", "wafers", "potato", "classic", "barbecue"),
+    "tortilla_chips": ("doritos", "nacho", "tortilla", "cheese"),
+    "extruded_snacks": ("kurkure", "cheetos", "bingo", "masala munch", "chatka"),
+    "namkeen": ("namkeen", "bhujia", "balaji", "haldiram"),
 }
 
 
@@ -104,8 +113,16 @@ def filter_planogram_by_scope(
         return items
 
     if scope_type == "category":
-        cat = _norm(scope_values.get("category") or scan_context.get("aislix_category") or "")
-        return [i for i in items if _norm(i.get("category") or "") == cat or cat in _norm(i.get("category") or "")]
+        cat = _norm(
+            normalize_planogram_category(
+                scope_values.get("category") or scan_context.get("aislix_category") or ""
+            )
+        )
+        return [
+            i for i in items
+            if _norm(normalize_planogram_category(i.get("category") or "")) == cat
+            or cat in _norm(normalize_planogram_category(i.get("category") or ""))
+        ]
 
     if scope_type == "sub_category":
         sub = normalize_sub_category_id(
@@ -268,12 +285,16 @@ def compare_planogram(
         wrong_cat = False
         cat_name = (scan_context or {}).get("aislix_category") or expected.get("category")
         exp_sub = expected.get("sub_category") or ""
-        act_sub = (
-            (scan_context or {}).get("sub_category")
-            or actual.get("sub_category")
-            or ""
-        )
-        if exp_sub and act_sub and not sub_categories_match(exp_sub, act_sub, cat_name):
+        scan_sub = (scan_context or {}).get("sub_category") or ""
+        detected_sub = actual.get("sub_category") or ""
+        if not detected_sub:
+            from app.subcategory_compliance import infer_detected_subcategory
+
+            detected_sub = infer_detected_subcategory(actual, scan_context) or scan_sub
+        # Planogram rows may use finer sub-types (potato_chips) than the audit (chips).
+        if exp_sub and scan_sub and sub_categories_match(exp_sub, scan_sub, cat_name):
+            wrong_cat = False
+        elif exp_sub and detected_sub and not sub_categories_match(exp_sub, detected_sub, cat_name):
             wrong_cat = True
 
         wrong_loc_row = _wrong_location_check(actual, full_store, current_aisle)

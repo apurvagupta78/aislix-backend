@@ -272,3 +272,91 @@ def test_shampoo_row_realistic_inventory_compliance():
     )
     assert result["compliance_percent"] >= 50.0
     assert result["summary"]["wrong_products"] <= 2
+
+
+CHIPS_FIXTURE = Path(__file__).resolve().parents[1] / "data" / "fixtures" / "planogram_chips_rack.csv"
+
+
+def _load_chips_fixture_items() -> list[dict]:
+    parsed = parse_csv_text(CHIPS_FIXTURE.read_bytes().decode("utf-8-sig"))
+    assert parsed["valid_count"] == 20, parsed["errors"]
+    return [row["data"] for row in parsed["rows"] if row.get("valid")]
+
+
+def test_chips_planogram_csv_parses_with_bom_and_snacks_category():
+    parsed = parse_csv_text(CHIPS_FIXTURE.read_bytes().decode("utf-8-sig"))
+    assert parsed["valid_count"] == 20
+    first = parsed["rows"][0]["data"]
+    assert first["category"] == "Packaged Food & Snacks"
+    assert first["sub_category"] == "potato_chips"
+
+
+def test_chips_planogram_scopes_to_chips_audit():
+    from app.planogram_guided import prepare_planogram_candidates
+
+    items = _load_chips_fixture_items()
+    ctx = {
+        "aislix_category": "Packaged Food & Snacks",
+        "sub_category": "chips",
+        "shelf_label": "Rack 01",
+    }
+    scoped = prepare_planogram_candidates(
+        items,
+        "sub_category",
+        {"sub_category": "chips"},
+        ctx,
+    )
+    assert len(scoped) == 20
+
+
+def test_chips_subtypes_match_chips_audit():
+    from app.scan_context import sub_categories_match
+
+    assert sub_categories_match("potato_chips", "chips")
+    assert sub_categories_match("tortilla_chips", "chips")
+    assert sub_categories_match("extruded_snacks", "chips")
+    assert sub_categories_match("namkeen", "chips")
+
+
+def test_chips_planogram_no_false_wrong_category_on_mixed_rack():
+    expected = _load_chips_fixture_items()
+    picks = [row for row in expected if row["brand"] in {"Doritos", "Kurkure", "Balaji"}][:3]
+    inventory = [
+        {"brand": row["brand"], "product_name": row["product_name"], "quantity": 2}
+        for row in picks
+    ]
+    result = compare_planogram(
+        picks,
+        inventory,
+        scan_context={
+            "sub_category": "chips",
+            "aislix_category": "Packaged Food & Snacks",
+            "shelf_label": "Rack 01",
+        },
+    )
+    assert result["summary"]["wrong_category"] == 0
+    assert result["summary"]["correct_products"] == 3
+
+
+def test_chips_planogram_full_rack_inventory_compliance():
+    """Simulate ideal chips rack: 20 SKUs × 2 facings."""
+    expected = _load_chips_fixture_items()
+    inventory = [
+        {"brand": row["brand"], "product_name": row["product_name"], "quantity": row["expected_qty"]}
+        for row in expected
+    ]
+    result = compare_planogram(
+        expected,
+        inventory,
+        scan_context={
+            "sub_category": "chips",
+            "aislix_category": "Packaged Food & Snacks",
+            "shelf_label": "Rack 01",
+        },
+        scope_type="sub_category",
+        scope_values={"sub_category": "chips"},
+    )
+    assert result["compliance_percent"] == 100.0
+    assert result["summary"]["wrong_category"] == 0
+    assert result["scan_status"] == "compliant"
+

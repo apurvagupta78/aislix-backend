@@ -1,0 +1,21 @@
+location,category,sub_category,brand,product_name,expected_qty,sku,shelf_position
+Rack 01,Snacks,Potato Chips,Lay's,Classic,2,RACK-SN-001,Shelf 1 / Position 1-2
+Rack 01,Snacks,Potato Chips,Lay's,Chile Limón,2,RACK-SN-002,Shelf 1 / Position 3-4
+Rack 01,Snacks,Tortilla Chips,Doritos,Nacho Cheese,2,RACK-SN-003,Shelf 1 / Position 5-6
+Rack 01,Snacks,Tortilla Chips,Doritos,Sweet Chilli,2,RACK-SN-004,Shelf 1 / Position 7-8
+Rack 01,Snacks,Extruded Snacks,Kurkure,Chilli Chatka,2,RACK-SN-005,Shelf 1 / Position 9-10
+Rack 01,Snacks,Extruded Snacks,Cheetos,Crunchy,2,RACK-SN-006,Shelf 2 / Position 1-2
+Rack 01,Snacks,Potato Chips,Lay's,Barbecue,2,RACK-SN-007,Shelf 2 / Position 3-4
+Rack 01,Snacks,Potato Chips,Lay's,India's Magic Masala,2,RACK-SN-008,Shelf 2 / Position 5-6
+Rack 01,Snacks,Extruded Snacks,Kurkure,Masala Munch,2,RACK-SN-009,Shelf 2 / Position 7-8
+Rack 01,Snacks,Potato Chips,Uncle Chipps,Spicy Treat,2,RACK-SN-010,Shelf 2 / Position 9-10
+Rack 01,Snacks,Potato Chips,Ruffles,Original,2,RACK-SN-011,Shelf 3 / Position 1-2
+Rack 01,Snacks,Potato Chips,Pringles,Original,2,RACK-SN-012,Shelf 3 / Position 3-4
+Rack 01,Snacks,Potato Chips,Pringles,Sour Cream & Onion,2,RACK-SN-013,Shelf 3 / Position 5-6
+Rack 01,Snacks,Potato Chips,Lay's,Salted,2,RACK-SN-014,Shelf 3 / Position 7-8
+Rack 01,Snacks,Potato Chips,Lay's Maxx,Sizzling Barbeque,2,RACK-SN-015,Shelf 3 / Position 9-10
+Rack 01,Snacks,Namkeen,Balaji,Masala Masti,2,RACK-SN-016,Shelf 4 / Position 1-2
+Rack 01,Snacks,Extruded Snacks,Balaji,Crunchem Masala Masti,2,RACK-SN-017,Shelf 4 / Position 3-4
+Rack 01,Snacks,Extruded Snacks,Bingo!,Original Style,2,RACK-SN-018,Shelf 4 / Position 5-6
+Rack 01,Snacks,Extruded Snacks,Bingo!,Mad Angles,2,RACK-SN-019,Shelf 4 / Position 7-8
+Rack 01,Snacks,Namkeen,Haldiram's,Aloo Bhujia,2,RACK-SN-020,Shelf 4 / Position 9-10

@@ -7,7 +7,7 @@ import io
 import re
 from typing import Any
 
-from app.scan_context import normalize_sub_category_id
+from app.scan_context import normalize_planogram_category, normalize_sub_category_id
 
 REQUIRED_FIELDS = ("location", "category", "sub_category", "brand", "product_name", "expected_qty")
 
@@ -71,7 +71,7 @@ def normalize_planogram_row(row: dict[str, Any], row_num: int = 0) -> tuple[dict
 
     brand = str(row.get("brand") or "").strip()
     product_name = str(row.get("product_name") or row.get("product") or "").strip()
-    category = str(row.get("category") or "").strip()
+    category = normalize_planogram_category(str(row.get("category") or "").strip())
     location = str(row.get("location") or "").strip()
     sub_category = str(row.get("sub_category") or "").strip()
 
@@ -121,6 +121,7 @@ def parse_csv_text(content: str, delimiter: str | None = None) -> dict[str, Any]
     if not content or not content.strip():
         return {"rows": [], "errors": ["CSV is empty"], "valid_count": 0, "error_count": 0}
 
+    content = content.lstrip("\ufeff")
     sample = content[:4096]
     if delimiter is None:
         delimiter = ";" if sample.count(";") > sample.count(",") else ","

@@ -32,6 +32,7 @@ from app.scan_context import (
     label_fits_scan_context,
     product_type_matches_sub_category,
     propagation_type_conflict,
+    requires_ocr_for_faiss,
     strict_subcategory_gates_enabled,
     sub_category_blocks_brand,
 )
@@ -48,6 +49,7 @@ FAISS_THRESHOLD = float(os.getenv("FAISS_SIMILARITY_THRESHOLD", "0.92"))
 FAISS_THRESHOLD_CONTEXT = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_CONTEXT", "0.88"))
 FAISS_THRESHOLD_RETRY = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_RETRY", "0.82"))
 FAISS_HIGH_CONFIDENCE = float(os.getenv("FAISS_HIGH_CONFIDENCE", "0.95"))
+FAISS_EMPTY_OCR_MIN = float(os.getenv("FAISS_EMPTY_OCR_MIN", "0.97"))
 FAISS_SCOPED_NO_OCR = float(os.getenv("FAISS_SCOPED_NO_OCR", "0.92"))
 PROPAGATE_THRESHOLD = float(os.getenv("PROPAGATE_SIMILARITY_THRESHOLD", "0.90"))
 PROPAGATE_THRESHOLD_NO_OCR = float(os.getenv("PROPAGATE_SIMILARITY_THRESHOLD_NO_OCR", "0.95"))
@@ -505,6 +507,23 @@ def _ocr_supports_faiss_match(
     return score >= FAISS_HIGH_CONFIDENCE
 
 
+def _ocr_text_usable(ocr_text: str) -> bool:
+    return bool(ocr_text and len(ocr_text.strip()) >= 3)
+
+
+def _accept_faiss_without_ocr(
+    match: dict,
+    score: float,
+    scan_context: dict | None,
+) -> bool:
+    """Visual-only FAISS — blocked on snack audits unless similarity is near-certain."""
+    if requires_ocr_for_faiss(scan_context):
+        return score >= FAISS_EMPTY_OCR_MIN
+    if _faiss_allowed_without_ocr(match, score, scan_context):
+        return True
+    return score >= FAISS_HIGH_CONFIDENCE
+
+
 def _accept_faiss_fusion(
     match: dict,
     score: float,
@@ -528,11 +547,12 @@ def _accept_faiss_fusion(
     ):
         return False
 
+    ocr_usable = _ocr_text_usable(ocr_text)
     sub = (scan_context or {}).get("sub_category")
     if sub and sub != "others" and strict_subcategory_gates_enabled():
         if not product_type_matches_sub_category(sub, match, ocr_text):
             return False
-        if ocr_text and len(ocr_text.strip()) >= 3 and not _ocr_supports_faiss_match(
+        if ocr_usable and not _ocr_supports_faiss_match(
             match, ocr_text, score, scan_context
         ):
             from app.scan_context import compatible_product_types, infer_product_type
@@ -550,12 +570,15 @@ def _accept_faiss_fusion(
                 label_type != sub and not compatible_product_types(label_type, sub)
             ):
                 return False
+        if not ocr_usable:
+            return _accept_faiss_without_ocr(match, score, scan_context)
         return True
 
-    if ocr_text and len(ocr_text.strip()) >= 3:
+    if ocr_usable:
         if not _ocr_supports_faiss_match(match, ocr_text, score, scan_context):
             return False
-    return True
+        return True
+    return _accept_faiss_without_ocr(match, score, scan_context)
 
 
 def recognition_v3_enabled() -> bool:

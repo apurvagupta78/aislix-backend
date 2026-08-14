@@ -340,6 +340,16 @@ def _infer_product_type(text: str) -> str | None:
 
 SNACK_PRODUCT_TYPES = frozenset({"chips", "namkeen", "biscuits", "noodles", "chocolates"})
 
+# Snack-facing audits: FAISS must not guess the brand when pack OCR is empty.
+SNACK_OCR_REQUIRED_AISLE = frozenset({"packaged food & snacks"})
+
+
+def requires_ocr_for_faiss(scan_context: dict | None) -> bool:
+    """True when visual-only FAISS matches need very high confidence (snack packs)."""
+    if not scan_context:
+        return False
+    return _normalize_key(scan_context.get("aislix_category") or "") in SNACK_OCR_REQUIRED_AISLE
+
 
 def compatible_product_types(left: str, right: str) -> bool:
     """True when two inferred product types can coexist on the same snack-facing audit."""
@@ -610,13 +620,77 @@ def normalize_sub_category_id(raw: str | None, category_name: str | None = None)
     return key
 
 
+# Planogram CSV often uses shorthand category names vs Aislix aisle labels.
+PLANOGRAM_CATEGORY_ALIASES: dict[str, str] = {
+    "snacks": "packaged food & snacks",
+    "packaged food and snacks": "packaged food & snacks",
+    "packaged_food_snacks": "packaged food & snacks",
+    "frozen foods": "frozen foods & ice cream",
+    "frozen": "frozen foods & ice cream",
+    "ice cream": "frozen foods & ice cream",
+    "personal care products": "personal care",
+    "home care products": "home care",
+    "grocery": "grocery & staples",
+    "staples": "grocery & staples",
+}
+
+# Finer planogram sub-types that belong on the same snack-rack audit as "Chips".
+CHIPS_RACK_SUBCATEGORIES = frozenset({
+    "chips",
+    "potato_chips",
+    "tortilla_chips",
+    "extruded_snacks",
+    "namkeen",
+    "wafers",
+    "crisps",
+})
+
+SUB_CATEGORY_SIBLING_GROUPS: tuple[frozenset[str], ...] = (
+    frozenset({"shampoo", "conditioner"}),
+    CHIPS_RACK_SUBCATEGORIES,
+    frozenset({"biscuits", "cookies", "crackers"}),
+    frozenset({"tea", "coffee"}),
+)
+
+
+def normalize_planogram_category(raw: str | None) -> str:
+    """Map planogram CSV category shorthand to canonical Aislix aisle name."""
+    if not raw or not str(raw).strip():
+        return ""
+    key = _normalize_key(str(raw))
+    alias = PLANOGRAM_CATEGORY_ALIASES.get(key)
+    if alias:
+        resolved = resolve_aislix_category(alias)
+        if resolved:
+            return str(resolved.get("name") or alias)
+        return alias.title()
+    resolved = resolve_aislix_category(raw)
+    if resolved:
+        return str(resolved.get("name") or raw).strip()
+    return str(raw).strip()
+
+
+def sibling_subcategories(a: str | None, b: str | None) -> bool:
+    """True when two sub-category ids are compatible on the same focused audit."""
+    left = _slug_key(a or "")
+    right = _slug_key(b or "")
+    if not left or not right:
+        return False
+    for group in SUB_CATEGORY_SIBLING_GROUPS:
+        if left in group and right in group:
+            return True
+    return False
+
+
 def sub_categories_match(a: str | None, b: str | None, category_name: str | None = None) -> bool:
     """True when two sub-category values refer to the same subcategory (id or label)."""
     left = normalize_sub_category_id(a, category_name)
     right = normalize_sub_category_id(b, category_name)
     if not left or not right:
         return not left and not right
-    return left == right
+    if left == right:
+        return True
+    return sibling_subcategories(left, right)
 
 
 def aisle_category_matches(item_category: str | None, aislix_category: str | None) -> bool:

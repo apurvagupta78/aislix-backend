@@ -90,6 +90,56 @@ def test_faiss_fusion_accepts_scoped_match_without_ocr():
     assert _accept_faiss_fusion(match, 0.93, "", None, ctx) is True
 
 
+def test_faiss_blocked_without_ocr_on_chips_scan():
+    ctx = resolve_scan_context(
+        {"category": "Packaged Food & Snacks · Chips", "location": "A-1-Z"}
+    )
+    match = {
+        "brand": "TooYumm",
+        "product_name": "Tooyumm",
+        "sku": "tooyumm_tooyumm",
+        "category": "General",
+    }
+    assert _accept_faiss_fusion(match, 0.93, "", None, ctx) is False
+
+
+def test_faiss_allowed_without_ocr_on_chips_at_near_certain_score():
+    ctx = resolve_scan_context(
+        {"category": "Packaged Food & Snacks · Chips", "location": "A-1-Z"}
+    )
+    match = {
+        "brand": "Lays",
+        "product_name": "Classic Salted Potato Chips",
+        "sku": "lays_classic_salted_potato_chips",
+        "category": "General",
+    }
+    assert _accept_faiss_fusion(match, 0.97, "", None, ctx) is True
+
+
+def test_faiss_blocked_on_chips_when_ocr_conflicts():
+    ctx = resolve_scan_context(
+        {"category": "Packaged Food & Snacks · Chips", "location": "A-1-Z"}
+    )
+    match = {
+        "brand": "TooYumm",
+        "product_name": "Tooyumm",
+        "sku": "tooyumm_tooyumm",
+        "category": "General",
+    }
+    assert _accept_faiss_fusion(match, 0.99, "Lay's Magic Masala potato chips", None, ctx) is False
+
+
+def test_logo_focus_crop_targets_center_logo_band():
+    from PIL import Image
+
+    from app.ocr_reader import logo_focus_crop
+
+    img = Image.new("RGB", (100, 200), color=(255, 255, 255))
+    crop = logo_focus_crop(img)
+    assert crop.size == (84, 86)
+    assert crop.getbbox() is not None
+
+
 def test_effective_entry_ids_kulfi_sku_is_frozen():
     cat_id, sub_id = effective_entry_ids(
         {

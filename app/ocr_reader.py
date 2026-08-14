@@ -33,6 +33,23 @@ SIZE_TOKEN_PATTERN = re.compile(
 )
 
 
+def logo_focus_crop(image: Image.Image) -> Image.Image:
+    """
+    Center band where brand logos sit on upright snack bags.
+    Skips shelf strips (top) and flavor/weight text (lower pack).
+    """
+    width, height = image.size
+    if width < 12 or height < 12:
+        return image
+    left = int(width * 0.08)
+    right = int(width * 0.92)
+    top = int(height * 0.12)
+    bottom = int(height * 0.55)
+    if right - left < 8 or bottom - top < 8:
+        return image
+    return image.crop((left, top, right, bottom))
+
+
 def _upscale_if_small(image: Image.Image) -> Image.Image:
     width, height = image.size
     longest = max(width, height)
@@ -302,8 +319,9 @@ def read_packaging_text(image: Image.Image, *, aggressive: bool = False) -> str:
     pack_bottom = max(1, int(height * 0.85))
     pack_crop = image.crop((0, 0, width, pack_bottom))
 
-    def _read_crop(crop: Image.Image) -> str:
-        if aggressive:
+    def _read_crop(crop: Image.Image, *, force_aggressive: bool = False) -> str:
+        use_aggressive = aggressive or force_aggressive
+        if use_aggressive:
             crop = _upscale_if_small(crop)
             longest = max(crop.size)
             if longest < 640:
@@ -322,6 +340,8 @@ def read_packaging_text(image: Image.Image, *, aggressive: bool = False) -> str:
             return _clean_ocr_text(raw)
         return _clean_ocr_text(read_text_from_pil(crop))
 
+    logo_band = logo_focus_crop(pack_crop)
+    logo_text = _read_crop(logo_band)
     full_text = _read_crop(pack_crop)
     if pack_bottom >= 40:
         band_h = max(1, int(pack_bottom * 0.45))
@@ -331,5 +351,14 @@ def read_packaging_text(image: Image.Image, *, aggressive: bool = False) -> str:
         center_bottom = min(pack_bottom, int(pack_bottom * 0.65))
         center_band = pack_crop.crop((0, center_top, width, center_bottom))
         center_text = _read_crop(center_band)
-        return _merge_ocr_texts(top_text, center_text, full_text)
-    return full_text
+        merged = _merge_ocr_texts(logo_text, top_text, center_text, full_text)
+        if len(merged.strip()) < 3:
+            merged = _merge_ocr_texts(
+                _read_crop(logo_band, force_aggressive=True),
+                merged,
+            )
+        return merged
+    merged = _merge_ocr_texts(logo_text, full_text)
+    if len(merged.strip()) < 3:
+        merged = _merge_ocr_texts(_read_crop(logo_band, force_aggressive=True), merged)
+    return merged

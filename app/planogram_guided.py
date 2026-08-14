@@ -32,7 +32,11 @@ _PLANOGRAM_PRODUCT_KEYWORDS: dict[str, tuple[str, ...]] = {
         "ice cream", "kulfi", "rajbhog", "rajwadi", "rabdi", "sandwich", "funwich", "funwith",
         "tricone", "sorbet", "gelato", "raspberry", "rasberry", "chocolate", "brooklyn", "baskin",
     ),
-    "chips": ("chips", "crisps", "wafers", "nacho", "masala", "barbecue"),
+    "chips": ("chips", "crisps", "wafers", "nacho", "masala", "barbecue", "classic", "limon", "limón"),
+    "potato_chips": ("chips", "crisps", "wafers", "potato", "classic", "barbecue", "salted", "magic masala"),
+    "tortilla_chips": ("doritos", "nacho", "tortilla", "sweet chili", "sweet chilli", "cheese"),
+    "extruded_snacks": ("kurkure", "cheetos", "bingo", "masala munch", "chatka", "angles", "crunchem"),
+    "namkeen": ("namkeen", "bhujia", "balaji", "haldiram", "mast", "masti"),
 }
 
 
@@ -142,6 +146,16 @@ def _ocr_brand_conflicts(text: str, candidate: dict) -> bool:
         (r"\bdove\b", "dove"),
         (r"\bclinic\s*plus\b|\bclinic\b", "clinic"),
         (r"\bhimalaya\b", "himalaya"),
+        (r"\blay'?s\b|\blays\b", "lay"),
+        (r"\bdoritos\b", "doritos"),
+        (r"\bkurkure\b", "kurkure"),
+        (r"\bpringles\b", "pringles"),
+        (r"\bruffles\b", "ruffles"),
+        (r"\bcheetos\b", "cheetos"),
+        (r"\bbalaji\b", "balaji"),
+        (r"\bbingo\b", "bingo"),
+        (r"\bhaldiram", "haldiram"),
+        (r"\buncle\s*chipps?\b", "uncle"),
     ]
     for pattern, hinted in hints:
         if re.search(pattern, blob, flags=re.IGNORECASE):
@@ -174,6 +188,10 @@ def _brand_in_text(text: str, candidate: dict) -> float:
         return 0.0
     if brand in blob:
         return 1.0
+    if "lay" in brand and re.search(r"lay'?s\b", blob, flags=re.IGNORECASE):
+        return 0.95
+    if "haldiram" in brand and "haldiram" in blob.replace("'", ""):
+        return 0.92
     # Common OCR variants
     if "head" in blob and "shoulder" in blob and ("head" in brand or "shoulder" in brand):
         return 0.88

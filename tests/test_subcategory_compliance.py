@@ -187,3 +187,17 @@ def test_kurkure_masala_munch_compliant_on_chips_audit():
     assert result["misplaced_facings"] == 0
 
 
+def test_balaji_namkeen_compliant_on_chips_audit():
+    ctx = {
+        "aislix_category": "Packaged Food & Snacks",
+        "sub_category": "chips",
+        "sub_category_label": "Chips",
+        "catalog_categories": ["snacks", "bakery & biscuits"],
+        "brand_hints": {"lays", "kurkure", "bingo", "haldiram", "balaji"},
+    }
+    classified = [_facing("Balaji", "Masala Masti", pack_text="masala masti namkeen")]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 0
+
+
+

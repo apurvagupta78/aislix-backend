@@ -84,6 +84,17 @@ def _sibling_pc_subcategory(selected: str, detected: str | None) -> bool:
     return False
 
 
+def _sibling_chips_subcategory(selected: str, detected: str | None) -> bool:
+    """Potato/tortilla/extruded/namkeen facings on a Chips rack audit."""
+    from app.scan_context import CHIPS_RACK_SUBCATEGORIES
+
+    if not detected or detected == selected:
+        return True
+    if selected in CHIPS_RACK_SUBCATEGORIES and detected in CHIPS_RACK_SUBCATEGORIES:
+        return True
+    return False
+
+
 def _shampoo_product_text(haystack: str) -> bool:
     """True when label text describes hair wash, not body lotion/skincare."""
     h = haystack.lower()
@@ -238,6 +249,8 @@ def _evaluate_compliance(
     cat_name = scan_context.get("aislix_category")
     if detected and not sub_categories_match(detected, selected, cat_name):
         if _sibling_pc_subcategory(selected, detected):
+            return True, selected, selected_label
+        if _sibling_chips_subcategory(selected, detected):
             return True, selected, selected_label
         pack_text = (item.get("pack_text") or "").strip()
         if _subcategory_product_guard(selected, haystack, pack_text):
