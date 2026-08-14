@@ -53,6 +53,14 @@ def is_learnable(label: dict) -> bool:
         return False
     if lowered_product in {"unknown", "unknown product", "unidentified sku", "n/a"}:
         return False
+    if _is_snack_visual_pollution(
+        {
+            "brand": brand,
+            "product_name": product,
+            "sku": metadata_to_sku(brand, product, label.get("variant") or ""),
+        }
+    ):
+        return False
     return True
 
 
@@ -71,13 +79,54 @@ def _is_cross_aisle_pollution(entry: dict) -> bool:
     return False
 
 
+_LAYS_CHIP_FLAVOR_TOKENS = (
+    "magic masala",
+    "tomato tango",
+    "cream",
+    "onion",
+    "american style",
+    "classic salted",
+    "potato chips",
+    "india's magic masala",
+    "sour cream",
+)
+
+
+def _is_snack_visual_pollution(entry: dict) -> bool:
+    """CLIP/GPT false positives on glossy chip bags (TooYumm, Haldiram on Lay's flavors)."""
+    brand = (entry.get("brand") or "").lower().strip()
+    product = (entry.get("product_name") or "").lower().strip()
+    sku = (entry.get("sku") or "").lower()
+    combined = f"{brand} {product} {sku}"
+
+    if "tooyumm" in combined or "too_yumm" in sku or brand in {"too yumm", "tooyum"}:
+        return True
+
+    if "haldiram" in brand:
+        if any(token in product for token in _LAYS_CHIP_FLAVOR_TOKENS):
+            return True
+        if "magic masala" in product and "moong" not in product and "namkeen" not in product:
+            return True
+        if product in {"", "unknown", "potato chips", "chips", "lays", "lay's"}:
+            return True
+
+    if brand in {"lays", "lay's"} and product in {"", "unknown", "lays", "lay's", "potato chips"}:
+        return True
+
+    return False
+
+
+def _is_learned_entry_blocked(entry: dict) -> bool:
+    return _is_cross_aisle_pollution(entry) or _is_snack_visual_pollution(entry)
+
+
 def _prune_cross_aisle_pollution() -> int:
     global _learned_catalog
     before = len(_learned_catalog)
-    _learned_catalog = [entry for entry in _learned_catalog if not _is_cross_aisle_pollution(entry)]
+    _learned_catalog = [entry for entry in _learned_catalog if not _is_learned_entry_blocked(entry)]
     removed = before - len(_learned_catalog)
     if removed:
-        print(f"Pruned {removed} cross-aisle learned SKU(s)")
+        print(f"Pruned {removed} polluted learned SKU(s)")
         _rebuild_index_unlocked()
     return removed
 
@@ -157,7 +206,7 @@ def import_learned_catalog(entries: list[dict]) -> int:
             enrich_learned_entry(row)
             raw_category = str(raw.get("category") or "").lower()
             inferred_cat = str(row.get("category_id") or "")
-            if "beverage" in raw_category and inferred_cat and inferred_cat not in {"beverages", "others", ""}:
+            if _is_learned_entry_blocked(row):
                 continue
             _learned_catalog.append(row)
             added += 1
@@ -211,11 +260,22 @@ def search_learned(
     k = min(LEARNED_SEARCH_K, len(_learned_catalog))
     scores, ids = _learned_index.search(vec, k)
 
+    filtered_ids: list[int] = []
+    filtered_scores: list[float] = []
+    for idx, score in zip(ids[0].tolist(), scores[0].tolist()):
+        if idx < 0:
+            continue
+        entry = _learned_catalog[int(idx)]
+        if _is_learned_entry_blocked(entry):
+            continue
+        filtered_ids.append(int(idx))
+        filtered_scores.append(float(score))
+
     # Pass 1: match category + sub-category.
     entry, score = filter_scoped_candidates(
         _learned_catalog,
-        ids[0].tolist(),
-        scores[0].tolist(),
+        filtered_ids,
+        filtered_scores,
         scan_context,
         strict_sub=True,
         threshold=threshold,
@@ -224,8 +284,8 @@ def search_learned(
     if entry is None and scan_context and scan_context.get("sub_category"):
         entry, score = filter_scoped_candidates(
             _learned_catalog,
-            ids[0].tolist(),
-            scores[0].tolist(),
+            filtered_ids,
+            filtered_scores,
             scan_context,
             strict_sub=False,
             threshold=threshold,
@@ -255,6 +315,8 @@ def learn_sku(
 
     category = label.get("category") or infer_category(metadata_to_sku(brand, product, variant))
     sku = metadata_to_sku(brand, product, variant)
+    if _is_snack_visual_pollution({"brand": brand, "product_name": product, "sku": sku}):
+        return False
     vector = np.asarray(embedding, dtype=np.float32).reshape(-1)
     norm = np.linalg.norm(vector)
     if norm > 0:

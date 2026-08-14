@@ -86,6 +86,19 @@ def test_strict_rejects_haldiram_faiss_without_lays_in_ocr():
     assert _strict_faiss_accept(match, 0.983, None, ctx, "Lay's American Style Cream Onion") is False
 
 
+def test_accept_context_label_rejects_haldiram_when_ocr_says_lays():
+    from app.recognizer import _accept_context_label
+
+    ctx = _chips_context()
+    label = {
+        "brand": "Haldiram",
+        "product_name": "Magic Masala",
+        "sku": "haldiram_magic_masala",
+        "category": "Snacks",
+    }
+    assert _accept_context_label(label, ctx, "Lay's Magic Masala Potato Chips") is False
+
+
 def test_strict_learned_requires_higher_score():
     ctx = _chips_context()
     match = {

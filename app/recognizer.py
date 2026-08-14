@@ -101,11 +101,77 @@ No markdown or extra text.
 """
 
 
+CATALOG_GPT_CANDIDATE_LIMIT = int(os.getenv("CATALOG_GPT_CANDIDATE_LIMIT", "80"))
+
+
+def catalog_candidates_for_scan(scan_context: dict | None, limit: int | None = None) -> list[dict]:
+    """Scoped base-catalog rows for closed-vocabulary GPT on snack audits."""
+    if not scan_context:
+        return []
+    from app.catalog import load_catalog
+    from app.category_scope import catalog_entry_in_scope
+    from app.planogram_guided import _normalize_candidate
+
+    cap = limit or CATALOG_GPT_CANDIDATE_LIMIT
+    seen: set[str] = set()
+    out: list[dict] = []
+    for row in load_catalog():
+        brand = (row.get("brand") or "").strip()
+        if not brand or brand.lower() in {"unknown", "7"}:
+            continue
+        pseudo = {
+            "brand": brand,
+            "product_name": row.get("product_name") or "",
+            "variant": row.get("variant") or "",
+            "sku": row.get("sku") or "",
+            "category": row.get("category") or "",
+        }
+        if not catalog_entry_in_scope(pseudo, scan_context):
+            continue
+        if not category_allows_brand(
+            scan_context.get("aislix_category"),
+            brand,
+            pseudo.get("sku") or "",
+            entry_category=pseudo.get("category") or "",
+            scan_context=scan_context,
+        ):
+            continue
+        norm = _normalize_candidate({**row, "expected_qty": 1})
+        key = str(norm.get("match_key") or f"{brand}|{norm.get('product_name')}")
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(norm)
+        if len(out) >= cap:
+            break
+    return out
+
+
+def _classify_with_catalog_gpt(
+    image: Image.Image,
+    ocr_hint: str = "",
+    scan_context: dict | None = None,
+) -> dict:
+    from app.planogram_guided import classify_with_planogram_gpt
+
+    candidates = catalog_candidates_for_scan(scan_context)
+    if not candidates:
+        return _unknown_label(confidence=0.35)
+    return classify_with_planogram_gpt(
+        image,
+        candidates,
+        ocr_hint=ocr_hint,
+        scan_context=scan_context,
+    )
+
+
 def classify_with_gpt(
     image: Image.Image,
     ocr_hint: str = "",
     scan_context: dict | None = None,
 ) -> dict:
+    if requires_ocr_for_faiss(scan_context):
+        return _classify_with_catalog_gpt(image, ocr_hint=ocr_hint, scan_context=scan_context)
     buffer = BytesIO()
     image.save(buffer, format="JPEG", quality=85)
     image_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
@@ -461,6 +527,8 @@ def _accept_ocr_label(label: dict, scan_context: dict | None) -> bool:
 
 def _accept_context_label(label: dict, scan_context: dict | None, ocr_text: str = "") -> bool:
     if not _accept_ocr_label(label, scan_context):
+        return False
+    if label_conflicts_with_pack_text(label, ocr_text):
         return False
     return label_fits_scan_context(label, scan_context, ocr_text)
 

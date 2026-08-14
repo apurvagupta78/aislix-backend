@@ -265,7 +265,16 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
         return True
     if ("hair fall" in text_l or "hairfall" in text_l) and label_brand == "dove" and "conditioner" in product_l:
         return True
-    if re.search(r"\blay(?:\'|s)?s\b", text_l) and label_brand in {"del", "haldiram", "britannia", "bingo", "pringles"}:
+    if re.search(r"\blay(?:\'|s)?s\b", text_l) and label_brand in {
+        "del",
+        "haldiram",
+        "britannia",
+        "bingo",
+        "pringles",
+        "tooyumm",
+        "too yumm",
+        "balaji",
+    }:
         return True
     if re.search(r"\bbingo\b|\btedhe\s+medhe\b|\bmad\s+angles\b", text_l) and label_brand == "pringles":
         return True
