@@ -327,8 +327,9 @@ def read_packaging_text(image: Image.Image, *, aggressive: bool = False) -> str:
         if use_aggressive:
             crop = _upscale_if_small(crop)
             longest = max(crop.size)
-            if longest < 640:
-                scale = 640 / float(longest)
+            target = 960 if max(crop.size) < 120 else 640
+            if longest < target:
+                scale = target / float(longest)
                 crop = crop.resize(
                     (max(1, int(crop.size[0] * scale)), max(1, int(crop.size[1] * scale))),
                     Image.Resampling.LANCZOS,

@@ -179,7 +179,7 @@ def test_align_shelf_clusters_bottom_aligns_extra_top_row():
 def test_should_use_planogram_shelf_rows_for_chips_multi_row():
     cands = _lays_candidates()
     records = [{"x1": 0, "y1": 0, "x2": 10, "y2": 10}] * 8
-    ctx = {"shelf_mode": "multi_row", "sub_category": "chips"}
+    ctx = {"shelf_mode": "single_row", "sub_category": "chips"}
     assert should_use_planogram_shelf_rows(records, cands, ctx) is True
 
 

@@ -680,17 +680,18 @@ def should_use_planogram_shelf_rows(
     """Multi-row snack racks: assign SKUs by horizontal shelf row (Y position)."""
     if not records or not candidates:
         return False
-    scan_context = scan_context or {}
-    if scan_context.get("shelf_mode") != "multi_row":
-        return False
-    if not planogram_products_by_shelf(candidates):
+    shelf_products = planogram_products_by_shelf(candidates)
+    if len(shelf_products) < 2:
         return False
     from app.scan_context import CHIPS_RACK_SUBCATEGORIES, effective_sub_category
 
-    sub = effective_sub_category(scan_context)
+    sub = effective_sub_category(scan_context or {})
     if sub not in CHIPS_RACK_SUBCATEGORIES:
         return False
-    return len(records) >= 4
+    if len(records) < 4:
+        return False
+    # Planogram CSV with Shelf N positions — use row assignment even if layout heuristics disagree.
+    return True
 
 
 def assign_planogram_shelf_rows(

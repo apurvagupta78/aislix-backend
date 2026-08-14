@@ -203,14 +203,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             )
 
             planogram_candidates = scan_context["planogram_candidates"]
-            if should_use_planogram_slots(classified, planogram_candidates, scan_context):
-                classified = assign_planogram_slots(
-                    classified,
-                    planogram_candidates,
-                    scan_id=scan_id,
-                    scan_context=scan_context,
-                )
-            elif should_use_planogram_shelf_rows(classified, planogram_candidates, scan_context):
+            if should_use_planogram_shelf_rows(classified, planogram_candidates, scan_context):
                 classified = assign_planogram_shelf_rows(
                     classified,
                     planogram_candidates,
@@ -218,6 +211,13 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
                     scan_context=scan_context,
                 )
                 scan_context["planogram_shelf_rows"] = True
+            elif should_use_planogram_slots(classified, planogram_candidates, scan_context):
+                classified = assign_planogram_slots(
+                    classified,
+                    planogram_candidates,
+                    scan_id=scan_id,
+                    scan_context=scan_context,
+                )
             else:
                 scan_context["planogram_slot_skipped"] = True
         compliance = analyze_subcategory_compliance(classified, scan_context)
