@@ -782,6 +782,86 @@ def match_product_for_brand(
     }
 
 
+def recover_label_from_context(
+    label: dict,
+    scan_context: dict | None,
+    pack_text: str = "",
+) -> dict | None:
+    """Fill missing brand or product using OCR, aisle hints, and catalog context."""
+    if not scan_context:
+        return None
+
+    from app.scan_context import SUB_CATEGORY_BRAND_HINTS, effective_sub_category, label_fits_scan_context
+
+    brand = (label.get("brand") or "").strip()
+    product = (label.get("product_name") or "").strip()
+    unknown = {"", "unknown", "n/a", "unidentified sku", "unknown product"}
+
+    brand_missing = brand.lower() in unknown
+    product_missing = product.lower() in unknown
+    if not brand_missing and not product_missing:
+        return None
+
+    if pack_text and len(pack_text.strip()) >= 3:
+        ocr = match_from_text(pack_text, scan_context=scan_context)
+        if ocr and label_fits_scan_context(ocr, scan_context, pack_text):
+            brand_ok = (ocr.get("brand") or "").lower() not in unknown
+            product_ok = (ocr.get("product_name") or "").lower() not in unknown
+            if brand_ok and product_ok:
+                ocr["recognition_source"] = (label.get("recognition_source") or "ocr") + "+context"
+                return ocr
+
+    aislix_key = (scan_context.get("aislix_category") or "").strip().lower()
+    sub = effective_sub_category(scan_context)
+    hints: set[str] = set()
+    if sub:
+        hints.update((SUB_CATEGORY_BRAND_HINTS.get(aislix_key) or {}).get(sub) or set())
+    hints.update(scan_context.get("brand_hints") or set())
+
+    combined = " ".join(filter(None, [product, pack_text, brand])).strip()
+
+    if brand_missing and not product_missing:
+        for hint_brand in sorted(hints, key=len, reverse=True):
+            candidate = match_product_for_brand(hint_brand, combined, scan_context=scan_context)
+            if not candidate:
+                continue
+            cand_product = (candidate.get("product_name") or "").lower()
+            if product.lower() in cand_product or cand_product in product.lower():
+                candidate["recognition_source"] = (label.get("recognition_source") or "ocr") + "+context"
+                return candidate
+        if sub == "ice_cream" or "ice cream" in product.lower() or "kulfi" in product.lower():
+            for hint_brand in ("Amul", "Baskin Robbins", "Brooklyn", "Kwality", "Mother Dairy"):
+                if hint_brand.lower() not in {h.lower() for h in hints}:
+                    continue
+                candidate = match_product_for_brand(hint_brand, combined, scan_context=scan_context)
+                if candidate and label_fits_scan_context(candidate, scan_context, pack_text):
+                    candidate["recognition_source"] = (label.get("recognition_source") or "ocr") + "+context"
+                    return candidate
+
+    if not brand_missing and product_missing:
+        candidate = match_product_for_brand(brand, combined or product, scan_context=scan_context)
+        if candidate and label_fits_scan_context(candidate, scan_context, pack_text):
+            candidate["recognition_source"] = (label.get("recognition_source") or "ocr") + "+context"
+            return candidate
+
+    if brand_missing and product_missing and hints and combined.strip():
+        best: dict | None = None
+        best_score = 0.0
+        for hint_brand in hints:
+            candidate = match_product_for_brand(hint_brand, combined, scan_context=scan_context)
+            if not candidate or not label_fits_scan_context(candidate, scan_context, pack_text):
+                continue
+            score = float(candidate.get("confidence") or 0)
+            if score > best_score:
+                best_score = score
+                best = candidate
+        if best:
+            best["recognition_source"] = (label.get("recognition_source") or "ocr") + "+context"
+            return best
+
+    return None
+
+
 def category_allows_brand(
     scan_category: str | None,
     brand: str,

@@ -18,7 +18,9 @@ from app.brand_dictionary import (
     label_conflicts_with_tea_pack,
     match_brand_in_text,
     match_from_text,
+    match_product_for_brand,
     ocr_agrees_with_label,
+    recover_label_from_context,
     reconcile_label_with_text,
 )
 from app.clip_embeddings import embed_pil_images
@@ -27,6 +29,7 @@ from app.learned_catalog import learn_sku, metadata_to_sku
 from app.ocr_reader import classify_with_ocr, read_packaging_text
 from app.scan_context import (
     gpt_context_prompt,
+    label_fits_scan_context,
     product_type_matches_sub_category,
     propagation_type_conflict,
     strict_subcategory_gates_enabled,
@@ -192,7 +195,19 @@ def _is_unknown_label(label: dict | None) -> bool:
     if not label:
         return True
     brand = (label.get("brand") or "").strip().lower()
-    return brand in {"", "unknown"}
+    product = (label.get("product_name") or "").strip().lower()
+    unknown = {"", "unknown", "n/a", "unidentified sku"}
+    return brand in unknown or product in unknown
+
+
+def _is_incomplete_label(label: dict | None) -> bool:
+    """True when exactly one of brand/product is missing."""
+    if not label:
+        return False
+    unknown = {"", "unknown", "n/a", "unidentified sku", "unknown product"}
+    brand_u = (label.get("brand") or "").strip().lower() in unknown
+    product_u = (label.get("product_name") or "").strip().lower() in unknown
+    return brand_u != product_u
 
 
 def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -425,13 +440,21 @@ def _accept_faiss_match(
 def _accept_ocr_label(label: dict, scan_context: dict | None) -> bool:
     if not scan_context:
         return True
-    return category_allows_brand(
+    if not category_allows_brand(
         None,
         label.get("brand") or "",
         label.get("sku") or "",
         label.get("category") or "",
         scan_context=scan_context,
-    )
+    ):
+        return False
+    return label_fits_scan_context(label, scan_context)
+
+
+def _accept_context_label(label: dict, scan_context: dict | None, ocr_text: str = "") -> bool:
+    if not _accept_ocr_label(label, scan_context):
+        return False
+    return label_fits_scan_context(label, scan_context, ocr_text)
 
 
 def _faiss_allowed_without_ocr(
@@ -640,6 +663,83 @@ def _reconcile_conflicts_only(row: dict, pack_text: str, scan_context: dict | No
     return row
 
 
+def _finalize_classification(
+    records: list[dict],
+    classified: list[dict | None],
+    embeddings: np.ndarray,
+    ocr_texts: list[str],
+    scan_context: dict | None,
+    stats: dict,
+) -> None:
+    """Unified post-pass: context recovery, neighbor inheritance, cross-aisle rejection."""
+    for index, row in enumerate(classified):
+        if not row:
+            continue
+        pack_text = ocr_texts[index] if index < len(ocr_texts) else ""
+        if pack_text and len(pack_text.strip()) >= 3:
+            row = reconcile_label_with_text(row, pack_text)
+            row = _reconcile_conflicts_only(row, pack_text, scan_context)
+        if pack_text:
+            row["pack_text"] = pack_text
+        if _is_unknown_label(row) or _is_incomplete_label(row):
+            recovered = recover_label_from_context(row, scan_context, pack_text)
+            if recovered and _is_valid_label(recovered) and _accept_context_label(
+                recovered, scan_context, pack_text
+            ):
+                was_unknown = _is_unknown_label(row)
+                row = _merge_label(records[index], recovered)
+                if was_unknown:
+                    stats["none"] = max(0, stats.get("none", 0) - 1)
+                stats["ocr"] = stats.get("ocr", 0) + 1
+        elif not label_fits_scan_context(row, scan_context, pack_text):
+            row = _merge_label(records[index], _unknown_label())
+            stats["none"] = stats.get("none", 0) + 1
+        classified[index] = row
+
+    for index, row in enumerate(classified):
+        if not row or not _is_unknown_label(row):
+            continue
+        probe_emb = embeddings[index]
+        best_sim = 0.0
+        best_ref: dict | None = None
+        for j, ref in enumerate(classified):
+            if j == index or not ref or _is_unknown_label(ref) or _is_incomplete_label(ref):
+                continue
+            if not label_fits_scan_context(ref, scan_context):
+                continue
+            if not _propagation_neighbor_allowed(records[index], ref, scan_context):
+                continue
+            sim = _cosine_similarity(probe_emb, embeddings[j])
+            threshold = PROPAGATE_THRESHOLD_NO_OCR - 0.04
+            if sim >= threshold and sim > best_sim:
+                best_sim = sim
+                best_ref = ref
+        if not best_ref:
+            continue
+        pack_text = ocr_texts[index] if index < len(ocr_texts) else ""
+        seed = {
+            "brand": best_ref.get("brand"),
+            "product_name": "",
+            "variant": "",
+            "confidence": round(min(0.9, best_sim * 0.95), 4),
+            "recognition_source": "propagate+context",
+        }
+        recovered = recover_label_from_context(seed, scan_context, pack_text)
+        if not recovered:
+            recovered = match_product_for_brand(
+                best_ref.get("brand") or "",
+                pack_text or best_ref.get("product_name") or "",
+                scan_context=scan_context,
+            )
+        if recovered and _is_valid_label(recovered) and _accept_context_label(
+            recovered, scan_context, pack_text
+        ):
+            classified[index] = _merge_label(records[index], recovered)
+            classified[index]["pack_text"] = pack_text
+            stats["none"] = max(0, stats.get("none", 0) - 1)
+            stats["propagate"] = stats.get("propagate", 0) + 1
+
+
 def classify_records_v3(
     records: list[dict],
     scan_id: str | None = None,
@@ -797,11 +897,7 @@ def classify_records_v3(
     if learned_new:
         print(f"Learned {learned_new} new SKU(s) (scan={scan_id})")
 
-    for index, row in enumerate(classified):
-        if row:
-            classified[index] = _reconcile_conflicts_only(row, ocr_texts[index], scan_context)
-            if ocr_texts[index].strip():
-                classified[index]["pack_text"] = ocr_texts[index]
+    _finalize_classification(records, classified, embeddings, ocr_texts, scan_context, stats)
 
     stats["gpt_calls"] = gpt_used
     stats["unknown_count"] = stats["none"]
@@ -941,21 +1037,7 @@ def classify_records_v2(
     if learned_new:
         print(f"Learned {learned_new} new SKU(s) (scan={scan_id})")
 
-    # Final pass: OCR text always wins over FAISS/propagate/GPT when pack text is clear.
-    for index, row in enumerate(classified):
-        if not row:
-            continue
-        pack_text = ocr_texts[index]
-        row["pack_text"] = pack_text
-        if pack_text and len(pack_text.strip()) >= 3:
-            classified[index] = reconcile_label_with_text(row, pack_text)
-            if _is_unknown_label(classified[index]):
-                retry = match_from_text(pack_text, scan_context=scan_context)
-                if retry and _is_valid_label(retry) and _accept_ocr_label(retry, scan_context):
-                    classified[index] = _merge_label(records[index], retry)
-                    classified[index]["pack_text"] = pack_text
-                    stats["none"] = max(0, stats["none"] - 1)
-                    stats["ocr"] += 1
+    _finalize_classification(records, classified, embeddings, ocr_texts, scan_context, stats)
 
     stats["gpt_calls"] = gpt_used
     stats["unknown_count"] = stats["none"]

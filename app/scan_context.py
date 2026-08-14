@@ -175,7 +175,12 @@ SUB_CATEGORY_REJECT_TEXT: dict[str, tuple[str, ...]] = {
     "chips": (
         "muesli", "olive", "mayonnaise", "mayo", "kisses", "cup soup", "cup_soup",
         "funfoods", "oetker", "shampoo", "conditioner", "toothpaste", "tea bag",
-        "green tea", "detergent", "harpic", "namkeen", "bhujia",
+        "green tea", "detergent", "harpic", "namkeen", "bhujia", "weetabix", "cereal",
+        "kachori", "bread",
+    ),
+    "bread": (
+        "shampoo", "conditioner", "toothpaste", "namkeen", "bhujia", "chips", "wafer",
+        "biscuit", "kachori", "cereal", "weetabix", "jabsons", "chheddas",
     ),
     "namkeen": (
         "muesli", "olive", "mayonnaise", "kisses", "shampoo", "conditioner",
@@ -255,8 +260,9 @@ SUB_CATEGORY_PRODUCT_KEYWORDS: dict[str, list[str]] = {
     "air_fresheners": ["air freshener", "room freshener", "odonil"],
     "insecticides": ["mosquito", "insecticide", "repellent", "good knight", "all out"],
     "biscuits": ["biscuit", "cookie", "cracker", "marie"],
-    "chips": ["chips", "crisps", "wafers"],
+    "chips": ["chips", "crisps", "wafers", "potato chips", "nacho", "nachos", "masala munch", "masala"],
     "namkeen": ["namkeen", "bhujia", "mixture"],
+    "bread": ["bread", "whole wheat", "brown bread", "white bread", "multigrain", "pav", "bun", "loaf"],
     "noodles": ["noodles", "maggi", "instant noodles"],
     "chocolates": ["chocolate", "cocoa"],
     "milk": ["milk", "toned milk", "full cream milk"],
@@ -273,6 +279,7 @@ PROPAGATION_PRODUCT_TYPES = (
     "shampoo", "soap", "toothpaste", "hand_care",
     "tea", "coffee", "soft_drinks", "juices", "water",
     "biscuits", "chips", "namkeen", "noodles", "chocolates",
+    "ice_cream", "bread",
     "detergent", "dishwash", "floor_cleaner", "toilet_cleaner",
     "milk", "atta", "rice", "oil",
 )
@@ -380,6 +387,121 @@ def product_type_matches_sub_category(
             return False
 
     return True
+
+
+def label_fits_scan_context(
+    label: dict,
+    scan_context: dict | None,
+    ocr_text: str = "",
+) -> bool:
+    """Unified gate: aisle scope + sub-category product type for any label source."""
+    if not scan_context or not scan_context.get("aislix_category"):
+        return True
+    brand = (label.get("brand") or "").strip()
+    if brand.lower() in {"", "unknown", "n/a"}:
+        product = (label.get("product_name") or "").strip().lower()
+        if product in {"", "unknown", "unidentified sku", "n/a"}:
+            return True
+    from app.brand_dictionary import category_allows_brand
+
+    if not category_allows_brand(
+        None,
+        brand,
+        label.get("sku") or "",
+        label.get("category") or "",
+        scan_context=scan_context,
+    ):
+        return False
+    sub = effective_sub_category(scan_context)
+    if sub and sub != "others" and strict_subcategory_gates_enabled():
+        return product_type_matches_sub_category(sub, label, ocr_text)
+    return True
+
+
+def effective_sub_category(context: dict | None) -> str:
+    """Resolve sub-category id from explicit selection or custom label (e.g. Others · Bread)."""
+    if not context:
+        return ""
+    sub = _slug_key(context.get("sub_category") or "")
+    if sub and sub != "others":
+        return sub
+    custom = " ".join(
+        filter(
+            None,
+            [
+                context.get("sub_category_custom"),
+                context.get("sub_category_label"),
+                context.get("notes"),
+            ],
+        )
+    ).lower()
+    if not custom:
+        return sub or ""
+    hints = (
+        ("ice cream", "ice_cream"),
+        ("kulfi", "ice_cream"),
+        ("bread", "bread"),
+        ("chip", "chips"),
+        ("namkeen", "namkeen"),
+        ("biscuit", "biscuits"),
+        ("shampoo", "shampoo"),
+        ("tea", "tea"),
+        ("noodle", "noodles"),
+    )
+    for needle, mapped in hints:
+        if needle in custom:
+            return mapped
+    return sub or "others"
+
+
+def foreign_aisle_conflict(
+    haystack: str,
+    scan_context: dict | None,
+    *,
+    pack_text: str = "",
+) -> tuple[str, str] | None:
+    """Return foreign aisle when text clearly belongs elsewhere; respects scan sub-category guard."""
+    if not scan_context:
+        return None
+    aislix_key = _normalize_key(scan_context.get("aislix_category") or "")
+    selected = effective_sub_category(scan_context)
+    combined = f"{haystack} {pack_text}".strip()
+    if selected and selected != "others":
+        keywords = SUB_CATEGORY_PRODUCT_KEYWORDS.get(selected) or []
+        if keywords and sum(1 for kw in keywords if kw in _normalize_key(combined)) > 0:
+            return None
+    return _infer_foreign_aisle_local(combined, aislix_key)
+
+
+def _infer_foreign_aisle_local(haystack: str, scan_aisle_key: str) -> tuple[str, str] | None:
+    """Return (aisle_key, display_name) when product text belongs to another aisle."""
+    haystack_l = haystack.lower()
+    tea_on_beverage_scan = (
+        scan_aisle_key == "beverages"
+        and any(token in haystack_l for token in ("masala chai", "tulsi masala", "tulsi chai", "organic india"))
+    )
+    if tea_on_beverage_scan:
+        return None
+
+    best_score = 0
+    best_aisle = ""
+    for aisle_key, keywords in AISLE_PRODUCT_KEYWORDS.items():
+        if aisle_key == scan_aisle_key:
+            continue
+        score = sum(1 for kw in keywords if kw in haystack_l)
+        if score > best_score:
+            best_score = score
+            best_aisle = aisle_key
+    if best_score > 0 and best_aisle:
+        if (
+            scan_aisle_key == "beverages"
+            and best_aisle == "grocery & staples"
+            and "masala" in haystack_l
+            and sum(1 for kw in ["tea", "chai", "tulsi"] if kw in haystack_l) > 0
+        ):
+            return None
+        return best_aisle, AISLE_DISPLAY_NAMES.get(best_aisle, best_aisle.title())
+    return None
 
 
 def strict_subcategory_gates_enabled() -> bool:

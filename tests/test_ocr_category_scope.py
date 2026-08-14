@@ -132,3 +132,64 @@ def test_brooklyn_learned_category_not_compliance_mismatch():
     }]
     out = analyze_subcategory_compliance(classified, ctx)
     assert out["misplaced_facings"] == 0
+
+
+def test_recover_brand_for_ice_cream_sandwich_without_brand():
+    from app.brand_dictionary import recover_label_from_context
+
+    ctx = _ice_cream_context()
+    partial = {
+        "brand": "Unidentified SKU",
+        "product_name": "Ice Cream Sandwich",
+        "confidence": 0.99,
+    }
+    recovered = recover_label_from_context(partial, ctx, "")
+    assert recovered is not None
+    assert "amul" in recovered["brand"].lower()
+
+
+def test_label_fits_rejects_snack_on_bread_context():
+    from app.scan_context import label_fits_scan_context, resolve_scan_context
+
+    ctx = resolve_scan_context(
+        {
+            "category": "Others",
+            "sub_category": "others",
+            "sub_category_custom": "Bread",
+            "location": "Bread rack",
+        }
+    )
+    snack_label = {
+        "brand": "Jabsons",
+        "product_name": "Roasted Peanuts",
+        "sku": "jabsons_roasted_peanuts",
+        "category": "Snacks",
+    }
+    assert label_fits_scan_context(snack_label, ctx) is False
+
+
+def test_nacho_cheese_chips_not_foreign_dairy():
+    from app.scan_context import foreign_aisle_conflict, resolve_scan_context
+
+    ctx = resolve_scan_context(
+        {"category": "Packaged Food & Snacks · Chips", "location": "A-2"}
+    )
+    conflict = foreign_aisle_conflict(
+        "doritos nacho cheese",
+        ctx,
+        pack_text="nacho cheese flavoured",
+    )
+    assert conflict is None
+
+
+def test_effective_sub_category_from_custom_bread():
+    from app.scan_context import effective_sub_category, resolve_scan_context
+
+    ctx = resolve_scan_context(
+        {
+            "category": "Others",
+            "sub_category": "others",
+            "sub_category_custom": "Bread",
+        }
+    )
+    assert effective_sub_category(ctx) == "bread"

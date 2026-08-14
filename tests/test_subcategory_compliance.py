@@ -161,3 +161,29 @@ def test_nivea_roll_on_blocked_on_shampoo_audit():
     ) is True
 
 
+def test_doritos_nacho_cheese_compliant_on_chips_audit():
+    ctx = {
+        "aislix_category": "Packaged Food & Snacks",
+        "sub_category": "chips",
+        "sub_category_label": "Chips",
+        "catalog_categories": ["snacks", "bakery & biscuits"],
+        "brand_hints": {"lays", "kurkure", "bingo", "haldiram"},
+    }
+    classified = [_facing("Doritos", "Nacho Cheese", pack_text="nacho cheese")]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 0
+
+
+def test_kurkure_masala_munch_compliant_on_chips_audit():
+    ctx = {
+        "aislix_category": "Packaged Food & Snacks",
+        "sub_category": "chips",
+        "sub_category_label": "Chips",
+        "catalog_categories": ["snacks", "bakery & biscuits"],
+        "brand_hints": {"lays", "kurkure", "bingo"},
+    }
+    classified = [_facing("Kurkure", "Masala Munch", pack_text="masala munch")]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 0
+
+

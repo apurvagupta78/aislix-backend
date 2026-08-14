@@ -13,6 +13,8 @@ from app.scan_context import (
     SUB_CATEGORY_BRAND_HINTS,
     SUB_CATEGORY_PRODUCT_KEYWORDS,
     aisle_category_matches,
+    effective_sub_category,
+    foreign_aisle_conflict,
     resolve_subcategory_label,
     sku_allowed_in_context,
     sub_categories_match,
@@ -117,8 +119,15 @@ def _subcategory_product_guard(selected: str, haystack: str, pack_text: str = ""
     return False
 
 
-def _infer_foreign_aisle(haystack: str, scan_aisle_key: str) -> tuple[str, str] | None:
+def _infer_foreign_aisle(
+    haystack: str,
+    scan_aisle_key: str,
+    scan_context: dict | None = None,
+    pack_text: str = "",
+) -> tuple[str, str] | None:
     """Return (aisle_key, display_name) when product text belongs to another aisle."""
+    if scan_context:
+        return foreign_aisle_conflict(haystack, scan_context, pack_text=pack_text)
     haystack_l = haystack.lower()
     tea_on_beverage_scan = (
         scan_aisle_key == "beverages"
@@ -192,6 +201,8 @@ def _evaluate_compliance(
     haystack = _haystack(item)
     aislix_key = _normalize_key(scan_context.get("aislix_category") or "")
     brand = (item.get("brand") or "").strip()
+    pack_text = (item.get("pack_text") or "").strip()
+    selected = effective_sub_category(scan_context) or scan_context.get("sub_category") or ""
 
     if not sku_allowed_in_context(
         brand,
@@ -199,7 +210,7 @@ def _evaluate_compliance(
         item.get("category") or "",
         context=scan_context,
     ):
-        foreign = _infer_foreign_aisle(haystack, aislix_key)
+        foreign = _infer_foreign_aisle(haystack, aislix_key, scan_context, pack_text)
         if foreign:
             return False, foreign[0], foreign[1]
         return False, "cross_aisle", "Other Aisle"
@@ -212,13 +223,12 @@ def _evaluate_compliance(
         if aislix_key == "personal care" and _pc_brand_in_context(brand, scan_context):
             pass
         else:
-            foreign = _infer_foreign_aisle(haystack, aislix_key)
+            foreign = _infer_foreign_aisle(haystack, aislix_key, scan_context, pack_text)
             label = foreign[1] if foreign else item_cat.title()
             return False, foreign[0] if foreign else "cross_aisle", label
 
-    foreign = _infer_foreign_aisle(haystack, aislix_key)
+    foreign = _infer_foreign_aisle(haystack, aislix_key, scan_context, pack_text)
     if foreign:
-        pack_text = (item.get("pack_text") or "").strip()
         if _subcategory_product_guard(selected, haystack, pack_text):
             pass
         else:
