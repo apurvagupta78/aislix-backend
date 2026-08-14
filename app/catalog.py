@@ -49,12 +49,14 @@ def infer_category(slug: str) -> str:
     s = slug.lower()
     rules = [
         (("tea", "coffee", "lipton", "tata_tea", "nescafe", "bru_"), "Beverages"),
+        (("kulfi", "ice_cream", "funwich", "frozen_dessert", "sorbet", "gelato"), "General"),
         (("biscuit", "cookie", "marie", "rusk", "bread", "parota", "hearts"), "Bakery & Biscuits"),
         (("shampoo", "soap", "toothpaste", "deodorant", "deo", "lotion"), "Personal Care"),
         (("detergent", "dishwash", "cleaner", "harpic", "vim"), "Household"),
         (("oil", "ghee", "atta", "dal", "rice", "masala", "spice"), "Staples"),
         (("chocolate", "chips", "namkeen", "snack", "lays", "haldiram"), "Snacks"),
-        (("milk", "dahi", "curd", "paneer", "cheese", "amul", "nestle_a"), "Dairy"),
+        (("milk", "dahi", "curd", "paneer", "cheese", "nestle_a"), "Dairy"),
+        (("amul",), "Dairy"),
     ]
     for keys, category in rules:
         if any(k in s for k in keys):

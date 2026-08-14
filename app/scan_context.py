@@ -19,7 +19,7 @@ AISLIX_TO_CATALOG: dict[str, list[str]] = {
     "dairy & chilled": ["dairy"],
     "grocery & staples": ["staples"],
     "packaged food & snacks": ["snacks", "bakery & biscuits"],
-    "frozen foods & ice cream": ["dairy", "general"],
+    "frozen foods & ice cream": ["dairy", "general", "snacks"],
     "personal care": ["personal care"],
     "home care": ["household"],
     "health & wellness": ["personal care", "general"],
@@ -779,6 +779,40 @@ def gpt_context_prompt(context: dict | None) -> str:
     return "\n".join(line for line in lines if line)
 
 
+def _brand_in_aisle_hints(brand_l: str, hints: set[str] | frozenset[str]) -> bool:
+    if brand_l in hints:
+        return True
+    for hint in hints:
+        hint_l = hint.lower()
+        if brand_l == hint_l or brand_l in hint_l or hint_l in brand_l:
+            return True
+    return False
+
+
+def aisle_brand_override_allowed(
+    brand: str,
+    sku: str = "",
+    entry_category: str = "",
+    context: dict | None = None,
+) -> bool:
+    """Allow aisle-expected brands when category_id inference alone would wrongly block them."""
+    if not context:
+        return False
+    brand_l = (brand or "").strip().lower()
+    if not brand_l:
+        return False
+    hints = context.get("brand_hints") or set()
+    if not _brand_in_aisle_hints(brand_l, hints):
+        return False
+    sub = context.get("sub_category")
+    hay = f"{sku} {entry_category} {brand}".lower()
+    if sub and sub not in {"", "others"}:
+        keywords = SUB_CATEGORY_PRODUCT_KEYWORDS.get(sub) or []
+        if any(kw in hay for kw in keywords):
+            return True
+    return True
+
+
 def sku_allowed_in_context(
     brand: str,
     sku: str = "",
@@ -817,7 +851,10 @@ def sku_allowed_in_context(
     scan_cat_id = context.get("aislix_category_id")
     if scan_cat_id and inferred_cat and inferred_cat not in {"", "others"}:
         if inferred_cat != scan_cat_id:
-            return False
+            if aisle_brand_override_allowed(brand, sku=sku, entry_category=entry_category, context=context):
+                pass
+            else:
+                return False
 
     entry_cat_norm = _normalize_key(entry_category or "")
     if entry_cat_norm and aisle_category_matches(entry_category, context.get("aislix_category")):

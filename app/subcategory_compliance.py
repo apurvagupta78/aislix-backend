@@ -106,6 +106,17 @@ def _shampoo_product_text(haystack: str) -> bool:
     )
 
 
+def _subcategory_product_guard(selected: str, haystack: str, pack_text: str = "") -> bool:
+    """True when label/pack text clearly belongs to the selected sub-category."""
+    if selected == "shampoo" and _shampoo_product_text(haystack):
+        return True
+    combined = _normalize_key(f"{haystack} {pack_text}")
+    keywords = SUB_CATEGORY_PRODUCT_KEYWORDS.get(selected) or []
+    if keywords and _keyword_score(combined, keywords) > 0:
+        return True
+    return False
+
+
 def _infer_foreign_aisle(haystack: str, scan_aisle_key: str) -> tuple[str, str] | None:
     """Return (aisle_key, display_name) when product text belongs to another aisle."""
     haystack_l = haystack.lower()
@@ -207,7 +218,8 @@ def _evaluate_compliance(
 
     foreign = _infer_foreign_aisle(haystack, aislix_key)
     if foreign:
-        if selected == "shampoo" and _shampoo_product_text(haystack):
+        pack_text = (item.get("pack_text") or "").strip()
+        if _subcategory_product_guard(selected, haystack, pack_text):
             pass
         else:
             return False, foreign[0], foreign[1]
@@ -217,7 +229,13 @@ def _evaluate_compliance(
     if detected and not sub_categories_match(detected, selected, cat_name):
         if _sibling_pc_subcategory(selected, detected):
             return True, selected, selected_label
-        if selected == "shampoo" and _shampoo_product_text(haystack) and detected in {"skincare", "cosmetics"}:
+        pack_text = (item.get("pack_text") or "").strip()
+        if _subcategory_product_guard(selected, haystack, pack_text) and detected in {
+            "skincare",
+            "cosmetics",
+            "frozen_snacks",
+            "others",
+        }:
             return True, selected, selected_label
         return False, detected, _subcategory_label(scan_context, detected)
 
@@ -294,7 +312,7 @@ def analyze_subcategory_compliance(
             if pack_text:
                 from app.brand_dictionary import match_from_text, category_allows_brand
 
-                ocr_label = match_from_text(pack_text)
+                ocr_label = match_from_text(pack_text, scan_context=scan_context)
                 brand = (ocr_label or {}).get("brand") or ""
                 product = (ocr_label or {}).get("product_name") or ""
                 if (

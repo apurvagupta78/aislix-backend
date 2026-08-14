@@ -7,7 +7,7 @@ import re
 from typing import Any, Literal
 
 import numpy as np
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageFilter
 
 from app.brand_dictionary import match_from_text
 
@@ -22,8 +22,9 @@ _paddle_init_error: str | None = None
 
 OCR_MIN_CONFIDENCE = float(os.getenv("OCR_MIN_CONFIDENCE", "0.6"))
 OCR_LINE_MIN_CONFIDENCE = float(os.getenv("OCR_LINE_MIN_CONFIDENCE", "0.45"))
+OCR_SHORT_WORD_MIN_CONFIDENCE = float(os.getenv("OCR_SHORT_WORD_MIN_CONFIDENCE", "0.32"))
 OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() in {"1", "true", "yes"}
-OCR_UPSCALE_MIN = int(os.getenv("OCR_UPSCALE_MIN", "320"))
+OCR_UPSCALE_MIN = int(os.getenv("OCR_UPSCALE_MIN", "480"))
 OCR_ENGINE = os.getenv("OCR_ENGINE", "easyocr").strip().lower()
 
 SIZE_TOKEN_PATTERN = re.compile(
@@ -32,15 +33,21 @@ SIZE_TOKEN_PATTERN = re.compile(
 )
 
 
-def _prepare_for_ocr(image: Image.Image) -> Image.Image:
-    """Upscale small YOLO crops and boost contrast so pack text is readable."""
+def _upscale_if_small(image: Image.Image) -> Image.Image:
     width, height = image.size
     longest = max(width, height)
     if longest < OCR_UPSCALE_MIN:
         scale = OCR_UPSCALE_MIN / float(longest)
         new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
         image = image.resize(new_size, Image.Resampling.LANCZOS)
-    return ImageEnhance.Contrast(image.convert("RGB")).enhance(1.35)
+    return image
+
+
+def _prepare_for_ocr(image: Image.Image, *, contrast: float = 1.35) -> Image.Image:
+    """Upscale small YOLO crops, sharpen, and boost contrast so pack text is readable."""
+    image = _upscale_if_small(image.convert("RGB"))
+    image = image.filter(ImageFilter.SHARPEN)
+    return ImageEnhance.Contrast(image).enhance(contrast)
 
 
 def _extract_size_tokens(text: str) -> list[str]:
@@ -133,6 +140,13 @@ def _resolve_engine() -> ActiveEngine:
     return None
 
 
+def _line_confidence_ok(text: str, conf: float) -> bool:
+    token = re.sub(r"[^a-zA-Z0-9]", "", text)
+    if len(token) <= 5:
+        return conf >= OCR_SHORT_WORD_MIN_CONFIDENCE
+    return conf >= OCR_LINE_MIN_CONFIDENCE
+
+
 def _read_with_paddle(arr: np.ndarray) -> str:
     ocr = _init_paddle()
     if ocr is None:
@@ -154,7 +168,7 @@ def _read_with_paddle(arr: np.ndarray) -> str:
             if not isinstance(text_conf, (list, tuple)) or len(text_conf) < 2:
                 continue
             text, conf = str(text_conf[0]), float(text_conf[1])
-            if text.strip() and conf >= OCR_LINE_MIN_CONFIDENCE:
+            if text.strip() and _line_confidence_ok(text, conf):
                 lines.append(text.strip())
     return " ".join(lines)
 
@@ -164,24 +178,49 @@ def _read_with_easyocr(arr: np.ndarray) -> str:
     if reader is None:
         return ""
     try:
-        lines = reader.readtext(arr, detail=0, paragraph=True)
-        if isinstance(lines, list):
-            return " ".join(str(line) for line in lines if line)
-        return str(lines or "")
+        detailed = reader.readtext(arr, detail=1, paragraph=False)
+        lines: list[str] = []
+        for item in detailed or []:
+            if not item or len(item) < 3:
+                continue
+            text, conf = str(item[1]), float(item[2])
+            if text.strip() and _line_confidence_ok(text, conf):
+                lines.append(text.strip())
+        if lines:
+            return " ".join(lines)
+        fallback = reader.readtext(arr, detail=0, paragraph=True)
+        if isinstance(fallback, list):
+            return " ".join(str(line) for line in fallback if line)
+        return str(fallback or "")
     except Exception as exc:
         print(f"EasyOCR read failed: {exc}")
         return ""
 
 
-def read_text_from_pil(image: Image.Image) -> str:
+def _read_text_variants(image: Image.Image) -> str:
+    """Run OCR at multiple contrast levels and merge unique tokens."""
     engine = _resolve_engine()
     if engine is None:
         return ""
-    prepared = _prepare_for_ocr(image)
-    arr = np.asarray(prepared.convert("RGB"))
-    if engine == "paddle":
-        return _read_with_paddle(arr)
-    return _read_with_easyocr(arr)
+
+    chunks: list[str] = []
+    seen_lower: set[str] = set()
+    for contrast in (1.25, 1.55):
+        prepared = _prepare_for_ocr(image, contrast=contrast)
+        arr = np.asarray(prepared.convert("RGB"))
+        raw = _read_with_paddle(arr) if engine == "paddle" else _read_with_easyocr(arr)
+        for token in raw.split():
+            key = token.lower()
+            if key not in seen_lower:
+                seen_lower.add(key)
+                chunks.append(token)
+    return " ".join(chunks)
+
+
+def read_text_from_pil(image: Image.Image) -> str:
+    if _resolve_engine() is None:
+        return ""
+    return _read_text_variants(image)
 
 
 def active_ocr_engine() -> str | None:
@@ -210,7 +249,23 @@ def _clean_ocr_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def classify_with_ocr(image: Image.Image, raw_text: str | None = None) -> dict | None:
+def _merge_ocr_texts(*parts: str) -> str:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        for token in _clean_ocr_text(part).split():
+            key = token.lower()
+            if key not in seen:
+                seen.add(key)
+                merged.append(token)
+    return " ".join(merged)
+
+
+def classify_with_ocr(
+    image: Image.Image,
+    raw_text: str | None = None,
+    scan_context: dict | None = None,
+) -> dict | None:
     """Try to identify product from packaging text. Returns None if OCR fails or is unclear."""
     if not OCR_ENABLED:
         return None
@@ -219,7 +274,7 @@ def classify_with_ocr(image: Image.Image, raw_text: str | None = None) -> dict |
         return None
 
     enriched = _enrich_text_for_matching(raw)
-    product = match_from_text(enriched)
+    product = match_from_text(enriched, scan_context=scan_context)
     if not product:
         return None
 
@@ -249,11 +304,11 @@ def read_packaging_text(image: Image.Image) -> str:
     full_text = _clean_ocr_text(read_text_from_pil(pack_crop))
     if pack_bottom >= 40:
         band_h = max(1, int(pack_bottom * 0.45))
-        band = pack_crop.crop((0, 0, width, band_h))
-        band_text = _clean_ocr_text(read_text_from_pil(band))
-        if band_text and band_text.lower() not in full_text.lower():
-            merged = f"{band_text} {full_text}".strip()
-            return _clean_ocr_text(merged)
-        if band_text and len(band_text) > len(full_text):
-            return band_text
+        top_band = pack_crop.crop((0, 0, width, band_h))
+        top_text = _clean_ocr_text(read_text_from_pil(top_band))
+        center_top = max(1, int(pack_bottom * 0.2))
+        center_bottom = min(pack_bottom, int(pack_bottom * 0.65))
+        center_band = pack_crop.crop((0, center_top, width, center_bottom))
+        center_text = _clean_ocr_text(read_text_from_pil(center_band))
+        return _merge_ocr_texts(top_text, center_text, full_text)
     return full_text

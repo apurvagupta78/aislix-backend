@@ -43,11 +43,32 @@ _RULES: list[tuple[tuple[str, ...], str, str]] = [
     (("coffee", "nescafe", "bru", "davidoff", "lecafe", "wagh bakri"), "beverages", "coffee"),
     (("pepsi", "coca", "sprite", "fanta", "thumps", "mirinda", "maaza", "frooti", "limca", "kinley", "soda", "softdrink", "redbull", "sting", "monster", "energy", "schweppes", "7up", "appy", "paperboat", "juice", "tropicana", "real", "minute", "coconut water", "coconutwater"), "beverages", "others"),
     (("water", "kinley"), "beverages", "water"),
-    # Frozen & ice cream
-    (("icecream", "ice_cream", "kulfi", "funwich", "brooklyn", "baskin", "topntown", "havmor", "amul_cool", "amulcool"), "frozen_ice_cream", "ice_cream"),
+    # Frozen & ice cream (product-type tokens before bare brand names)
+    (
+        (
+            "icecream", "ice cream", "ice_cream", "kulfi", "funwich",
+            "frozen dessert", "sorbet", "gelato", "cornetto", "sandwich",
+            "brooklyn", "baskin", "baskin robbins", "topntown", "havmor",
+            "vadilal", "kwality", "walls", "cream bell", "creamery",
+            "amul_cool", "amulcool", "stick", "popsicle",
+        ),
+        "frozen_ice_cream",
+        "ice_cream",
+    ),
+    (("frozen vegetable", "frozen veg", "frozen peas", "frozen corn"), "frozen_ice_cream", "frozen_vegetables"),
+    (("frozen snack", "frozen paratha", "frozen samosa"), "frozen_ice_cream", "frozen_snacks"),
+    (("frozen meal", "frozen pizza"), "frozen_ice_cream", "frozen_meals"),
     (("frozen",), "frozen_ice_cream", "frozen_snacks"),
-    # Dairy
-    (("milk", "dahi", "curd", "yogurt", "lassi", "paneer", "cheese", "butter", "ghee", "amul", "mother dairy", "motherdairy", "nandini", "milky", "epigamia", "danone", "cream", "milkmaid"), "dairy_chilled", "others"),
+    # Dairy (no bare "amul" — milk/curd SKUs still match via milk, dahi, etc.)
+    (
+        (
+            "milk", "dahi", "curd", "yogurt", "lassi", "paneer", "cheese",
+            "butter", "ghee", "mother dairy", "motherdairy", "nandini", "milky",
+            "epigamia", "danone", "milkmaid", "toned milk", "full cream milk",
+        ),
+        "dairy_chilled",
+        "others",
+    ),
     # Personal care
     (("shampoo", "tresemme", "head", "shoulders", "pantene", "sunsilk", "clinic plus", "clinicplus", "himalaya", "dove", "loreal", "fiama", "herbal", "vatika", "dabur", "hyaluron"), "personal_care", "shampoo"),
     (("soap", "dettol", "lifebuoy", "santoor", "pears", "lux", "cinthol", "medimix"), "personal_care", "soap"),

@@ -16,6 +16,7 @@ from app.brand_dictionary import (
     category_allows_brand,
     label_conflicts_with_pack_text,
     label_conflicts_with_tea_pack,
+    match_brand_in_text,
     match_from_text,
     ocr_agrees_with_label,
     reconcile_label_with_text,
@@ -44,6 +45,7 @@ FAISS_THRESHOLD = float(os.getenv("FAISS_SIMILARITY_THRESHOLD", "0.92"))
 FAISS_THRESHOLD_CONTEXT = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_CONTEXT", "0.88"))
 FAISS_THRESHOLD_RETRY = float(os.getenv("FAISS_SIMILARITY_THRESHOLD_RETRY", "0.82"))
 FAISS_HIGH_CONFIDENCE = float(os.getenv("FAISS_HIGH_CONFIDENCE", "0.95"))
+FAISS_SCOPED_NO_OCR = float(os.getenv("FAISS_SCOPED_NO_OCR", "0.92"))
 PROPAGATE_THRESHOLD = float(os.getenv("PROPAGATE_SIMILARITY_THRESHOLD", "0.90"))
 PROPAGATE_THRESHOLD_NO_OCR = float(os.getenv("PROPAGATE_SIMILARITY_THRESHOLD_NO_OCR", "0.95"))
 LEARN_MIN_CONFIDENCE = float(os.getenv("LEARN_MIN_CONFIDENCE", "0.7"))
@@ -248,7 +250,7 @@ def _try_ocr_override(
     scan_context: dict | None,
     known: list[tuple[np.ndarray, dict]],
 ) -> dict | None:
-    ocr_fix = match_from_text(pack_text)
+    ocr_fix = match_from_text(pack_text, scan_context=scan_context)
     if not ocr_fix or not _is_valid_label(ocr_fix) or not _accept_ocr_label(ocr_fix, scan_context):
         return None
     row = _merge_label(records[index], ocr_fix)
@@ -290,7 +292,7 @@ def _propagate_shelf_labels(
                 ocr_texts[index] = pack_text
 
         if use_ocr and pack_text:
-            ocr_match = match_from_text(pack_text)
+            ocr_match = match_from_text(pack_text, scan_context=scan_context)
             if ocr_match and _is_valid_label(ocr_match) and _accept_ocr_label(ocr_match, scan_context):
                 row = _merge_label(records[index], ocr_match)
                 row["_index"] = index
@@ -323,7 +325,7 @@ def _propagate_shelf_labels(
                     continue
                 still_unknown.append(index)
                 continue
-            if not ocr_agrees_with_label(best_label, pack_text, strict=True):
+            if not ocr_agrees_with_label(best_label, pack_text, strict=True, scan_context=scan_context):
                 if _try_ocr_override(
                     records, classified, embeddings, index, pack_text, scan_context, known
                 ):
@@ -432,6 +434,46 @@ def _accept_ocr_label(label: dict, scan_context: dict | None) -> bool:
     )
 
 
+def _faiss_allowed_without_ocr(
+    match: dict,
+    score: float,
+    scan_context: dict | None,
+) -> bool:
+    if score < FAISS_SCOPED_NO_OCR:
+        return False
+    if not scan_context or not scan_context.get("aislix_category_id"):
+        return False
+    from app.category_scope import catalog_entry_in_scope
+
+    if not catalog_entry_in_scope(match, scan_context):
+        return False
+    sub = (scan_context or {}).get("sub_category")
+    if sub and sub != "others" and strict_subcategory_gates_enabled():
+        return product_type_matches_sub_category(sub, match, "")
+    return True
+
+
+def _ocr_supports_faiss_match(
+    match: dict,
+    ocr_text: str,
+    score: float,
+    scan_context: dict | None = None,
+) -> bool:
+    if not ocr_text or len(ocr_text.strip()) < 3:
+        return _faiss_allowed_without_ocr(match, score, scan_context)
+    if ocr_agrees_with_label(match, ocr_text, scan_context=scan_context):
+        return True
+    brand_match = match_brand_in_text(ocr_text)
+    if brand_match:
+        from app.inventory import _normalize_brand_key
+
+        ocr_brand = _normalize_brand_key(brand_match[0])
+        label_brand = _normalize_brand_key(match.get("brand") or "")
+        if ocr_brand and label_brand and ocr_brand == label_brand and score >= FAISS_SCOPED_NO_OCR:
+            return True
+    return score >= FAISS_HIGH_CONFIDENCE
+
+
 def _accept_faiss_fusion(
     match: dict,
     score: float,
@@ -459,7 +501,9 @@ def _accept_faiss_fusion(
     if sub and sub != "others" and strict_subcategory_gates_enabled():
         if not product_type_matches_sub_category(sub, match, ocr_text):
             return False
-        if ocr_text and len(ocr_text.strip()) >= 3 and not ocr_agrees_with_label(match, ocr_text):
+        if ocr_text and len(ocr_text.strip()) >= 3 and not _ocr_supports_faiss_match(
+            match, ocr_text, score, scan_context
+        ):
             from app.scan_context import compatible_product_types, infer_product_type
 
             label_text = " ".join(
@@ -478,7 +522,7 @@ def _accept_faiss_fusion(
         return True
 
     if ocr_text and len(ocr_text.strip()) >= 3:
-        if not ocr_agrees_with_label(match, ocr_text) and score < FAISS_HIGH_CONFIDENCE:
+        if not _ocr_supports_faiss_match(match, ocr_text, score, scan_context):
             return False
     return True
 
@@ -504,7 +548,7 @@ def _ocr_disambiguate(
     """Pick among FAISS top-K using OCR when scores are close or conflicting."""
     if not candidates:
         return None
-    text_match = match_from_text(ocr_text) if ocr_text else None
+    text_match = match_from_text(ocr_text, scan_context=scan_context) if ocr_text else None
     best_match: dict | None = None
     best_score = -1.0
     for match, score in candidates:
@@ -516,7 +560,7 @@ def _ocr_disambiguate(
         ):
             continue
         bonus = 0.0
-        if ocr_text and ocr_agrees_with_label(match, ocr_text):
+        if ocr_text and ocr_agrees_with_label(match, ocr_text, scan_context=scan_context):
             bonus += 0.08
         if text_match and _brands_match(match, text_match):
             bonus += 0.15
@@ -562,7 +606,7 @@ def _resolve_faiss_v3(
             label_conflicts_with_tea_pack(match, ocr_text)
             or label_conflicts_with_pack_text(match, ocr_text)
         ):
-            text_match = match_from_text(ocr_text)
+            text_match = match_from_text(ocr_text, scan_context=scan_context)
             if text_match and _is_valid_label(text_match) and _accept_ocr_label(text_match, scan_context):
                 text_match = dict(text_match)
                 text_match["recognition_source"] = "ocr"
@@ -583,14 +627,14 @@ def _resolve_faiss_v3(
     return None
 
 
-def _reconcile_conflicts_only(row: dict, pack_text: str) -> dict:
+def _reconcile_conflicts_only(row: dict, pack_text: str, scan_context: dict | None = None) -> dict:
     """Adjust label only when pack OCR clearly conflicts with the assigned SKU."""
     if not pack_text or len(pack_text.strip()) < 3:
         return row
     if label_conflicts_with_tea_pack(row, pack_text) or label_conflicts_with_pack_text(row, pack_text):
         return reconcile_label_with_text(row, pack_text)
-    if not ocr_agrees_with_label(row, pack_text, strict=True):
-        text_match = match_from_text(pack_text)
+    if not ocr_agrees_with_label(row, pack_text, strict=True, scan_context=scan_context):
+        text_match = match_from_text(pack_text, scan_context=scan_context)
         if text_match and _is_valid_label(text_match) and not _brands_match(row, text_match):
             return reconcile_label_with_text(row, pack_text)
     return row
@@ -669,9 +713,9 @@ def classify_records_v3(
     ocr_pending: list[int] = []
     for index in pending:
         pack_text = ocr_texts[index]
-        ocr_label = classify_with_ocr(images[index], raw_text=pack_text)
+        ocr_label = classify_with_ocr(images[index], raw_text=pack_text, scan_context=scan_context)
         if not ocr_label or not _is_valid_label(ocr_label):
-            ocr_label = match_from_text(pack_text)
+            ocr_label = match_from_text(pack_text, scan_context=scan_context)
         if ocr_label and _is_valid_label(ocr_label) and _accept_ocr_label(ocr_label, scan_context):
             if sub_category_blocks_brand(
                 scan_context,
@@ -755,7 +799,7 @@ def classify_records_v3(
 
     for index, row in enumerate(classified):
         if row:
-            classified[index] = _reconcile_conflicts_only(row, ocr_texts[index])
+            classified[index] = _reconcile_conflicts_only(row, ocr_texts[index], scan_context)
             if ocr_texts[index].strip():
                 classified[index]["pack_text"] = ocr_texts[index]
 
@@ -819,7 +863,7 @@ def classify_records_v2(
     for index in range(len(records)):
         pack_text = read_packaging_text(images[index])
         ocr_texts[index] = pack_text
-        ocr_label = classify_with_ocr(images[index], raw_text=pack_text)
+        ocr_label = classify_with_ocr(images[index], raw_text=pack_text, scan_context=scan_context)
         if ocr_label and _is_valid_label(ocr_label) and _accept_ocr_label(ocr_label, scan_context):
             if sub_category_blocks_brand(
                 scan_context,

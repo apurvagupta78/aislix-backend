@@ -52,6 +52,14 @@ TEXT_ALIASES: dict[str, str] = {
     "tedhe medhe": "Bingo",
     "mad angles": "Bingo",
     "pringles": "Pringles",
+    "baskin robbins": "Baskin",
+    "brooklyn creamery": "Brooklyn",
+    "mother dairy": "Mother",
+    "head and shoulders": "Head",
+    "park avenue": "Park",
+    "paper boat": "Paper",
+    "too yumm": "Too",
+    "cream bell": "Cream",
 }
 
 # Single-token catalog brands that are usually variant words, not manufacturers.
@@ -153,6 +161,12 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\baashirvaad\b", "Aashirvaad", ""),
     (r"\bfortune\b", "Fortune", ""),
     (r"\bindia\s+gate\b", "India", ""),
+    (r"\bamul\b.*\bkulfi\b|\bkulfi\b.*\bamul\b", "Amul", "Rabdi Kulfi Ice Cream Stick"),
+    (r"\bamul\b.*\bice cream sandwich\b|\bice cream sandwich\b.*\bamul\b", "Amul", ""),
+    (r"\bice cream sandwich\b", "Amul", ""),
+    (r"\bkulfi\b", "Amul", "Rabdi Kulfi Ice Cream Stick"),
+    (r"\bbrooklyn\b", "Brooklyn", "Ice Cream"),
+    (r"\bbaskin\b.*\bfunwich\b|\bfunwich\b", "Baskin Robbins", "Funwich"),
     (r"\bamul\b", "Amul", ""),
 ]
 
@@ -215,6 +229,9 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
         (r"\byellow\s+label\b", "lipton"),
         (r"\btatva\b|\btandoori\s+masala\b", "organic"),
         (r"\bwhole\s+truth\b|\bprotein\s+bar\b", "the"),
+        (r"\bamul\b", "amul"),
+        (r"\bbrooklyn\b", "brooklyn"),
+        (r"\bbaskin\b|\bfunwich\b", "baskin"),
     ]
     for pattern, hinted_brand in ocr_brand_hints:
         if re.search(pattern, text_l, flags=re.IGNORECASE):
@@ -366,14 +383,20 @@ def display_brand_name(brand: str, product_name: str = "") -> str:
     return brand
 
 
-def ocr_agrees_with_label(label: dict, text: str, *, strict: bool = False) -> bool:
+def ocr_agrees_with_label(
+    label: dict,
+    text: str,
+    *,
+    strict: bool = False,
+    scan_context: dict | None = None,
+) -> bool:
     """Return True when OCR text supports the proposed brand/product label."""
     if not text or len(text.strip()) < 3:
         return not strict
     label_brand = (label.get("brand") or "").strip().lower()
     if label_brand == "blue" and not _blue_brand_allowed(_normalize(text)):
         return False
-    corrected = match_from_text(text)
+    corrected = match_from_text(text, scan_context=scan_context)
     if not corrected:
         return False
     text_brand = (corrected.get("brand") or "").strip().lower()
@@ -411,6 +434,13 @@ def _load() -> None:
     _brand_products = brand_map
     _brands = sorted(seen, key=len, reverse=True)
     _brand_aliases = {k: v for k, v in TEXT_ALIASES.items()}
+    for brand in seen:
+        alias = _normalize(brand)
+        if len(alias) >= 5 and (" " in alias or "&" in brand):
+            _brand_aliases.setdefault(alias, brand)
+        compact = alias.replace(" ", "")
+        if len(compact) >= 6 and compact != alias:
+            _brand_aliases.setdefault(compact, brand)
 
 
 def all_brands() -> list[str]:
@@ -486,7 +516,7 @@ def _catalog_entry(brand: str, product_name: str) -> dict | None:
     return None
 
 
-def match_from_text(text: str) -> dict | None:
+def match_from_text(text: str, scan_context: dict | None = None) -> dict | None:
     """Best catalog match from OCR text: product hints → brand → SKU."""
     if not text or len(text.strip()) < 3:
         return None
@@ -509,19 +539,33 @@ def match_from_text(text: str) -> dict | None:
                     "recognition_source": "ocr",
                     "visible_text": text[:240],
                 }
-        else:
-            product = match_product_for_brand(brand, text)
+            product = match_product_for_brand(brand, text, scan_context=scan_context)
             if product:
                 product["visible_text"] = text[:240]
                 product["confidence"] = max(float(product.get("confidence") or 0), 0.9)
                 return product
+            return {
+                "brand": display_brand_name(brand, product_name),
+                "product_name": product_name,
+                "variant": "",
+                "sku": "",
+                "category": "General",
+                "confidence": 0.9,
+                "recognition_source": "ocr",
+                "visible_text": text[:240],
+            }
+        product = match_product_for_brand(brand, text, scan_context=scan_context)
+        if product:
+            product["visible_text"] = text[:240]
+            product["confidence"] = max(float(product.get("confidence") or 0), 0.9)
+            return product
         return {
             "brand": display_brand_name(brand, product_name),
-            "product_name": product_name,
+            "product_name": product_name or brand,
             "variant": "",
             "sku": "",
             "category": "General",
-            "confidence": 0.92,
+            "confidence": 0.88,
             "recognition_source": "ocr",
             "visible_text": text[:240],
         }
@@ -534,7 +578,7 @@ def match_from_text(text: str) -> dict | None:
         return None
     if _tea_brand_blocked_on_pc_pack(text, brand):
         return None
-    product = match_product_for_brand(brand, text)
+    product = match_product_for_brand(brand, text, scan_context=scan_context)
     if not product:
         return None
     product["visible_text"] = text[:240]
@@ -611,7 +655,65 @@ def _hair_product_type_adjustment(normalized: str, entry: dict) -> float:
     return 0.0
 
 
-def match_product_for_brand(brand: str, text: str) -> dict | None:
+def _subcategory_product_adjustment(
+    normalized: str,
+    entry: dict,
+    scan_context: dict | None = None,
+) -> float:
+    """Boost SKUs that fit the scan sub-category; penalize obvious mismatches."""
+    score = _hair_product_type_adjustment(normalized, entry)
+    if not scan_context:
+        return score
+
+    sub = (scan_context.get("sub_category") or "").strip()
+    if not sub or sub == "others":
+        return score
+
+    from app.scan_context import SUB_CATEGORY_PRODUCT_KEYWORDS, infer_product_type
+
+    keywords = SUB_CATEGORY_PRODUCT_KEYWORDS.get(sub) or []
+    if not keywords:
+        return score
+
+    sku_l = (entry.get("sku") or "").lower()
+    product_l = (entry.get("product_name") or "").lower()
+    entry_blob = f"{sku_l} {product_l}"
+    entry_type = infer_product_type(entry_blob)
+    text_type = infer_product_type(normalized)
+
+    entry_hits = sum(1 for kw in keywords if kw in entry_blob or kw in normalized)
+    if entry_hits > 0:
+        score += 0.12 * entry_hits
+
+    if text_type and entry_type:
+        if text_type == entry_type:
+            score += 0.15
+        elif text_type == sub and entry_type != sub:
+            score -= 0.2
+
+    if sub == "ice_cream":
+        if any(token in entry_blob for token in ("kulfi", "ice cream", "funwich", "sorbet", "gelato", "frozen")):
+            score += 0.35
+        if any(token in entry_blob for token in ("chocolate", "biscuit", "milk", "butter", "ghee", "paneer", "cheese")):
+            score -= 0.45
+
+    conflicting = {
+        "ice_cream": ("shampoo", "soap", "tea", "detergent", "biscuit"),
+        "shampoo": ("lotion", "skincare", "tea", "biscuit"),
+        "tea": ("shampoo", "soap", "chips"),
+        "chips": ("tea", "shampoo", "detergent"),
+    }
+    for conflict in conflicting.get(sub, ()):
+        if conflict in entry_blob and not any(kw in entry_blob for kw in keywords):
+            score -= 0.25
+    return score
+
+
+def match_product_for_brand(
+    brand: str,
+    text: str,
+    scan_context: dict | None = None,
+) -> dict | None:
     """Pick the best catalog SKU for a brand given OCR text."""
     entries = products_for_brand(brand)
     if not entries:
@@ -650,7 +752,7 @@ def match_product_for_brand(brand: str, text: str) -> dict | None:
                 score += 0.08
             elif entry_vol and not (entry_vol & volume_tokens):
                 score -= 0.05
-        score += _hair_product_type_adjustment(normalized, entry)
+        score += _subcategory_product_adjustment(normalized, entry, scan_context)
         if score >= best_score:
             best_score = score
             best = entry
