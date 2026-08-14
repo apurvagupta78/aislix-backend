@@ -99,9 +99,13 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\btresenme\b", "Tresemme", ""),
     (r"\bkeratin\s+smooth\b", "Tresemme", "Keratin Smooth Shampoo"),
     (r"\bsmooth\s*(?:&|and\s+)?\s*shine\b", "Tresemme", "Smooth Shine Shampoo"),
+    (r"\bvatika\b", "Dabur", "Vatika Health Shine Shampoo"),
+    (r"\bdabur\s+vatika\b", "Dabur", "Vatika Health Shine Shampoo"),
+    (r"\bhyaluron\s+moisture\b", "Loreal", "Paris Hyaluron Moisture Shampoo"),
     (r"\banti[\-\s]?hair\s*fall\b", "Himalaya", "Anti Hair Fall Shampoo"),
     (r"\bhead\s*(?:&|and)\s*shoulders\b", "Head", ""),
     (r"\bhead\s+shoulders\b", "Head", ""),
+    (r"\bcool\s+menthol\b", "Head", "Cool Menthol Shampoo"),
     (r"\bclinic\s+plus\b", "Clinic", "Plus Strong And Long Health Shampoo"),
     (r"\bl[\s']?oreal\b", "Loreal", ""),
     (r"\btotal\s+repair\s*5?\b", "Loreal", "Paris Total Repair 5 Shampoo"),
@@ -186,6 +190,8 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
         (r"shoulder|head\s*&?\s*shoulder|head\s+shoulder", "head"),
         (r"\bhimalaya\b", "himalaya"),
         (r"\bsunsilk\b", "sunsilk"),
+        (r"\bvatika\b|\bdabur\s+vatika\b", "dabur"),
+        (r"\bhyaluron\b", "loreal"),
         (r"\bclinic\s*plus\b|\bclinic\b", "clinic"),
         (r"\btresemme\b|\btresemm", "tresemme"),
         (r"\bl[\s']?oreal\b|\btotal\s+repair", "loreal"),
@@ -242,6 +248,12 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
     if re.search(r"yellow\s+label", text_l) and "darjeeling" in product_l:
         return True
     if re.search(r"\bdarjeeling\b", text_l) and "yellow label" in product_l:
+        return True
+    if re.search(r"\bvatika\b", text_l) and label_brand == "sunsilk":
+        return True
+    if re.search(r"\bhyaluron\b", text_l) and "total repair" in product_l:
+        return True
+    if re.search(r"\btotal\s+repair\b", text_l) and "hyaluron" in product_l:
         return True
 
     label_text = " ".join(

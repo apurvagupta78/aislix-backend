@@ -82,6 +82,30 @@ def _sibling_pc_subcategory(selected: str, detected: str | None) -> bool:
     return False
 
 
+def _shampoo_product_text(haystack: str) -> bool:
+    """True when label text describes hair wash, not body lotion/skincare."""
+    h = haystack.lower()
+    if any(
+        token in h
+        for token in (
+            "body lotion",
+            "smooth skin lotion",
+            "skin lotion",
+            "body milk",
+            "natural glow",
+            "moisturising lotion",
+            "moisturizing lotion",
+        )
+    ):
+        return False
+    if "shampoo" in h or "conditioner" in h:
+        return True
+    return any(
+        token in h
+        for token in ("keratin", "anti dandruff", "hair fall", "hyaluron moisture", "vatika", "cool menthol")
+    )
+
+
 def _infer_foreign_aisle(haystack: str, scan_aisle_key: str) -> tuple[str, str] | None:
     """Return (aisle_key, display_name) when product text belongs to another aisle."""
     haystack_l = haystack.lower()
@@ -183,12 +207,17 @@ def _evaluate_compliance(
 
     foreign = _infer_foreign_aisle(haystack, aislix_key)
     if foreign:
-        return False, foreign[0], foreign[1]
+        if selected == "shampoo" and _shampoo_product_text(haystack):
+            pass
+        else:
+            return False, foreign[0], foreign[1]
 
     detected = infer_detected_subcategory(item, scan_context)
     cat_name = scan_context.get("aislix_category")
     if detected and not sub_categories_match(detected, selected, cat_name):
         if _sibling_pc_subcategory(selected, detected):
+            return True, selected, selected_label
+        if selected == "shampoo" and _shampoo_product_text(haystack) and detected in {"skincare", "cosmetics"}:
             return True, selected, selected_label
         return False, detected, _subcategory_label(scan_context, detected)
 

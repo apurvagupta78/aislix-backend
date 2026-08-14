@@ -200,7 +200,7 @@ SUB_CATEGORY_BRAND_HINTS: dict[str, dict[str, set[str]]] = {
         "shampoo": {
             "dove", "pantene", "sunsilk", "head & shoulders", "tresemme", "tresemmé",
             "clinic plus", "loreal", "l'oreal", "garnier", "indulekha", "himalaya",
-            "clear", "meera", "sunsilk", "schwarzkopf",
+            "clear", "meera", "sunsilk", "schwarzkopf", "dabur", "vatika",
         },
         "soap": {
             "lux", "dove", "dettol", "pears", "lifebuoy", "santoor", "hamam", "cinthol",
@@ -231,7 +231,7 @@ SUB_CATEGORY_BRAND_HINTS: dict[str, dict[str, set[str]]] = {
 
 # Product-type keywords for sub-category inference (compliance / mismatch detection).
 SUB_CATEGORY_PRODUCT_KEYWORDS: dict[str, list[str]] = {
-    "shampoo": ["shampoo", "conditioner", "hair fall", "anti dandruff", "hair care", "keratin"],
+    "shampoo": ["shampoo", "conditioner", "hair fall", "anti dandruff", "hair care", "keratin", "hyaluron", "vatika"],
     "soap": ["soap", "handwash", "hand wash", "bathing bar", "bath bar", "antiseptic liquid"],
     "hand_care": ["hand wash", "handwash", "hand-wash", "hand sanitizer", "sanitizer"],
     "toothpaste": ["toothpaste", "toothbrush", "tooth brush", "dental", "oral care", "mouthwash"],

@@ -49,7 +49,7 @@ _RULES: list[tuple[tuple[str, ...], str, str]] = [
     # Dairy
     (("milk", "dahi", "curd", "yogurt", "lassi", "paneer", "cheese", "butter", "ghee", "amul", "mother dairy", "motherdairy", "nandini", "milky", "epigamia", "danone", "cream", "milkmaid"), "dairy_chilled", "others"),
     # Personal care
-    (("shampoo", "tresemme", "head", "shoulders", "pantene", "sunsilk", "clinic plus", "clinicplus", "himalaya", "dove", "loreal", "fiama", "herbal"), "personal_care", "shampoo"),
+    (("shampoo", "tresemme", "head", "shoulders", "pantene", "sunsilk", "clinic plus", "clinicplus", "himalaya", "dove", "loreal", "fiama", "herbal", "vatika", "dabur", "hyaluron"), "personal_care", "shampoo"),
     (("soap", "dettol", "lifebuoy", "santoor", "pears", "lux", "cinthol", "medimix"), "personal_care", "soap"),
     (("toothpaste", "tooth brush", "toothbrush", "colgate", "pepsodent", "sensodyne", "dabur red"), "personal_care", "toothpaste"),
     (("deodorant", "deodrant", "axe", "park avenue", "nivea", "fa "), "personal_care", "deodorant"),
@@ -79,11 +79,23 @@ _RULES: list[tuple[tuple[str, ...], str, str]] = [
 ]
 
 
+def _key_in_text(key: str, text: str) -> bool:
+    """Match rule tokens without substring false positives (e.g. real in loreal)."""
+    key = key.strip()
+    if not key:
+        return False
+    if " " in key:
+        return key in text
+    if len(key) <= 4:
+        return bool(re.search(rf"\b{re.escape(key)}\b", text))
+    return key in text
+
+
 def map_class_to_aislix_category(class_name: str) -> dict[str, str]:
     """Return category label plus ids for a Grocer-Help YOLO class name."""
     text = _norm(class_name.replace("_", " "))
     for keys, category_id, sub_id in _RULES:
-        if any(k in text for k in keys):
+        if any(_key_in_text(k, text) for k in keys):
             return {
                 "category_id": category_id,
                 "sub_category_id": sub_id,
