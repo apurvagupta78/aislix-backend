@@ -91,8 +91,35 @@ def test_assign_planogram_slots_one_per_column():
             "product_name": "Unidentified SKU",
             "confidence": 0.35,
         })
-    assigned = assign_planogram_slots(records, cands)
+    assigned = assign_planogram_slots(records, cands, scan_context={"shelf_mode": "single_row"})
     assert len(assigned) == 8
     brands = {r["brand"] for r in assigned}
     assert len(brands) == 8
     assert all(r["planogram_guided"] for r in assigned)
+
+
+def test_should_skip_planogram_slots_on_ice_cream_with_few_detections():
+    from app.planogram_guided import should_use_planogram_slots
+
+    cands = [
+        {"brand": "Amul", "product_name": "Rajbhog Kulfi", "sub_category": "ice_cream"},
+        {"brand": "Baskin Robbins", "product_name": "Funwich", "sub_category": "ice_cream"},
+    ]
+    records = [{"x1": 0, "y1": 0, "x2": 100, "y2": 100, "brand": "Unknown", "product_name": "Unidentified SKU"}]
+    ctx = {"shelf_mode": "multi_row", "sub_category": "ice_cream"}
+    assert should_use_planogram_slots(records, cands, ctx) is False
+
+
+def test_ocr_brand_conflict_blocks_baskin_for_amul_text():
+    from app.planogram_guided import best_candidate_from_text, prepare_planogram_candidates
+
+    items = [
+        {"brand": "Amul", "product_name": "Rajbhog Kulfi", "sub_category": "ice_cream", "expected_qty": 3, "location": "A-1-D", "category": "Frozen Foods & Ice Cream"},
+        {"brand": "Baskin Robbins", "product_name": "Funwich", "sub_category": "ice_cream", "expected_qty": 2, "location": "A-1-D", "category": "Frozen Foods & Ice Cream"},
+    ]
+    cands = prepare_planogram_candidates(items, None, {}, {"sub_category": "ice_cream"})
+    match = best_candidate_from_text("Amul Rajbhog Kulfi stick", cands)
+    assert match is not None
+    assert match[0]["brand"] == "Amul"
+    blocked = best_candidate_from_text("Amul Rajbhog Kulfi stick", cands)
+    assert blocked[0]["brand"] != "Baskin Robbins"

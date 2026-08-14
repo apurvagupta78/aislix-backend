@@ -52,6 +52,7 @@ FAISS_SCOPED_NO_OCR = float(os.getenv("FAISS_SCOPED_NO_OCR", "0.92"))
 PROPAGATE_THRESHOLD = float(os.getenv("PROPAGATE_SIMILARITY_THRESHOLD", "0.90"))
 PROPAGATE_THRESHOLD_NO_OCR = float(os.getenv("PROPAGATE_SIMILARITY_THRESHOLD_NO_OCR", "0.95"))
 LEARN_MIN_CONFIDENCE = float(os.getenv("LEARN_MIN_CONFIDENCE", "0.7"))
+ICE_CREAM_NO_OCR_FAISS_BRANDS = frozenset({"havmor"})
 
 
 def get_client() -> OpenAI:
@@ -472,7 +473,14 @@ def _faiss_allowed_without_ocr(
         return False
     sub = (scan_context or {}).get("sub_category")
     if sub and sub != "others" and strict_subcategory_gates_enabled():
-        return product_type_matches_sub_category(sub, match, "")
+        if not product_type_matches_sub_category(sub, match, ""):
+            return False
+        from app.scan_context import effective_sub_category
+
+        if effective_sub_category(scan_context) == "ice_cream":
+            brand_l = (match.get("brand") or "").strip().lower()
+            if brand_l in ICE_CREAM_NO_OCR_FAISS_BRANDS:
+                return False
     return True
 
 
@@ -663,6 +671,104 @@ def _reconcile_conflicts_only(row: dict, pack_text: str, scan_context: dict | No
     return row
 
 
+def _ice_cream_label_needs_retry(label: dict) -> bool:
+    brand_l = (label.get("brand") or "").strip().lower()
+    product_l = (label.get("product_name") or "").strip().lower()
+    if brand_l == "havmor" and "sandwich" in product_l:
+        return True
+    if brand_l == "amul" and "tricone" in product_l:
+        return True
+    return False
+
+
+def _reconcile_ice_cream_mislabels(
+    records: list[dict],
+    classified: list[dict | None],
+    embeddings: np.ndarray,
+    ocr_texts: list[str],
+    scan_context: dict | None,
+    stats: dict,
+) -> None:
+    """Fix common FAISS swaps on frost-covered ice cream packs (Havmor/Amul, Tricone/Sandwich)."""
+    from app.scan_context import effective_sub_category
+
+    if effective_sub_category(scan_context) != "ice_cream":
+        return
+
+    for index, row in enumerate(classified):
+        if not row or not _ice_cream_label_needs_retry(row):
+            continue
+        pack_text = ocr_texts[index] if index < len(ocr_texts) else ""
+        if len(pack_text.strip()) < 5:
+            img = Image.open(records[index]["image_path"]).convert("RGB")
+            pack_text = read_packaging_text(img, aggressive=True)
+            ocr_texts[index] = pack_text
+        if pack_text and label_conflicts_with_pack_text(row, pack_text):
+            fixed = reconcile_label_with_text(row, pack_text)
+            if _is_valid_label(fixed) and _accept_context_label(fixed, scan_context, pack_text):
+                classified[index] = _merge_label(records[index], fixed)
+                classified[index]["pack_text"] = pack_text
+                stats["ocr"] = stats.get("ocr", 0) + 1
+
+    for index, row in enumerate(classified):
+        if not row:
+            continue
+        brand_l = (row.get("brand") or "").strip().lower()
+        product_l = (row.get("product_name") or "").strip().lower()
+        pack_text = ocr_texts[index] if index < len(ocr_texts) else ""
+
+        if brand_l == "havmor" and "sandwich" in product_l:
+            probe_emb = embeddings[index]
+            for j, ref in enumerate(classified):
+                if j == index or not ref:
+                    continue
+                if (ref.get("brand") or "").strip().lower() != "amul":
+                    continue
+                if not _propagation_neighbor_allowed(records[index], ref, scan_context):
+                    continue
+                sim = _cosine_similarity(probe_emb, embeddings[j])
+                if sim < 0.84:
+                    continue
+                hint = pack_text or (ocr_texts[j] if j < len(ocr_texts) else "") or "kulfi"
+                recovered = match_from_text(hint, scan_context=scan_context) or match_product_for_brand(
+                    "Amul", hint or "kulfi", scan_context=scan_context
+                )
+                if recovered and _is_valid_label(recovered) and _accept_context_label(
+                    recovered, scan_context, hint
+                ):
+                    recovered["recognition_source"] = "propagate+ice_cream_fix"
+                    classified[index] = _merge_label(records[index], recovered)
+                    classified[index]["pack_text"] = pack_text
+                    stats["propagate"] = stats.get("propagate", 0) + 1
+                    break
+
+        if brand_l == "amul" and "tricone" in product_l:
+            for j, ref in enumerate(classified):
+                if j == index or not ref:
+                    continue
+                ref_product = (ref.get("product_name") or "").lower()
+                ref_pack = ocr_texts[j] if j < len(ocr_texts) else ""
+                if "sandwich" not in ref_product and "sandwich" not in ref_pack.lower():
+                    continue
+                if not _propagation_neighbor_allowed(records[index], ref, scan_context):
+                    continue
+                sim = _cosine_similarity(embeddings[index], embeddings[j])
+                if sim < 0.82:
+                    continue
+                hint = pack_text or ref_pack or "ice cream sandwich"
+                recovered = match_from_text(hint, scan_context=scan_context) or match_product_for_brand(
+                    "Amul", hint, scan_context=scan_context
+                )
+                if recovered and _is_valid_label(recovered) and _accept_context_label(
+                    recovered, scan_context, hint
+                ):
+                    recovered["recognition_source"] = "propagate+ice_cream_fix"
+                    classified[index] = _merge_label(records[index], recovered)
+                    classified[index]["pack_text"] = pack_text
+                    stats["propagate"] = stats.get("propagate", 0) + 1
+                    break
+
+
 def _finalize_classification(
     records: list[dict],
     classified: list[dict | None],
@@ -738,6 +844,10 @@ def _finalize_classification(
             classified[index]["pack_text"] = pack_text
             stats["none"] = max(0, stats.get("none", 0) - 1)
             stats["propagate"] = stats.get("propagate", 0) + 1
+
+    _reconcile_ice_cream_mislabels(
+        records, classified, embeddings, ocr_texts, scan_context, stats
+    )
 
 
 def classify_records_v3(

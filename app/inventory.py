@@ -37,6 +37,8 @@ PRODUCT_DISPLAY_ALIASES: dict[str, str] = {
     "mad angles": "Mad Angles",
     "snacks": "Snacks",
     "wafers": "Wafers",
+    "funwith": "Funwich",
+    "funwich": "Funwich",
 }
 
 VARIANT_PLACEHOLDERS = frozenset({

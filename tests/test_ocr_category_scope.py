@@ -193,3 +193,48 @@ def test_effective_sub_category_from_custom_bread():
         }
     )
     assert effective_sub_category(ctx) == "bread"
+
+
+def test_kulfi_ocr_rejects_havmor_sandwich_label():
+    from app.brand_dictionary import label_conflicts_with_pack_text
+
+    label = {"brand": "Havmor", "product_name": "Sandwich Ice Cream", "sku": "havmor_sandwich_ice_cream_100_ml"}
+    assert label_conflicts_with_pack_text(label, "Amul Rajbhog Kulfi") is True
+
+
+def test_sandwich_ocr_rejects_amul_tricone_label():
+    from app.brand_dictionary import label_conflicts_with_pack_text
+
+    label = {"brand": "Amul", "product_name": "Tricone Vanilla Ice Cream", "sku": "amul_tricone_vanilla_ice_cream_40_ml"}
+    assert label_conflicts_with_pack_text(label, "Amul Ice Cream Sandwich") is True
+
+
+def test_funwith_ocr_maps_to_funwich():
+    ctx = _ice_cream_context()
+    result = match_from_text("Baskin Robbins Funwith Choco Vanilla", scan_context=ctx)
+    assert result is not None
+    assert "funwich" in (result.get("product_name") or "").lower()
+
+
+def test_havmor_faiss_blocked_without_ocr_on_ice_cream_scan():
+    ctx = _ice_cream_context()
+    match = {
+        "brand": "Havmor",
+        "product_name": "Sandwich Ice Cream",
+        "sku": "havmor_sandwich_ice_cream_100_ml",
+        "category": "General",
+    }
+    assert _faiss_allowed_without_ocr(match, 0.95, ctx) is False
+
+
+def test_funwith_inventory_alias_merges_with_funwich():
+    from app.inventory import aggregate_inventory
+
+    classified = [
+        {"brand": "Baskin Robbins", "product_name": "Funwith", "confidence": 0.99, "category": "General"},
+        {"brand": "Baskin Robbins", "product_name": "Funwich", "confidence": 0.99, "category": "General"},
+    ]
+    rows = aggregate_inventory(classified)
+    assert len(rows) == 1
+    assert rows[0]["product_name"] == "Funwich"
+    assert rows[0]["quantity"] == 2

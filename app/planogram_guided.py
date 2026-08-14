@@ -20,6 +20,20 @@ from app.planogram_csv import build_match_key
 PLANOGRAM_MATCH_MIN_SCORE = 0.38
 PLANOGRAM_SLOT_MIN_SCORE = 0.22
 PLANOGRAM_LEARN_MIN_CONFIDENCE = 0.55
+PLANOGRAM_POSITIONAL_FALLBACK_MIN_SCORE = 0.28
+
+# Product tokens for planogram OCR scoring (beyond shampoo).
+_PLANOGRAM_PRODUCT_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "ice cream": (
+        "ice cream", "kulfi", "rajbhog", "rajwadi", "rabdi", "sandwich", "funwich", "funwith",
+        "tricone", "sorbet", "gelato", "raspberry", "rasberry", "chocolate", "brooklyn", "baskin",
+    ),
+    "ice_cream": (
+        "ice cream", "kulfi", "rajbhog", "rajwadi", "rabdi", "sandwich", "funwich", "funwith",
+        "tricone", "sorbet", "gelato", "raspberry", "rasberry", "chocolate", "brooklyn", "baskin",
+    ),
+    "chips": ("chips", "crisps", "wafers", "nacho", "masala", "barbecue"),
+}
 
 
 def _x_center_rec(record: dict) -> float:
@@ -112,6 +126,45 @@ def _normalize_candidate(row: dict) -> dict:
     }
 
 
+def _ocr_brand_conflicts(text: str, candidate: dict) -> bool:
+    """True when pack text clearly names a different brand than the planogram row."""
+    if not text or not text.strip():
+        return False
+    blob = _norm(text)
+    cand_brand = _norm(candidate.get("brand") or "")
+    if not cand_brand:
+        return False
+    hints: list[tuple[str, str]] = [
+        (r"\bamul\b", "amul"),
+        (r"\bbaskin\b|\bfunwich\b|\bfunwith\b", "baskin"),
+        (r"\bbrooklyn\b", "brooklyn"),
+        (r"\bhavmor\b", "havmor"),
+        (r"\bdove\b", "dove"),
+        (r"\bclinic\s*plus\b|\bclinic\b", "clinic"),
+        (r"\bhimalaya\b", "himalaya"),
+    ]
+    for pattern, hinted in hints:
+        if re.search(pattern, blob, flags=re.IGNORECASE):
+            if hinted not in cand_brand and cand_brand not in hinted:
+                if not any(token in blob for token in cand_brand.split()):
+                    return True
+            break
+    return False
+
+
+def _product_keyword_bonus(text: str, candidate: dict) -> float:
+    sub = _norm(candidate.get("sub_category") or "")
+    blob = _norm(text)
+    if not blob:
+        return 0.0
+    keywords = _PLANOGRAM_PRODUCT_KEYWORDS.get(sub) or _PLANOGRAM_PRODUCT_KEYWORDS.get("ice cream", ())
+    product = _norm(candidate.get("product_name") or "")
+    hits = sum(1 for kw in keywords if kw in blob)
+    if product:
+        hits += sum(1 for token in product.split() if len(token) >= 4 and token in blob)
+    return min(0.35, 0.08 * hits) if hits else 0.0
+
+
 def _brand_in_text(text: str, candidate: dict) -> float:
     blob = _norm(text)
     if not blob:
@@ -144,13 +197,16 @@ def score_text_against_candidate(text: str, candidate: dict) -> float:
     """Score OCR/pack text against one planogram row."""
     if not text or not text.strip():
         return 0.0
+    if _ocr_brand_conflicts(text, candidate):
+        return 0.0
     brand_score = _brand_in_text(text, candidate)
     if brand_score <= 0.0:
         return 0.0
     product_score = _token_overlap(candidate.get("product_name") or "", text)
     sub = _norm(candidate.get("sub_category") or "")
     kind_bonus = 0.12 if sub and _text_has_kind(text, sub) else 0.0
-    return min(1.0, brand_score * 0.55 + product_score * 0.33 + kind_bonus)
+    keyword_bonus = _product_keyword_bonus(text, candidate)
+    return min(1.0, brand_score * 0.55 + product_score * 0.33 + kind_bonus + keyword_bonus)
 
 
 def best_candidate_from_text(
@@ -161,6 +217,8 @@ def best_candidate_from_text(
     best: dict | None = None
     best_score = 0.0
     for row in candidates:
+        if _ocr_brand_conflicts(text, row):
+            continue
         score = score_text_against_candidate(text, row)
         if score > best_score:
             best_score = score
@@ -232,6 +290,12 @@ def snap_label_to_planogram(
     if not match:
         return None
     candidate, score = match
+    if ocr_text and _ocr_brand_conflicts(ocr_text, candidate):
+        return None
+    if ocr_text and len(ocr_text.strip()) >= 3:
+        ocr_match = best_candidate_from_text(ocr_text, candidates, min_score=PLANOGRAM_MATCH_MIN_SCORE)
+        if ocr_match and ocr_match[1] >= score:
+            candidate, score = ocr_match
     conf = max(float(label.get("confidence") or 0.5), score)
     source = label.get("recognition_source") or "planogram_snap"
     return label_from_candidate(candidate, conf, source, ocr_text)
@@ -391,11 +455,12 @@ def classify_records_planogram_guided(
     if v3 and is_ready():
         topk = match_embeddings_batch_topk(embeddings, scan_context=scan_context)
         for index, row_candidates in enumerate(topk):
+            pack_text = ocr_texts[index]
             for match, score in row_candidates:
                 if score < 0.78:
                     break
-                snapped = snap_label_to_planogram(match, candidates, ocr_texts[index])
-                if snapped:
+                snapped = snap_label_to_planogram(match, candidates, pack_text)
+                if snapped and (pack_text.strip() or score >= 0.92):
                     snapped["confidence"] = max(snapped["confidence"], float(score) * 0.95)
                     classified[index] = _merge_record(records[index], snapped)
                     stats["faiss"] += 1
@@ -480,17 +545,19 @@ def classify_records_planogram_guided(
                 classified[index] = _merge_record(records[index], label)
                 stats["gpt"] += 1
                 continue
-        match = best_candidate_from_text(ocr_texts[index], candidates, min_score=0.32)
-        if match:
-            candidate, score = match
-            classified[index] = _merge_record(
-                records[index],
-                label_from_candidate(candidate, score, "planogram_fallback", ocr_texts[index]),
-            )
-            stats["planogram"] += 1
-        else:
-            classified[index] = _merge_record(records[index], _unknown_label())
-            stats["none"] += 1
+        pack_text = ocr_texts[index]
+        if pack_text.strip():
+            match = best_candidate_from_text(pack_text, candidates, min_score=PLANOGRAM_MATCH_MIN_SCORE)
+            if match:
+                candidate, score = match
+                classified[index] = _merge_record(
+                    records[index],
+                    label_from_candidate(candidate, score, "planogram_fallback", pack_text),
+                )
+                stats["planogram"] += 1
+                continue
+        classified[index] = _merge_record(records[index], _unknown_label())
+        stats["none"] += 1
 
     stats["gpt_calls"] = gpt_used
     stats["unknown_count"] = stats["none"]
@@ -499,6 +566,28 @@ def classify_records_planogram_guided(
 
     output = [{k: v for k, v in row.items() if k != "_index"} for row in classified if row]
     return output, stats
+
+
+def should_use_planogram_slots(
+    records: list[dict],
+    candidates: list[dict],
+    scan_context: dict | None = None,
+) -> bool:
+    """Planogram slot reassignment is for single-row shelves with enough detections."""
+    if not records or not candidates:
+        return False
+    scan_context = scan_context or {}
+    shelf_mode = scan_context.get("shelf_mode") or ""
+    if shelf_mode in {"multi_row", "multi_bin"}:
+        return False
+    from app.scan_context import effective_sub_category
+
+    sub = effective_sub_category(scan_context)
+    if sub == "ice_cream" and len(records) < len(candidates):
+        return False
+    if len(records) < max(2, int(len(candidates) * 0.6)):
+        return False
+    return True
 
 
 def assign_planogram_slots(
@@ -555,18 +644,32 @@ def assign_planogram_slots(
             slot_to_cand[si] = ci
             used_cands.add(ci)
 
+    scan_context = scan_context or {}
+    shelf_mode = scan_context.get("shelf_mode") or ""
+    exact_row_match = (
+        shelf_mode in {"single_row", "single_bin", ""}
+        and n_slots == n_cand
+        and n_slots >= 2
+    )
+
     if abs(n_slots - n_cand) <= 1:
         for si in range(min(n_slots, n_cand)):
-            if si not in slot_to_cand and si not in used_cands:
+            if si in slot_to_cand or si in used_cands:
+                continue
+            score = score_text_against_candidate(slot_ocrs[si], candidates[si])
+            if score >= PLANOGRAM_POSITIONAL_FALLBACK_MIN_SCORE or exact_row_match:
                 slot_to_cand[si] = si
                 used_cands.add(si)
 
-    # Left-to-right positional fallback when OCR scores are weak (e.g. dark slot crops).
+    # Positional fallback: OCR-supported, or exact facing count on a single product row.
     slot_order = sorted(range(n_slots), key=lambda si: _x_center_rec(slot_best[si]))
     for rank, si in enumerate(slot_order):
         if si in slot_to_cand:
             continue
-        if rank < n_cand and rank not in used_cands:
+        if rank >= n_cand or rank in used_cands:
+            continue
+        score = score_text_against_candidate(slot_ocrs[si], candidates[rank])
+        if score >= PLANOGRAM_POSITIONAL_FALLBACK_MIN_SCORE or exact_row_match:
             slot_to_cand[si] = rank
             used_cands.add(rank)
 

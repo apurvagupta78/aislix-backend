@@ -1,0 +1,6 @@
+location,category,sub_category,brand,product_name,variant,expected_qty,sku,shelf_position
+A-1-D,Frozen Foods & Ice Cream,Ice cream,Baskin Robbins,Funwich,,2,BIN-SH-001,Top
+A-1-D,Frozen Foods & Ice Cream,Ice cream,Amul,Rajbhog Kulfi,,3,BIN-SH-002,Top
+A-1-D,Frozen Foods & Ice Cream,Ice cream,Brooklyn,Rasberry,,1,BIN-SH-003,Top
+A-1-D,Frozen Foods & Ice Cream,Ice cream,Brooklyn,Death By Chocolate,,1,BIN-SH-004,Top
+A-1-D,Frozen Foods & Ice Cream,Ice cream,Amul,Ice Cream Sandwich,,2,BIN-SH-005,Top

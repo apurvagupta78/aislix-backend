@@ -38,6 +38,8 @@ def _token_overlap(a: str, b: str) -> float:
 _SUB_CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
     "shampoo": ("shampoo",),
     "conditioner": ("conditioner", "conditioning"),
+    "ice cream": ("ice cream", "kulfi", "sandwich", "funwich", "sorbet", "gelato"),
+    "ice_cream": ("ice cream", "kulfi", "sandwich", "funwich", "sorbet", "gelato"),
 }
 
 

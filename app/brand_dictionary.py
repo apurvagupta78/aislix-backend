@@ -165,10 +165,11 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\brajbhog\b|\brajbog\b", "Amul", "Rabdi Kulfi Ice Cream Stick"),
     (r"\brajwadi\b", "Amul", "Rajwadi Kulfi Ice Cream"),
     (r"\bamul\b.*\bice cream sandwich\b|\bice cream sandwich\b.*\bamul\b", "Amul", ""),
-    (r"\bice cream sandwich\b", "Amul", ""),
+    (r"\bice cream sandwich\b", "Amul", "Ice Cream Sandwich"),
+    (r"\bsandwich\b", "Amul", "Ice Cream Sandwich"),
     (r"\bkulfi\b", "Amul", "Rabdi Kulfi Ice Cream Stick"),
     (r"\bbrooklyn\b", "Brooklyn", "Ice Cream"),
-    (r"\bbaskin\b.*\bfunwich\b|\bfunwich\b", "Baskin Robbins", "Funwich"),
+    (r"\bbaskin\b.*\bfunwich\b|\bfunwich\b|\bfunwith\b", "Baskin Robbins", "Funwich"),
     (r"\bamul\b", "Amul", ""),
 ]
 
@@ -233,7 +234,11 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
         (r"\bwhole\s+truth\b|\bprotein\s+bar\b", "the"),
         (r"\bamul\b", "amul"),
         (r"\bbrooklyn\b", "brooklyn"),
-        (r"\bbaskin\b|\bfunwich\b", "baskin"),
+        (r"\bbaskin\b|\bfunwich\b|\bfunwith\b", "baskin"),
+        (r"\bhavmor\b", "havmor"),
+        (r"\bkulfi\b|\brajbhog\b|\brajbog\b|\brajwadi\b", "amul"),
+        (r"\bsandwich\b", "amul"),
+        (r"\btricone\b", "amul"),
     ]
     for pattern, hinted_brand in ocr_brand_hints:
         if re.search(pattern, text_l, flags=re.IGNORECASE):
@@ -273,6 +278,16 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
     if re.search(r"\bhyaluron\b", text_l) and "total repair" in product_l:
         return True
     if re.search(r"\btotal\s+repair\b", text_l) and "hyaluron" in product_l:
+        return True
+
+    if "amul" in text_l and label_brand == "havmor":
+        return True
+    if any(token in text_l for token in ("kulfi", "rajbhog", "rajbog", "rajwadi", "rabdi")):
+        if label_brand == "havmor" or "sandwich" in product_l:
+            return True
+    if "sandwich" in text_l and ("tricone" in product_l or "cone" in product_l or "kulfi" in product_l):
+        return True
+    if any(token in text_l for token in ("tricone", " cone")) and "sandwich" in product_l:
         return True
 
     label_text = " ".join(
@@ -698,6 +713,21 @@ def _subcategory_product_adjustment(
             score += 0.35
         if any(token in entry_blob for token in ("chocolate", "biscuit", "milk", "butter", "ghee", "paneer", "cheese")):
             score -= 0.45
+        if "sandwich" in normalized:
+            if "sandwich" in entry_blob:
+                score += 0.5
+            if any(token in entry_blob for token in ("tricone", "cone", "kulfi")):
+                score -= 0.6
+        if any(token in normalized for token in ("kulfi", "rajbhog", "rajbog", "rajwadi", "rabdi")):
+            if "kulfi" in entry_blob:
+                score += 0.5
+            if "sandwich" in entry_blob:
+                score -= 0.6
+        if "tricone" in normalized or re.search(r"\bcone\b", normalized):
+            if "tricone" in entry_blob or "cone" in entry_blob:
+                score += 0.45
+            if "sandwich" in entry_blob or "kulfi" in entry_blob:
+                score -= 0.55
 
     conflicting = {
         "ice_cream": ("shampoo", "soap", "tea", "detergent", "biscuit"),
