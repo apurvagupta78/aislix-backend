@@ -38,9 +38,10 @@ def test_strict_rejects_weak_learned_faiss_on_chips():
         "recognition_source": "learned",
     }
     assert _strict_faiss_accept(match, 0.96, None, ctx) is False
+    assert _strict_faiss_accept(match, 0.99, None, ctx, "TooYumm masala") is False
 
 
-def test_strict_accepts_near_certain_base_catalog_faiss():
+def test_strict_accepts_base_catalog_faiss_when_ocr_agrees():
     ctx = _chips_context()
     match = {
         "brand": "Lays",
@@ -49,7 +50,23 @@ def test_strict_accepts_near_certain_base_catalog_faiss():
         "category": "General",
         "recognition_source": "faiss",
     }
-    assert _strict_faiss_accept(match, FAISS_STRICT_THRESHOLD, None, ctx) is True
+    assert _strict_faiss_accept(match, FAISS_STRICT_THRESHOLD, None, ctx) is False
+    assert _strict_faiss_accept(
+        match, FAISS_STRICT_THRESHOLD, None, ctx, "Lay's Classic Salted Potato Chips"
+    ) is True
+
+
+def test_strict_rejects_haldiram_faiss_without_lays_in_ocr():
+    ctx = _chips_context()
+    match = {
+        "brand": "Haldiram",
+        "product_name": "Namkeen Navratan Mix Pouch",
+        "sku": "haldiram_navratan",
+        "category": "General",
+        "recognition_source": "learned",
+    }
+    assert _strict_faiss_accept(match, 0.983, None, ctx) is False
+    assert _strict_faiss_accept(match, 0.983, None, ctx, "Lay's American Style Cream Onion") is False
 
 
 def test_strict_learned_requires_higher_score():
@@ -62,7 +79,10 @@ def test_strict_learned_requires_higher_score():
         "recognition_source": "learned",
     }
     assert _strict_faiss_accept(match, FAISS_STRICT_THRESHOLD, None, ctx) is False
-    assert _strict_faiss_accept(match, FAISS_STRICT_LEARNED_MIN, None, ctx) is True
+    assert _strict_faiss_accept(match, FAISS_STRICT_LEARNED_MIN, None, ctx) is False
+    assert _strict_faiss_accept(
+        match, FAISS_STRICT_LEARNED_MIN, None, ctx, "Lay's Classic Salted Potato Chips"
+    ) is True
 
 
 def test_strict_wins_over_v3_when_both_enabled(monkeypatch):

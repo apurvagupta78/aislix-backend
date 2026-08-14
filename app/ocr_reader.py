@@ -315,6 +315,9 @@ def read_packaging_text(image: Image.Image, *, aggressive: bool = False) -> str:
     if not OCR_ENABLED:
         return ""
     width, height = image.size
+    # Small YOLO crops (typical chip facings) need aggressive upscale + contrast.
+    if max(width, height) < 160:
+        aggressive = True
     # Exclude bottom 15% — yellow price tags read as wrong brands (Taj Mahal, etc.).
     pack_bottom = max(1, int(height * 0.85))
     pack_crop = image.crop((0, 0, width, pack_bottom))

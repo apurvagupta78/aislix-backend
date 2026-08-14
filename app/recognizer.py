@@ -617,6 +617,7 @@ def _strict_faiss_accept(
     score: float,
     scan_category: str | None,
     scan_context: dict | None,
+    ocr_text: str = "",
 ) -> bool:
     """Accept FAISS only at near-certain similarity — never guess from weak CLIP matches."""
     if not _accept_faiss_match(match, scan_category, scan_context=scan_context):
@@ -625,18 +626,34 @@ def _strict_faiss_accept(
     min_score = _strict_faiss_threshold(scan_context)
     if source == "learned":
         min_score = max(min_score, FAISS_STRICT_LEARNED_MIN)
-    return score >= min_score
+    if score < min_score:
+        return False
+
+    if requires_ocr_for_faiss(scan_context):
+        # Snack-facing audits: CLIP must not label packs when OCR is empty or disagrees.
+        if not _ocr_text_usable(ocr_text):
+            return False
+        if label_conflicts_with_pack_text(match, ocr_text):
+            return False
+        if not _ocr_supports_faiss_match(match, ocr_text, score, scan_context):
+            return False
+        if source == "learned" and not ocr_agrees_with_label(
+            match, ocr_text, scan_context=scan_context
+        ):
+            return False
+    return True
 
 
 def _pick_strict_faiss_match(
     candidates: list[tuple[dict, float]],
     scan_category: str | None,
     scan_context: dict | None,
+    ocr_text: str = "",
 ) -> tuple[dict, float] | None:
     for match, score in candidates:
         if score < _strict_faiss_threshold(scan_context):
             break
-        if _strict_faiss_accept(match, score, scan_category, scan_context):
+        if _strict_faiss_accept(match, score, scan_category, scan_context, ocr_text):
             return match, score
     return None
 
@@ -666,7 +683,7 @@ def classify_records_strict(
     scan_context: dict | None = None,
 ) -> tuple[list[dict], dict]:
     """
-    Production pipeline: CLIP+FAISS catalog lookup → OCR fallback → Unknown.
+    Production pipeline: OCR first on snack audits, then FAISS only with OCR support → Unknown.
     Never assigns labels via propagation or open-vocabulary GPT guessing.
     """
     if not records:
@@ -679,30 +696,6 @@ def classify_records_strict(
     ocr_texts: list[str] = [""] * len(records)
 
     for index in range(len(records)):
-        faiss_label: dict | None = None
-        faiss_score = 0.0
-        if is_ready():
-            topk = match_embeddings_batch_topk(
-                embeddings[index : index + 1],
-                scan_context=scan_context,
-            )
-            picked = _pick_strict_faiss_match(
-                topk[0] if topk else [],
-                scan_category,
-                scan_context,
-            )
-            if picked:
-                faiss_label, faiss_score = picked
-
-        if faiss_label:
-            merged = _merge_label(records[index], faiss_label)
-            merged["confidence"] = round(min(0.99, faiss_score), 4)
-            merged["recognition_source"] = faiss_label.get("recognition_source") or "faiss"
-            classified[index] = merged
-            source = merged.get("recognition_source") or "faiss"
-            stats["learned" if source == "learned" else "faiss"] += 1
-            continue
-
         pack_text = read_packaging_text(images[index])
         if len(pack_text.strip()) < 3:
             pack_text = read_packaging_text(images[index], aggressive=True)
@@ -730,6 +723,31 @@ def classify_records_strict(
             row["recognition_source"] = ocr_label.get("recognition_source") or "ocr"
             classified[index] = row
             stats["ocr"] += 1
+            continue
+
+        faiss_label: dict | None = None
+        faiss_score = 0.0
+        if is_ready():
+            topk = match_embeddings_batch_topk(
+                embeddings[index : index + 1],
+                scan_context=scan_context,
+            )
+            picked = _pick_strict_faiss_match(
+                topk[0] if topk else [],
+                scan_category,
+                scan_context,
+                pack_text,
+            )
+            if picked:
+                faiss_label, faiss_score = picked
+
+        if faiss_label:
+            merged = _merge_label(records[index], faiss_label)
+            merged["confidence"] = round(min(0.99, faiss_score), 4)
+            merged["recognition_source"] = faiss_label.get("recognition_source") or "faiss"
+            classified[index] = merged
+            source = merged.get("recognition_source") or "faiss"
+            stats["learned" if source == "learned" else "faiss"] += 1
             continue
 
         classified[index] = _merge_label(records[index], _unknown_label())
