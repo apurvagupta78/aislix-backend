@@ -63,3 +63,16 @@ def test_strict_learned_requires_higher_score():
     }
     assert _strict_faiss_accept(match, FAISS_STRICT_THRESHOLD, None, ctx) is False
     assert _strict_faiss_accept(match, FAISS_STRICT_LEARNED_MIN, None, ctx) is True
+
+
+def test_strict_wins_over_v3_when_both_enabled(monkeypatch):
+    monkeypatch.setenv("RECOGNITION_STRICT", "true")
+    monkeypatch.setenv("RECOGNITION_V3", "true")
+    monkeypatch.delenv("RECOGNITION_LEGACY_V2", raising=False)
+    import importlib
+
+    import app.recognizer as recognizer
+
+    importlib.reload(recognizer)
+    assert recognizer.recognition_strict_enabled() is True
+    assert recognizer.active_recognition_mode() == "strict"

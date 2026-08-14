@@ -51,13 +51,19 @@ def on_startup():
     port = os.getenv("PORT", "8080")
     from app.learned_catalog import load_learned
     from app.ocr_reader import active_ocr_engine
+    from app.recognizer import active_recognition_mode
     from app.retailklip import ensure_checkpoint, is_available
 
     learned = load_learned()
     ensure_checkpoint()
     rk = "yes" if is_available() else "no"
     ocr = active_ocr_engine() or "none"
-    print(f"Aislix API starting on 0.0.0.0:{port} (learned SKUs: {learned}, RetailKLIP: {rk}, OCR: {ocr}, OCR requested: {os.getenv('OCR_ENGINE', 'easyocr')})")
+    mode = active_recognition_mode()
+    print(
+        f"Aislix API starting on 0.0.0.0:{port} "
+        f"(recognition={mode}, learned SKUs: {learned}, RetailKLIP: {rk}, OCR: {ocr}, "
+        f"OCR requested: {os.getenv('OCR_ENGINE', 'easyocr')})"
+    )
 
 
 @app.get("/")
@@ -72,11 +78,15 @@ def home():
 @app.get("/health")
 def health():
     from app.learned_catalog import count_learned
+    from app.recognizer import active_recognition_mode
 
     return {
         "status": "ok",
         "faiss_ready": (DATA_DIR / "faiss.index").exists() and (DATA_DIR / "catalog.json").exists(),
         "learned_skus": count_learned(),
+        "recognition_mode": active_recognition_mode(),
+        "recognition_strict": os.getenv("RECOGNITION_STRICT", "true"),
+        "recognition_v3": os.getenv("RECOGNITION_V3", "false"),
         **_ocr_status_detail(),
         "retailklip": _retailklip_status(),
     }

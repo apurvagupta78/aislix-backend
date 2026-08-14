@@ -247,6 +247,11 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         )
         recognition_stats = _recognition_stats(classified)
         metrics.update(recognition_stats)
+        from app.recognizer import active_recognition_mode
+
+        metrics["recognition_mode"] = (
+            "planogram_guided" if scan_context.get("planogram_candidates") else active_recognition_mode()
+        )
         metrics["gpt_vision_calls"] = int(recognition_engine_stats.get("gpt_calls") or 0)
         if scan_context.get("planogram_mode"):
             metrics["planogram_guided_recognition"] = True

@@ -593,6 +593,19 @@ def recognition_strict_enabled() -> bool:
     return RECOGNITION_STRICT and not RECOGNITION_LEGACY_V2
 
 
+def active_recognition_mode() -> str:
+    """Which recognition pipeline runs for scans without a planogram."""
+    if RECOGNITION_LEGACY_V2:
+        return "legacy_v2"
+    if recognition_strict_enabled():
+        return "strict"
+    if RECOGNITION_V3:
+        return "v3"
+    if RECOGNITION_V2:
+        return "v2"
+    return "v1"
+
+
 def _strict_faiss_threshold(scan_context: dict | None) -> float:
     if requires_ocr_for_faiss(scan_context):
         return max(FAISS_STRICT_THRESHOLD, FAISS_EMPTY_OCR_MIN)
@@ -1400,7 +1413,7 @@ def classify_records(
         )
         return classified, stats
 
-    if recognition_strict_enabled() and not RECOGNITION_V3:
+    if recognition_strict_enabled():
         classified, stats = classify_records_strict(
             records,
             scan_id=scan_id,
