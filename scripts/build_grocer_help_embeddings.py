@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -20,6 +21,7 @@ import numpy as np
 from PIL import Image
 
 BASE_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(BASE_DIR))
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
