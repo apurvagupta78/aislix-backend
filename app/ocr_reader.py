@@ -293,7 +293,7 @@ def classify_with_ocr(
     return product
 
 
-def read_packaging_text(image: Image.Image) -> str:
+def read_packaging_text(image: Image.Image, *, aggressive: bool = False) -> str:
     """Always read visible text, even when brand matching fails."""
     if not OCR_ENABLED:
         return ""
@@ -301,14 +301,35 @@ def read_packaging_text(image: Image.Image) -> str:
     # Exclude bottom 15% — yellow price tags read as wrong brands (Taj Mahal, etc.).
     pack_bottom = max(1, int(height * 0.85))
     pack_crop = image.crop((0, 0, width, pack_bottom))
-    full_text = _clean_ocr_text(read_text_from_pil(pack_crop))
+
+    def _read_crop(crop: Image.Image) -> str:
+        if aggressive:
+            crop = _upscale_if_small(crop)
+            longest = max(crop.size)
+            if longest < 640:
+                scale = 640 / float(longest)
+                crop = crop.resize(
+                    (max(1, int(crop.size[0] * scale)), max(1, int(crop.size[1] * scale))),
+                    Image.Resampling.LANCZOS,
+                )
+            prepared = crop.convert("RGB").filter(ImageFilter.SHARPEN)
+            prepared = ImageEnhance.Contrast(prepared).enhance(1.75)
+            engine = _resolve_engine()
+            if engine is None:
+                return ""
+            arr = np.asarray(prepared)
+            raw = _read_with_paddle(arr) if engine == "paddle" else _read_with_easyocr(arr)
+            return _clean_ocr_text(raw)
+        return _clean_ocr_text(read_text_from_pil(crop))
+
+    full_text = _read_crop(pack_crop)
     if pack_bottom >= 40:
         band_h = max(1, int(pack_bottom * 0.45))
         top_band = pack_crop.crop((0, 0, width, band_h))
-        top_text = _clean_ocr_text(read_text_from_pil(top_band))
+        top_text = _read_crop(top_band)
         center_top = max(1, int(pack_bottom * 0.2))
         center_bottom = min(pack_bottom, int(pack_bottom * 0.65))
         center_band = pack_crop.crop((0, center_top, width, center_bottom))
-        center_text = _clean_ocr_text(read_text_from_pil(center_band))
+        center_text = _read_crop(center_band)
         return _merge_ocr_texts(top_text, center_text, full_text)
     return full_text

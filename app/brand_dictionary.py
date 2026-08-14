@@ -162,6 +162,8 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bfortune\b", "Fortune", ""),
     (r"\bindia\s+gate\b", "India", ""),
     (r"\bamul\b.*\bkulfi\b|\bkulfi\b.*\bamul\b", "Amul", "Rabdi Kulfi Ice Cream Stick"),
+    (r"\brajbhog\b|\brajbog\b", "Amul", "Rabdi Kulfi Ice Cream Stick"),
+    (r"\brajwadi\b", "Amul", "Rajwadi Kulfi Ice Cream"),
     (r"\bamul\b.*\bice cream sandwich\b|\bice cream sandwich\b.*\bamul\b", "Amul", ""),
     (r"\bice cream sandwich\b", "Amul", ""),
     (r"\bkulfi\b", "Amul", "Rabdi Kulfi Ice Cream Stick"),

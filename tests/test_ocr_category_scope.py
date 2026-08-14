@@ -101,3 +101,34 @@ def test_effective_entry_ids_kulfi_sku_is_frozen():
     )
     assert cat_id == "frozen_ice_cream"
     assert sub_id == "ice_cream"
+
+
+def test_aisle_category_matches_learned_full_label():
+    from app.scan_context import aisle_category_matches
+
+    assert aisle_category_matches(
+        "Frozen Foods & Ice Cream · Ice cream",
+        "Frozen Foods & Ice Cream",
+    )
+
+
+def test_brooklyn_learned_category_not_compliance_mismatch():
+    from app.subcategory_compliance import analyze_subcategory_compliance
+
+    ctx = {
+        "aislix_category": "Frozen Foods & Ice Cream",
+        "aislix_category_id": "frozen_ice_cream",
+        "sub_category": "ice_cream",
+        "sub_category_label": "Ice cream",
+        "catalog_categories": ["dairy", "general", "snacks"],
+        "brand_hints": {"amul", "baskin robbins", "brooklyn"},
+    }
+    classified = [{
+        "brand": "Brooklyn",
+        "product_name": "Ice Cream",
+        "category": "Frozen Foods & Ice Cream · Ice cream",
+        "confidence": 0.9,
+        "x1": 0, "y1": 0, "x2": 10, "y2": 10,
+    }]
+    out = analyze_subcategory_compliance(classified, ctx)
+    assert out["misplaced_facings"] == 0

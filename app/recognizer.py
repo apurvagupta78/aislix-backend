@@ -862,6 +862,8 @@ def classify_records_v2(
     pending: list[int] = []
     for index in range(len(records)):
         pack_text = read_packaging_text(images[index])
+        if len(pack_text.strip()) < 3:
+            pack_text = read_packaging_text(images[index], aggressive=True)
         ocr_texts[index] = pack_text
         ocr_label = classify_with_ocr(images[index], raw_text=pack_text, scan_context=scan_context)
         if ocr_label and _is_valid_label(ocr_label) and _accept_ocr_label(ocr_label, scan_context):
@@ -944,8 +946,16 @@ def classify_records_v2(
         if not row:
             continue
         pack_text = ocr_texts[index]
+        row["pack_text"] = pack_text
         if pack_text and len(pack_text.strip()) >= 3:
             classified[index] = reconcile_label_with_text(row, pack_text)
+            if _is_unknown_label(classified[index]):
+                retry = match_from_text(pack_text, scan_context=scan_context)
+                if retry and _is_valid_label(retry) and _accept_ocr_label(retry, scan_context):
+                    classified[index] = _merge_label(records[index], retry)
+                    classified[index]["pack_text"] = pack_text
+                    stats["none"] = max(0, stats["none"] - 1)
+                    stats["ocr"] += 1
 
     stats["gpt_calls"] = gpt_used
     stats["unknown_count"] = stats["none"]

@@ -230,17 +230,14 @@ def _evaluate_compliance(
         if _sibling_pc_subcategory(selected, detected):
             return True, selected, selected_label
         pack_text = (item.get("pack_text") or "").strip()
-        if _subcategory_product_guard(selected, haystack, pack_text) and detected in {
-            "skincare",
-            "cosmetics",
-            "frozen_snacks",
-            "others",
-        }:
+        if _subcategory_product_guard(selected, haystack, pack_text):
             return True, selected, selected_label
         return False, detected, _subcategory_label(scan_context, detected)
 
     if not detected:
         brand_subs = _brand_subcategories(aislix_key, brand)
+        if selected in brand_subs:
+            return True, selected, selected_label
         if len(brand_subs) == 1 and selected not in brand_subs:
             other = next(iter(brand_subs))
             return False, other, _subcategory_label(scan_context, other)

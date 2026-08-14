@@ -511,7 +511,14 @@ def aisle_category_matches(item_category: str | None, aislix_category: str | Non
             _normalize_key(resolved.get("name") or ""),
             _normalize_key(resolved.get("id") or ""),
         }
-        return item_key in names
+        if item_key in names:
+            return True
+    # Learned catalog rows often store full labels: "Frozen Foods & Ice Cream · Ice cream".
+    combined = str(item_category).replace("\u00b7", "·")
+    if "·" in combined:
+        parts = [p.strip() for p in combined.split("·") if p.strip()]
+        if parts and _normalize_key(parts[0]) == aisle_key:
+            return True
     return False
 
 
