@@ -46,6 +46,7 @@ RECOGNITION_V2 = os.getenv("RECOGNITION_V2", "true").lower() in {"1", "true", "y
 RECOGNITION_V3 = os.getenv("RECOGNITION_V3", "false").lower() in {"1", "true", "yes"}
 RECOGNITION_STRICT = os.getenv("RECOGNITION_STRICT", "true").lower() in {"1", "true", "yes"}
 RECOGNITION_LEGACY_V2 = os.getenv("RECOGNITION_LEGACY_V2", "false").lower() in {"1", "true", "yes"}
+STRICT_GPT_FALLBACK = os.getenv("STRICT_GPT_FALLBACK", "true").lower() in {"1", "true", "yes"}
 FAISS_STRICT_THRESHOLD = float(os.getenv("FAISS_STRICT_THRESHOLD", "0.97"))
 FAISS_STRICT_LEARNED_MIN = float(os.getenv("FAISS_STRICT_LEARNED_MIN", "0.99"))
 FAISS_TIE_MARGIN = float(os.getenv("FAISS_TIE_MARGIN", "0.05"))
@@ -593,6 +594,59 @@ def recognition_strict_enabled() -> bool:
     return RECOGNITION_STRICT and not RECOGNITION_LEGACY_V2
 
 
+def strict_gpt_fallback_enabled() -> bool:
+    """GPT vision fallback after OCR/FAISS → Unknown (requires OPENAI_API_KEY)."""
+    return STRICT_GPT_FALLBACK and bool(os.getenv("OPENAI_API_KEY"))
+
+
+def _apply_gpt_fallback_to_unknowns(
+    records: list[dict],
+    classified: list[dict | None],
+    images: list[Image.Image],
+    ocr_texts: list[str],
+    scan_context: dict | None,
+    stats: dict,
+    *,
+    label_builder=None,
+) -> None:
+    """Send remaining Unknown facings to GPT vision (context-gated)."""
+    if not strict_gpt_fallback_enabled():
+        return
+
+    pending = [index for index, row in enumerate(classified) if row and _is_unknown_label(row)]
+    if not pending:
+        return
+
+    gpt_cap = min(GPT_MAX_FALLBACKS, len(pending))
+    gpt_used = 0
+    pending.sort(key=lambda idx: (0 if ocr_texts[idx].strip() else 1, idx))
+    for index in pending:
+        if gpt_used >= gpt_cap:
+            break
+        ocr_hint = ocr_texts[index] if index < len(ocr_texts) else ""
+        if label_builder:
+            label = label_builder(images[index], ocr_hint, index)
+        else:
+            label = classify_with_gpt(images[index], ocr_hint=ocr_hint, scan_context=scan_context)
+        gpt_used += 1
+        if not label or _is_unknown_label(label):
+            continue
+        if not _accept_context_label(label, scan_context, ocr_hint):
+            continue
+        if sub_category_blocks_brand(
+            scan_context,
+            label.get("brand") or "",
+            ocr_hint,
+            product_name=label.get("product_name") or "",
+        ):
+            continue
+        classified[index] = _merge_label(records[index], label)
+        stats["gpt"] = stats.get("gpt", 0) + 1
+        stats["none"] = max(0, int(stats.get("none") or 0) - 1)
+
+    stats["gpt_calls"] = int(stats.get("gpt_calls") or 0) + gpt_used
+
+
 def active_recognition_mode() -> str:
     """Which recognition pipeline runs for scans without a planogram."""
     if RECOGNITION_LEGACY_V2:
@@ -683,8 +737,8 @@ def classify_records_strict(
     scan_context: dict | None = None,
 ) -> tuple[list[dict], dict]:
     """
-    Production pipeline: OCR first on snack audits, then FAISS only with OCR support → Unknown.
-    Never assigns labels via propagation or open-vocabulary GPT guessing.
+    Production pipeline: OCR → FAISS (OCR-gated on snacks) → GPT fallback → Unknown.
+    No neighbor propagation or blind FAISS guessing.
     """
     if not records:
         return [], {}
@@ -753,6 +807,14 @@ def classify_records_strict(
         classified[index] = _merge_label(records[index], _unknown_label())
         stats["none"] += 1
 
+    _apply_gpt_fallback_to_unknowns(
+        records,
+        classified,
+        images,
+        ocr_texts,
+        scan_context,
+        stats,
+    )
     _finalize_classification_strict(records, classified, ocr_texts, scan_context)
     stats["unknown_count"] = stats["none"]
     output = [

@@ -220,6 +220,21 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
                 )
             else:
                 scan_context["planogram_slot_skipped"] = True
+
+            from app.planogram_guided import recover_planogram_unknowns_with_gpt
+
+            classified, gpt_recovery_stats = recover_planogram_unknowns_with_gpt(
+                classified,
+                scan_context=scan_context,
+                scan_id=scan_id,
+            )
+            recognition_engine_stats["gpt_recovery"] = gpt_recovery_stats.get("gpt_recovery", 0)
+            recognition_engine_stats["gpt_calls"] = int(
+                recognition_engine_stats.get("gpt_calls") or 0
+            ) + int(gpt_recovery_stats.get("gpt_calls") or 0)
+            recognition_engine_stats["gpt"] = int(
+                recognition_engine_stats.get("gpt") or 0
+            ) + int(gpt_recovery_stats.get("gpt") or 0)
         compliance = analyze_subcategory_compliance(classified, scan_context)
         classified = compliance["classified"]
         subcategory_mismatches = compliance["subcategory_mismatches"]
@@ -268,6 +283,8 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             metrics["planogram_candidate_count"] = len(scan_context.get("planogram_candidates") or [])
             if scan_context.get("planogram_shelf_rows"):
                 metrics["planogram_shelf_rows"] = True
+            if recognition_engine_stats.get("gpt_recovery"):
+                metrics["planogram_gpt_recovery"] = recognition_engine_stats["gpt_recovery"]
         if gap_stats:
             metrics.update({k: v for k, v in gap_stats.items() if k != "gap_fill_enabled"})
             metrics["planogram_gap_fill"] = bool(gap_stats.get("gap_fill_recovered"))

@@ -184,6 +184,34 @@ def test_should_use_planogram_shelf_rows_for_chips_multi_row():
     assert should_use_planogram_shelf_rows(records, cands, ctx) is True
 
 
+def test_shelf_row_neighbor_hint_uses_labeled_neighbors():
+    from app.planogram_guided import _shelf_row_neighbor_hint
+
+    classified = [
+        {"x1": 0, "y1": 100, "x2": 50, "y2": 200, "brand": "Unknown", "product_name": "Unidentified SKU"},
+        {"x1": 60, "y1": 105, "x2": 110, "y2": 195, "brand": "Lays", "product_name": "Tomato Tango"},
+        {"x1": 120, "y1": 400, "x2": 170, "y2": 500, "brand": "Lays", "product_name": "India's Magic Masala"},
+    ]
+    hint = _shelf_row_neighbor_hint(classified, 0)
+    assert "Tomato Tango" in hint
+    assert "Magic Masala" not in hint
+
+
+def test_recover_planogram_unknowns_skips_without_openai(monkeypatch):
+    from app.planogram_guided import recover_planogram_unknowns_with_gpt
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    classified = [
+        {"brand": "Unknown", "product_name": "Unidentified SKU", "image_path": ""},
+    ]
+    out, stats = recover_planogram_unknowns_with_gpt(
+        classified,
+        scan_context={"planogram_candidates": [{"brand": "Lays", "product_name": "Tomato Tango"}]},
+    )
+    assert out[0]["brand"] == "Unknown"
+    assert stats["gpt_recovery"] == 0
+
+
 def test_assign_planogram_shelf_rows_without_shelf_position():
     """Frontend planogram JSON often omits shelf_position — row assignment must still work."""
     cands = _lays_candidates()

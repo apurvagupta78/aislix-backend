@@ -17,6 +17,23 @@ def _chips_context() -> dict:
     )
 
 
+def test_strict_gpt_fallback_respects_env(monkeypatch):
+    monkeypatch.setenv("STRICT_GPT_FALLBACK", "false")
+    import importlib
+
+    import app.recognizer as recognizer
+
+    importlib.reload(recognizer)
+    assert recognizer.strict_gpt_fallback_enabled() is False
+    monkeypatch.setenv("STRICT_GPT_FALLBACK", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    importlib.reload(recognizer)
+    assert recognizer.strict_gpt_fallback_enabled() is False
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    importlib.reload(recognizer)
+    assert recognizer.strict_gpt_fallback_enabled() is True
+
+
 def test_strict_mode_enabled_by_default(monkeypatch):
     monkeypatch.delenv("RECOGNITION_STRICT", raising=False)
     monkeypatch.delenv("RECOGNITION_LEGACY_V2", raising=False)

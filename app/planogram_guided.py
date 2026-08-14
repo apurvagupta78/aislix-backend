@@ -530,6 +530,7 @@ def classify_with_planogram_gpt(
     candidates: list[dict],
     ocr_hint: str = "",
     scan_context: dict | None = None,
+    row_hint: str = "",
 ) -> dict:
     from app.recognizer import GPT_MODEL, get_client
     from app.scan_context import gpt_context_prompt
@@ -544,6 +545,8 @@ def classify_with_planogram_gpt(
         '  "confidence": 0.0,\n  "visible_text": ""\n}\n'
     )
     hint = f"\nOCR hint: {ocr_hint}" if ocr_hint else ""
+    if row_hint:
+        hint += f"\nShelf context: {row_hint}"
     try:
         response = get_client().responses.create(
             model=GPT_MODEL,
@@ -874,6 +877,102 @@ def assign_planogram_shelf_rows(
             f"({len(row_clusters)} rows, scan={scan_id})"
         )
     return output if output else records
+
+
+def _facing_y_center(item: dict) -> float:
+    return (float(item["y1"]) + float(item["y2"])) / 2.0
+
+
+def _facing_height(item: dict) -> float:
+    return max(0.0, float(item["y2"]) - float(item["y1"]))
+
+
+def _shelf_row_neighbor_hint(classified: list[dict], index: int) -> str:
+    """Hint GPT with products already labeled on the same shelf row."""
+    from app.recognizer import _is_unknown_label
+
+    target = classified[index]
+    ty = _facing_y_center(target)
+    threshold = max(_facing_height(target) * 0.42, 18.0)
+    labels: list[str] = []
+    for i, other in enumerate(classified):
+        if i == index or _is_unknown_label(other):
+            continue
+        if abs(_facing_y_center(other) - ty) > threshold:
+            continue
+        brand = (other.get("brand") or "").strip()
+        product = (other.get("product_name") or "").strip()
+        if brand and product:
+            labels.append(f"{brand} {product}")
+    if not labels:
+        return ""
+    unique = list(dict.fromkeys(labels))
+    return f"Same shelf row already identified as: {', '.join(unique[:3])}"
+
+
+def recover_planogram_unknowns_with_gpt(
+    classified: list[dict],
+    scan_context: dict | None = None,
+    scan_id: str | None = None,
+) -> tuple[list[dict], dict]:
+    """
+    Second GPT pass on facings still Unknown after OCR/FAISS/shelf-row assignment.
+    Uses closed planogram vocabulary + same-row neighbor hints.
+    """
+    from app.recognizer import GPT_MAX_FALLBACKS, _is_unknown_label, strict_gpt_fallback_enabled
+
+    stats = {"gpt": 0, "gpt_calls": 0, "gpt_recovery": 0}
+    scan_context = scan_context or {}
+    candidates: list[dict] = scan_context.get("planogram_candidates") or []
+    if not candidates or not strict_gpt_fallback_enabled():
+        return classified, stats
+
+    pending = [index for index, row in enumerate(classified) if _is_unknown_label(row)]
+    if not pending:
+        return classified, stats
+
+    gpt_cap = min(GPT_MAX_FALLBACKS, len(pending))
+    gpt_used = 0
+    pending.sort(
+        key=lambda idx: (
+            0 if _shelf_row_neighbor_hint(classified, idx) else 1,
+            idx,
+        )
+    )
+
+    for index in pending:
+        if gpt_used >= gpt_cap:
+            break
+        row = classified[index]
+        path = row.get("image_path")
+        if not path:
+            continue
+        img = Image.open(path).convert("RGB")
+        ocr_hint = read_packaging_text(img)
+        if len(ocr_hint.strip()) < 3:
+            ocr_hint = read_packaging_text(img, aggressive=True)
+        row_hint = _shelf_row_neighbor_hint(classified, index)
+        label = classify_with_planogram_gpt(
+            img,
+            candidates,
+            ocr_hint=ocr_hint,
+            scan_context=scan_context,
+            row_hint=row_hint,
+        )
+        gpt_used += 1
+        if _is_unknown_label(label):
+            continue
+        classified[index] = _merge_record(row, label)
+        stats["gpt"] += 1
+        stats["gpt_recovery"] += 1
+
+    stats["gpt_calls"] = gpt_used
+    if stats["gpt_recovery"]:
+        print(
+            f"Planogram GPT recovery: {stats['gpt_recovery']} facing(s) "
+            f"(scan={scan_id})"
+        )
+    return classified, stats
 
 
 def should_use_planogram_slots(
