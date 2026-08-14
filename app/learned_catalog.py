@@ -101,6 +101,10 @@ def import_learned_catalog(entries: list[dict]) -> int:
             if not sku or not embedding:
                 continue
             if any(entry.get("sku") == sku for entry in _learned_catalog):
+                for entry in _learned_catalog:
+                    if entry.get("sku") == sku:
+                        enrich_learned_entry(entry)
+                        break
                 continue
             vector = np.asarray(embedding, dtype=np.float32).reshape(-1)
             norm = np.linalg.norm(vector)

@@ -104,6 +104,17 @@ def test_catalog_entry_accepts_twinings_on_tea_scan():
     assert catalog_entry_in_scope(entry, _tea_context())
 
 
+def test_mislabeled_lovable_entry_rejected_on_tea_scan():
+    from app.category_scope import catalog_entry_in_scope
+
+    entry = {
+        "brand": "The",
+        "product_name": "Whole Truth Cranberry Protein Bar",
+        "sku": "the_whole_truth_cranberry_protein_bar",
+        "category": "Beverages · Tea",
+        "category_id": "beverages",
+        "sub_category_id": "tea",
+    }
 def test_filter_scoped_candidates_returns_none_when_only_cross_category():
     catalog = [
         {"brand": "Nivea", "category_id": "personal_care", "sub_category_id": "skincare"},

@@ -39,7 +39,7 @@ def _label(category_id: str, sub_category_id: str) -> str:
 # (category_id, sub_category_id) — first match wins; order matters (specific before broad).
 _RULES: list[tuple[tuple[str, ...], str, str]] = [
     # Beverages
-    (("tea", "chai", "tajmahal", "taj_mahal", "lipton", "tetley", "brookebond", "brooke", "redlabel", "taaza", "wagh", "tata_tea", "tata_premium", "tata_gold", "tata_agni", "greenfields_tea", "organicindia_tea", "teatime", "teavalley", "marveltea", "twinings", "tez"), "beverages", "tea"),
+    (("tea", "chai", "tajmahal", "taj_mahal", "lipton", "tetley", "brookebond", "brooke", "redlabel", "taaza", "wagh", "tata_tea", "tata_premium", "tata_premium", "tata gold", "tata_gold", "tata_agni", "greenfields_tea", "organicindia", "organic india", "organicindia_tea", "tulsi", "vahdam", "teatime", "teavalley", "marveltea", "twinings", "tez"), "beverages", "tea"),
     (("coffee", "nescafe", "bru", "davidoff", "lecafe", "wagh bakri"), "beverages", "coffee"),
     (("pepsi", "coca", "sprite", "fanta", "thumps", "mirinda", "maaza", "frooti", "limca", "kinley", "soda", "softdrink", "redbull", "sting", "monster", "energy", "schweppes", "7up", "appy", "paperboat", "juice", "tropicana", "real", "minute", "coconut water", "coconutwater"), "beverages", "others"),
     (("water", "kinley"), "beverages", "water"),
@@ -67,7 +67,7 @@ _RULES: list[tuple[tuple[str, ...], str, str]] = [
     (("spice", "masala", "mdh", "everest", "catch", "suhana", "mtr", "tandoori", "pickle", "ketchup", "maggi masala"), "grocery_staples", "spices"),
     # Packaged food & snacks
     (("biscuit", "cookie", "parle", "britannia", "oreo", "marie", "goodday", "bourbon", "digestive", "unibic", "mcvities"), "packaged_food_snacks", "biscuits"),
-    (("chip", "lays", "kurkure", "bingo", "namkeen", "haldiram", "bikaji", "too yumm", "tooyumm", "cornitos"), "packaged_food_snacks", "chips"),
+    (("chip", "lays", "kurkure", "bingo", "namkeen", "haldiram", "bikaji", "too yumm", "tooyumm", "cornitos", "protein", "protein bar", "protein_bar", "whole truth", "whole_truth"), "packaged_food_snacks", "chips"),
     (("noodle", "maggi", "yippee", "top ramen", "knorr", "nissin", "ching", "mtr ready"), "packaged_food_snacks", "noodles"),
     (("chocolate", "cadbury", "nestle", "kitkat", "munch", "perk", "dairy milk", "bournville", "ferrero", "toblerone", "amul_choco"), "packaged_food_snacks", "chocolates"),
     (("cereal", "muesli", "oats", "cornflake", "baggrys", "quaker", "kellog"), "packaged_food_snacks", "cereals"),

@@ -37,17 +37,21 @@ def _parse_category_label(category: str) -> tuple[str | None, str | None]:
 
 
 def _infer_from_brand(entry: dict[str, Any]) -> tuple[str, str]:
-    """Map brand / product tokens to Aislix category ids via Grocer-Help rules."""
-    for key in ("brand", "product_name", "sku"):
-        raw = (entry.get(key) or "").strip()
-        if not raw:
-            continue
-        mapped = map_class_to_aislix_category(raw.replace(" ", "_"))
-        if mapped.get("category_id") and mapped["category_id"] != "others":
-            return mapped["category_id"], mapped.get("sub_category_id") or "others"
-    mapped = map_class_to_aislix_category(
-        ((entry.get("brand") or entry.get("sku") or "unknown").replace(" ", "_"))
-    )
+    """Map brand / product / SKU text to Aislix category ids."""
+    parts = [
+        entry.get("brand") or "",
+        entry.get("product_name") or "",
+        entry.get("variant") or "",
+        (entry.get("sku") or "").replace("_", " "),
+    ]
+    blob = " ".join(p.strip() for p in parts if p and str(p).strip())
+    if not blob:
+        return "others", "others"
+    mapped = map_class_to_aislix_category(blob.replace(" ", "_"))
+    if mapped.get("category_id") and mapped["category_id"] != "others":
+        return mapped["category_id"], mapped.get("sub_category_id") or "others"
+    # Retry with spaced blob (multi-word brand names).
+    mapped = map_class_to_aislix_category(blob)
     return mapped["category_id"], mapped.get("sub_category_id") or "others"
 
 
@@ -55,8 +59,6 @@ def effective_entry_ids(entry: dict[str, Any]) -> tuple[str | None, str | None]:
     """Resolved category_id + sub_category_id for a learned catalog row."""
     cat_id = entry.get("category_id")
     sub_id = entry.get("sub_category_id")
-    if cat_id and sub_id and sub_id != "others":
-        return str(cat_id), str(sub_id)
 
     parsed_cat, parsed_sub = _parse_category_label(str(entry.get("category") or ""))
     if parsed_cat and parsed_cat != "others":
@@ -65,10 +67,15 @@ def effective_entry_ids(entry: dict[str, Any]) -> tuple[str | None, str | None]:
             sub_id = sub_id or parsed_sub
 
     inferred_cat, inferred_sub = _infer_from_brand(entry)
-    if not cat_id or cat_id == "others":
+    if inferred_cat and inferred_cat != "others":
+        # Prefer product-text inference over misleading stored labels (e.g. Lovable mis-tags).
+        if not cat_id or cat_id == "others" or cat_id != inferred_cat:
+            cat_id = inferred_cat
+            sub_id = inferred_sub if inferred_sub != "others" else (sub_id or parsed_sub or "others")
+    elif not cat_id or cat_id == "others":
         cat_id = inferred_cat
-    if not sub_id or sub_id == "others":
-        sub_id = inferred_sub if inferred_sub != "others" else (sub_id or parsed_sub or "others")
+        if not sub_id or sub_id == "others":
+            sub_id = inferred_sub if inferred_sub != "others" else (sub_id or parsed_sub or "others")
 
     return cat_id, sub_id
 
@@ -80,6 +87,10 @@ def enrich_learned_entry(entry: dict[str, Any]) -> dict[str, Any]:
         entry["category_id"] = cat_id
     if sub_id:
         entry["sub_category_id"] = sub_id
+    if cat_id and sub_id:
+        from app.sku_category_map import _label
+
+        entry["category"] = _label(cat_id, sub_id)
     return entry
 
 
