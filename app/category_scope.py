@@ -139,18 +139,43 @@ def filter_scoped_candidates(
 
 
 def catalog_entry_in_scope(entry: dict[str, Any], scan_context: dict[str, Any] | None) -> bool:
-    """Filter base FAISS catalog hits using aisle / sub-category gates."""
+    """Filter base FAISS catalog hits using the same aisle scope as learned search."""
     if not scan_context:
         return True
-    from app.brand_dictionary import category_allows_brand
+    if not scan_context.get("aislix_category_id"):
+        from app.brand_dictionary import category_allows_brand
 
-    return category_allows_brand(
-        scan_context.get("aislix_category"),
-        entry.get("brand") or "",
-        entry.get("sku") or "",
-        entry_category=entry.get("category") or "",
-        scan_context=scan_context,
-    )
+        return category_allows_brand(
+            scan_context.get("aislix_category"),
+            entry.get("brand") or "",
+            entry.get("sku") or "",
+            entry_category=entry.get("category") or "",
+            scan_context=scan_context,
+        )
+
+    pseudo = {
+        "brand": entry.get("brand") or "",
+        "product_name": entry.get("product_name") or "",
+        "variant": entry.get("variant") or "",
+        "sku": entry.get("sku") or "",
+        "category": entry.get("category") or "",
+    }
+    enrich_learned_entry(pseudo)
+    if entry_matches_scope(pseudo, scan_context, strict_sub=True):
+        return True
+    if scan_context.get("sub_category") and scan_context.get("sub_category") != "others":
+        return entry_matches_scope(pseudo, scan_context, strict_sub=False)
+    return False
+
+
+def filter_candidates_by_scope(
+    candidates: list[tuple[dict, float]],
+    scan_context: dict[str, Any] | None,
+) -> list[tuple[dict, float]]:
+    """Drop FAISS/learned candidates outside the scan category scope."""
+    if not scan_context or not scan_context.get("aislix_category_id"):
+        return candidates
+    return [(match, score) for match, score in candidates if catalog_entry_in_scope(match, scan_context)]
 
 
 def ensure_categories_loaded() -> None:

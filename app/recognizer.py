@@ -544,6 +544,9 @@ def _resolve_faiss_v3(
     threshold: float | None = None,
 ) -> dict | None:
     """Accept FAISS top-1 or OCR-disambiguate when margin is tight or OCR conflicts."""
+    from app.category_scope import filter_candidates_by_scope
+
+    candidates = filter_candidates_by_scope(candidates, scan_context)
     if not candidates:
         return None
     faiss_cutoff = threshold if threshold is not None else _faiss_threshold(scan_context)
