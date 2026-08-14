@@ -28,10 +28,13 @@ def _entry_from_catalog(catalog: list[dict], idx: int, score: float) -> dict:
 def match_embeddings_batch_topk(
     embeddings: np.ndarray,
     k: int | None = None,
+    scan_context: dict | None = None,
 ) -> list[list[tuple[dict, float]]]:
     """Return top-K FAISS catalog matches per embedding (scores descending)."""
     if len(embeddings) == 0:
         return []
+    from app.category_scope import catalog_entry_in_scope
+
     index, catalog = _load()
     vecs = np.asarray(embeddings, dtype=np.float32)
     import faiss
@@ -45,8 +48,13 @@ def match_embeddings_batch_topk(
         for idx, score in zip(ids[row], scores[row]):
             if idx < 0:
                 continue
-            row_candidates.append((_entry_from_catalog(catalog, int(idx), float(score)), float(score)))
-        learned_match, learned_score = _match_with_learned(vecs[row], threshold=0.78)
+            entry = _entry_from_catalog(catalog, int(idx), float(score))
+            if scan_context and not catalog_entry_in_scope(entry, scan_context):
+                continue
+            row_candidates.append((entry, float(score)))
+        learned_match, learned_score = _match_with_learned(
+            vecs[row], threshold=0.78, scan_context=scan_context
+        )
         if learned_match and learned_score > 0:
             row_candidates.append((learned_match, learned_score))
             row_candidates.sort(key=lambda item: item[1], reverse=True)
@@ -80,15 +88,17 @@ def is_ready() -> bool:
 def _match_with_learned(
     embedding: np.ndarray,
     threshold: float,
+    scan_context: dict | None = None,
 ) -> tuple[dict | None, float]:
     from app.learned_catalog import search_learned
 
-    return search_learned(embedding, threshold=threshold)
+    return search_learned(embedding, threshold=threshold, scan_context=scan_context)
 
 
 def match_embedding(
     embedding: np.ndarray,
     threshold: float = DEFAULT_THRESHOLD,
+    scan_context: dict | None = None,
 ) -> tuple[dict | None, float]:
     index, catalog = _load()
     vec = np.asarray(embedding, dtype=np.float32).reshape(1, -1)
@@ -115,6 +125,7 @@ def match_embedding(
     learned_match, learned_score = _match_with_learned(
         np.asarray(embedding, dtype=np.float32).reshape(-1),
         threshold=threshold,
+        scan_context=scan_context,
     )
     if learned_match:
         return learned_match, learned_score
@@ -127,6 +138,7 @@ def match_embedding(
 def match_embeddings_batch(
     embeddings: np.ndarray,
     threshold: float = DEFAULT_THRESHOLD,
+    scan_context: dict | None = None,
 ) -> list[tuple[dict | None, float]]:
     if len(embeddings) == 0:
         return []
@@ -155,7 +167,9 @@ def match_embeddings_batch(
             results.append((best_entry, best_score))
             continue
 
-        learned_match, learned_score = _match_with_learned(vecs[row], threshold=threshold)
+        learned_match, learned_score = _match_with_learned(
+            vecs[row], threshold=threshold, scan_context=scan_context
+        )
         if learned_match:
             results.append((learned_match, learned_score))
         elif ids[row][0] < 0:

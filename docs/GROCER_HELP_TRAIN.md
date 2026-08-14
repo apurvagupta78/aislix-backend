@@ -137,6 +137,11 @@ os.environ['SUPABASE_SERVICE_ROLE_KEY'] = 'your-key'
 
 Railway loads learned SKUs on startup. Lovable also sends `learned_catalog` on each scan.
 
+### Phase 2C — Category-scoped learned search
+
+Learned FAISS search filters by scan category + sub-category (all aisles), preventing
+cross-category false matches (e.g. protein bar on a tea shelf).
+
 ### What improves (all aisles)
 
 | Category | Example SKUs in Grocer-Help |

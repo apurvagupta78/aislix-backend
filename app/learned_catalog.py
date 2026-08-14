@@ -77,6 +77,11 @@ def load_learned() -> int:
                 data = json.load(f)
             _learned_catalog = data if isinstance(data, list) else data.get("products", [])
 
+        from app.category_scope import enrich_learned_entry
+
+        for entry in _learned_catalog:
+            enrich_learned_entry(entry)
+
         _rebuild_index_unlocked()
         _loaded = True
         print(f"Loaded {len(_learned_catalog)} learned SKUs")
@@ -101,19 +106,23 @@ def import_learned_catalog(entries: list[dict]) -> int:
             norm = np.linalg.norm(vector)
             if norm > 0:
                 vector = vector / norm
-            _learned_catalog.append(
-                {
-                    "sku": sku,
-                    "brand": raw.get("brand") or "",
-                    "product_name": raw.get("product_name") or "",
-                    "variant": raw.get("variant") or "",
-                    "category": raw.get("category") or "General",
-                    "embedding": vector.astype(float).tolist(),
-                    "hit_count": int(raw.get("hit_count") or 1),
-                    "source_scan_id": raw.get("source_scan_id"),
-                    "recognition_source": "learned",
-                }
-            )
+            from app.category_scope import enrich_learned_entry
+
+            row = {
+                "sku": sku,
+                "brand": raw.get("brand") or "",
+                "product_name": raw.get("product_name") or "",
+                "variant": raw.get("variant") or "",
+                "category": raw.get("category") or "General",
+                "category_id": raw.get("category_id"),
+                "sub_category_id": raw.get("sub_category_id"),
+                "embedding": vector.astype(float).tolist(),
+                "hit_count": int(raw.get("hit_count") or 1),
+                "source_scan_id": raw.get("source_scan_id"),
+                "recognition_source": "learned",
+            }
+            enrich_learned_entry(row)
+            _learned_catalog.append(row)
             added += 1
         if added:
             _rebuild_index_unlocked()
@@ -151,21 +160,44 @@ def _rebuild_index_unlocked() -> None:
 def search_learned(
     embedding: np.ndarray,
     threshold: float = 0.85,
+    scan_context: dict | None = None,
 ) -> tuple[dict | None, float]:
+    """Category-scoped learned SKU search (Phase 2C)."""
     if _learned_index is None or not _learned_catalog:
         return None, 0.0
     import faiss
 
+    from app.category_scope import LEARNED_SEARCH_K, filter_scoped_candidates
+
     vec = np.asarray(embedding, dtype=np.float32).reshape(1, -1)
     faiss.normalize_L2(vec)
-    scores, ids = _learned_index.search(vec, 1)
-    idx = int(ids[0][0])
-    if idx < 0:
-        return None, 0.0
-    score = float(scores[0][0])
-    if score < threshold:
-        return None, score
-    entry = dict(_learned_catalog[idx])
+    k = min(LEARNED_SEARCH_K, len(_learned_catalog))
+    scores, ids = _learned_index.search(vec, k)
+
+    # Pass 1: match category + sub-category.
+    entry, score = filter_scoped_candidates(
+        _learned_catalog,
+        ids[0].tolist(),
+        scores[0].tolist(),
+        scan_context,
+        strict_sub=True,
+        threshold=threshold,
+    )
+    # Pass 2: same category only (relax sub-category for sparse Grocer-Help tags).
+    if entry is None and scan_context and scan_context.get("sub_category"):
+        entry, score = filter_scoped_candidates(
+            _learned_catalog,
+            ids[0].tolist(),
+            scores[0].tolist(),
+            scan_context,
+            strict_sub=False,
+            threshold=threshold,
+        )
+
+    if entry is None:
+        return None, float(scores[0][0]) if len(scores[0]) else 0.0
+
+    entry = dict(entry)
     entry["confidence"] = round(min(0.99, score), 4)
     entry["recognition_source"] = "learned"
     return entry, score
@@ -182,6 +214,8 @@ def learn_sku(
     brand = (label.get("brand") or "").strip()
     product = (label.get("product_name") or "").strip()
     variant = (label.get("variant") or "").strip()
+    from app.category_scope import enrich_learned_entry
+
     category = label.get("category") or infer_category(metadata_to_sku(brand, product, variant))
     sku = metadata_to_sku(brand, product, variant)
     vector = np.asarray(embedding, dtype=np.float32).reshape(-1)
@@ -202,11 +236,14 @@ def learn_sku(
             "product_name": product,
             "variant": variant,
             "category": category,
+            "category_id": label.get("category_id"),
+            "sub_category_id": label.get("sub_category_id"),
             "embedding": vector.astype(float).tolist(),
             "hit_count": 1,
             "source_scan_id": scan_id,
             "recognition_source": "learned",
         }
+        enrich_learned_entry(new_entry)
         _learned_catalog.append(new_entry)
 
         import faiss

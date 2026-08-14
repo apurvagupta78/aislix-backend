@@ -641,7 +641,7 @@ def classify_records_v3(
     def _apply_faiss_v3(indices: list[int], threshold: float | None = None) -> list[int]:
         if not indices or not is_ready():
             return indices
-        topk = match_embeddings_batch_topk(embeddings[indices])
+        topk = match_embeddings_batch_topk(embeddings[indices], scan_context=scan_context)
         still: list[int] = []
         for local_idx, candidates in enumerate(topk):
             global_idx = indices[local_idx]
@@ -805,7 +805,9 @@ def classify_records_v2(
         nonlocal learned_new
         if not indices or not is_ready():
             return indices
-        matches = match_embeddings_batch(embeddings[indices], threshold=threshold)
+        matches = match_embeddings_batch(
+            embeddings[indices], threshold=threshold, scan_context=scan_context
+        )
         still: list[int] = []
         for local_idx, (match, score) in enumerate(matches):
             global_idx = indices[local_idx]

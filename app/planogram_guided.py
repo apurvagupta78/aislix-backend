@@ -389,7 +389,7 @@ def classify_records_planogram_guided(
     ocr_texts: list[str] = [read_packaging_text(img) for img in images]
 
     if v3 and is_ready():
-        topk = match_embeddings_batch_topk(embeddings)
+        topk = match_embeddings_batch_topk(embeddings, scan_context=scan_context)
         for index, row_candidates in enumerate(topk):
             for match, score in row_candidates:
                 if score < 0.78:
@@ -429,7 +429,7 @@ def classify_records_planogram_guided(
 
     if pending and is_ready() and not v3:
         pending_embeddings = embeddings[pending]
-        matches = match_embeddings_batch(pending_embeddings, threshold=0.78)
+        matches = match_embeddings_batch(pending_embeddings, threshold=0.78, scan_context=scan_context)
         still: list[int] = []
         for local_i, index in enumerate(pending):
             match, score = matches[local_i]
@@ -444,7 +444,7 @@ def classify_records_planogram_guided(
         pending = still
     elif pending and is_ready() and v3:
         pending_embeddings = embeddings[pending]
-        topk = match_embeddings_batch_topk(pending_embeddings)
+        topk = match_embeddings_batch_topk(pending_embeddings, scan_context=scan_context)
         still: list[int] = []
         for local_i, index in enumerate(pending):
             snapped_label = None
