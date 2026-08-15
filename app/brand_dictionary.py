@@ -157,6 +157,10 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bcolgate\b", "Colgate", ""),
     (r"\bcloseup\b", "Closeup", ""),
     (r"\bnivea\b", "Nivea", ""),
+    (r"\baxe\b", "Axe", "Deodorant Body Spray"),
+    (r"\bfogg\b", "Fogg", "Deodorant Body Spray"),
+    (r"\bwild\s+stone\b", "Wild Stone", "Deodorant Body Spray"),
+    (r"\bpark\s+avenue\b", "Park Avenue", "Deodorant Body Spray"),
     (r"\blux\b", "Lux", ""),
     (r"\blifebuoy\b", "Lifebuoy", ""),
     (r"\bmamaearth\b", "Mamaearth", ""),
@@ -280,6 +284,10 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
         (r"\bkulfi\b|\brajbhog\b|\brajbog\b|\brajwadi\b", "amul"),
         (r"\bsandwich\b", "amul"),
         (r"\btricone\b", "amul"),
+        (r"\baxe\b", "axe"),
+        (r"\bfogg\b", "fogg"),
+        (r"\bwild\s+stone\b", "wild stone"),
+        (r"\bpark\s+avenue\b", "park avenue"),
     ]
     for pattern, hinted_brand in ocr_brand_hints:
         if re.search(pattern, text_l, flags=re.IGNORECASE):
@@ -329,11 +337,28 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
         marker in text_l for marker in ("kurkure", "bingo", "crax", "pringles", "tedhe medhe", "mad angles")
     ):
         return True
+    if re.search(r"\blay(?:'|s)?s\b", text_l) and label_brand == "bingo":
+        return True
+    if re.search(r"\bclassic\b", text_l) and re.search(r"\bsalt", text_l) and label_brand == "bingo":
+        return True
+    if "vatika" in text_l and ("hajmola" in product_l or "digestive" in product_l):
+        return True
+    if ("hajmola" in product_l or "digestive" in product_l or "tablet" in product_l) and any(
+        token in text_l for token in ("vatika", "shampoo", "conditioner", "hair", "naturals")
+    ):
+        return True
+    if "dabur" in text_l and ("hajmola" in product_l or "digestive" in product_l):
+        if not any(token in text_l for token in ("hajmola", "imli", "digestive", "tablet")):
+            return True
+    if re.search(r"\baxe\b", text_l) and ("kesh" in product_l or label_brand == "patanjali"):
+        return True
+    if re.search(r"\bdeodorant\b|\bbody\s+spray\b", text_l) and "shampoo" in product_l:
+        return True
+    if re.search(r"\bvatika\b", text_l) and label_brand == "sunsilk":
+        return True
     if re.search(r"yellow\s+label", text_l) and "darjeeling" in product_l:
         return True
     if re.search(r"\bdarjeeling\b", text_l) and "yellow label" in product_l:
-        return True
-    if re.search(r"\bvatika\b", text_l) and label_brand == "sunsilk":
         return True
     if re.search(r"\bhyaluron\b", text_l) and "total repair" in product_l:
         return True
@@ -619,6 +644,7 @@ def _label_from_brand_product(
     *,
     confidence: float = 0.9,
     scan_context: dict | None = None,
+    allow_brand_fallback: bool = True,
 ) -> dict:
     entry = _catalog_entry(brand, product_name)
     if entry:
@@ -629,6 +655,17 @@ def _label_from_brand_product(
             "variant": entry.get("variant") or "",
             "sku": entry.get("sku") or "",
             "category": entry.get("category") or infer_category(entry.get("sku") or ""),
+            "confidence": confidence,
+            "recognition_source": "ocr",
+            "visible_text": text[:240],
+        }
+    if not allow_brand_fallback:
+        return {
+            "brand": display_brand_name(brand, product_name),
+            "product_name": product_name,
+            "variant": "",
+            "sku": "",
+            "category": "General",
             "confidence": confidence,
             "recognition_source": "ocr",
             "visible_text": text[:240],
@@ -690,6 +727,8 @@ def _match_partial_fragments(normalized: str, scan_context: dict | None = None) 
         if brand.lower() == "lays":
             if not _lays_flavor_fragment_allowed(text_l, sub):
                 continue
+        if brand.lower() == "bingo" and re.search(r"\blay(?:'|s)?s\b", text_l):
+            continue
         return _label_from_brand_product(
             brand, product_name, normalized, confidence=0.88, scan_context=scan_context
         )
@@ -721,10 +760,11 @@ def personal_care_food_mismatch(label: dict, scan_context: dict | None) -> bool:
     """Block food/digestive SKUs on personal-care shelf scans."""
     if not scan_context:
         return False
-    from app.scan_context import _normalize_key
+    from app.scan_context import NARROW_PC_SUBCATEGORIES, _normalize_key
 
     cat = _normalize_key(scan_context.get("aislix_category") or "")
-    if cat != "personal care":
+    sub = (scan_context.get("sub_category") or "").strip().lower()
+    if cat != "personal care" and sub not in NARROW_PC_SUBCATEGORIES:
         return False
     blob = " ".join(
         [
@@ -762,6 +802,12 @@ def match_from_text(text: str, scan_context: dict | None = None) -> dict | None:
     for pattern, brand, product_name in PRODUCT_HINTS:
         if not re.search(pattern, normalized, flags=re.IGNORECASE):
             continue
+        if brand.lower() == "bingo" and re.search(r"\blay(?:'|s)?s\b", normalized):
+            continue
+        if brand.lower() == "lays" and re.search(
+            r"\bbingo\b|\bmad\s+angles\b|\btedhe\s+medhe\b", normalized
+        ):
+            continue
         if product_name:
             entry = _catalog_entry(brand, product_name)
             if entry:
@@ -776,21 +822,14 @@ def match_from_text(text: str, scan_context: dict | None = None) -> dict | None:
                     "recognition_source": "ocr",
                     "visible_text": text[:240],
                 }
-            product = match_product_for_brand(brand, text, scan_context=scan_context)
-            if product:
-                product["visible_text"] = text[:240]
-                product["confidence"] = max(float(product.get("confidence") or 0), 0.9)
-                return product
-            return {
-                "brand": display_brand_name(brand, product_name),
-                "product_name": product_name,
-                "variant": "",
-                "sku": "",
-                "category": "General",
-                "confidence": 0.9,
-                "recognition_source": "ocr",
-                "visible_text": text[:240],
-            }
+            return _label_from_brand_product(
+                brand,
+                product_name,
+                text,
+                confidence=0.9,
+                scan_context=scan_context,
+                allow_brand_fallback=False,
+            )
         product = match_product_for_brand(brand, text, scan_context=scan_context)
         if product:
             product["visible_text"] = text[:240]
@@ -893,6 +932,58 @@ def _hair_product_type_adjustment(normalized: str, entry: dict) -> float:
         if is_conditioner:
             return -0.18
     return 0.0
+
+
+def _ocr_specific_sku_adjustment(
+    normalized: str,
+    entry: dict,
+    scan_context: dict | None = None,
+) -> float:
+    """Align catalog SKU pick with distinctive OCR tokens; penalize cross-aisle SKUs."""
+    sku_l = (entry.get("sku") or "").lower()
+    product_l = (entry.get("product_name") or "").lower()
+    blob = f"{sku_l} {product_l}"
+    score = 0.0
+
+    if scan_context:
+        from app.scan_context import NARROW_PC_SUBCATEGORIES, _normalize_key
+
+        cat = _normalize_key(scan_context.get("aislix_category") or "")
+        sub = (scan_context.get("sub_category") or "").strip().lower()
+        if cat == "personal care" or sub in NARROW_PC_SUBCATEGORIES:
+            if any(token in blob for token in PERSONAL_CARE_FOOD_TOKENS):
+                score -= 0.55
+            if sub == "shampoo" and any(token in blob for token in ("shampoo", "conditioner", "vatika", "hair")):
+                score += 0.2
+            if sub == "deodorant" and "deodorant" in blob:
+                score += 0.25
+
+    token_pairs = (
+        ("vatika", "vatika"),
+        ("hajmola", "hajmola"),
+        ("imli", "hajmola"),
+        ("axe", "axe"),
+        ("kesh", "kesh"),
+        ("bingo", "bingo"),
+        ("angles", "angles"),
+        ("lays", "lays"),
+        ("magic", "magic"),
+        ("tango", "tango"),
+    )
+    for ocr_token, sku_token in token_pairs:
+        if ocr_token in normalized:
+            if sku_token in blob:
+                score += 0.35
+            elif sku_token in {"hajmola", "bingo", "kesh"}:
+                score -= 0.4
+
+    if "lays" in normalized and "bingo" in blob:
+        score -= 0.45
+    if "vatika" in normalized and "hajmola" in blob:
+        score -= 0.5
+    if re.search(r"\baxe\b", normalized) and "shampoo" in blob:
+        score -= 0.35
+    return score
 
 
 def _subcategory_product_adjustment(
@@ -1010,6 +1101,7 @@ def match_product_for_brand(
                 score -= 0.05
         score += _subcategory_product_adjustment(normalized, entry, scan_context)
         score += _flavor_token_bonus(normalized, product_l)
+        score += _ocr_specific_sku_adjustment(normalized, entry, scan_context)
         if score > best_score or (score == best_score and best and len(product_l) < len((best.get("product_name") or ""))):
             best_score = score
             best = entry

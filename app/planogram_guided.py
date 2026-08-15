@@ -633,13 +633,56 @@ def classify_with_planogram_gpt(
             }
         candidate = _resolve_gpt_to_candidate(result, candidates)
         if candidate:
-            return label_from_candidate(
+            label = label_from_candidate(
                 candidate,
                 float(result.get("confidence") or 0.82),
                 "gpt_planogram",
                 ocr_hint,
                 scan_context=scan_context,
             )
+            from app.brand_dictionary import (
+                label_conflicts_with_pack_text,
+                match_from_text,
+                personal_care_food_mismatch,
+            )
+            from app.scan_context import label_fits_scan_context
+
+            if personal_care_food_mismatch(label, scan_context):
+                return {
+                    "brand": "Unknown",
+                    "product_name": "Unidentified SKU",
+                    "confidence": 0.35,
+                    "recognition_source": "gpt_planogram",
+                    "category": "General",
+                    "sku": "",
+                }
+            if ocr_hint and label_conflicts_with_pack_text(label, ocr_hint):
+                ocr_match = match_from_text(ocr_hint, scan_context=scan_context)
+                if ocr_match and not personal_care_food_mismatch(ocr_match, scan_context):
+                    ocr_match["recognition_source"] = "gpt_planogram+ocr_fix"
+                    ocr_match["confidence"] = max(
+                        float(ocr_match.get("confidence") or 0),
+                        float(label.get("confidence") or 0),
+                    )
+                    return ocr_match
+                return {
+                    "brand": "Unknown",
+                    "product_name": "Unidentified SKU",
+                    "confidence": 0.35,
+                    "recognition_source": "gpt_planogram",
+                    "category": "General",
+                    "sku": "",
+                }
+            if not label_fits_scan_context(label, scan_context, ocr_hint):
+                return {
+                    "brand": "Unknown",
+                    "product_name": "Unidentified SKU",
+                    "confidence": 0.35,
+                    "recognition_source": "gpt_planogram",
+                    "category": "General",
+                    "sku": "",
+                }
+            return label
         return {
             "brand": "Unknown",
             "product_name": "Unidentified SKU",

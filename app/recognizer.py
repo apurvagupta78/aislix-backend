@@ -222,6 +222,14 @@ def classify_with_gpt(
                 result.get("product_name") or "",
                 result.get("variant") or "",
             )
+        if not _accept_ocr_label(result, scan_context):
+            return _unknown_label(confidence=0.4)
+        if ocr_hint and label_conflicts_with_pack_text(result, ocr_hint):
+            corrected = match_from_text(ocr_hint, scan_context=scan_context)
+            if corrected and _accept_ocr_label(corrected, scan_context):
+                corrected["recognition_source"] = "gpt+ocr_fix"
+                return corrected
+            return _unknown_label(confidence=0.4)
         return result
     except Exception:
         return _unknown_label()
@@ -801,7 +809,13 @@ def _recover_unknowns_from_row_neighbors(
                     best_ref = ref
             if best_sim < 0.86 or not best_ref:
                 continue
-            if label_conflicts_with_pack_text(best_ref, pack_text):
+            if pack_text and len(pack_text.strip()) >= 3:
+                text_match = match_from_text(pack_text, scan_context=scan_context)
+                if text_match and not _brands_match(text_match, best_ref):
+                    continue
+                if label_conflicts_with_pack_text(best_ref, pack_text):
+                    continue
+            elif label_conflicts_with_pack_text(best_ref, pack_text):
                 continue
             if sub_category_blocks_brand(
                 scan_context,
@@ -909,6 +923,11 @@ def _finalize_classification_strict(
             row = reconcile_label_with_text(row, pack_text)
             row = _reconcile_conflicts_only(row, pack_text, scan_context)
             row["pack_text"] = pack_text
+        if row and not _accept_ocr_label(row, scan_context):
+            row = _merge_label(records[index], _unknown_label())
+        elif row and pack_text and label_conflicts_with_pack_text(row, pack_text):
+            fixed = reconcile_label_with_text(row, pack_text)
+            row = fixed if _accept_ocr_label(fixed, scan_context) else _merge_label(records[index], _unknown_label())
         if index < len(ocr_results) and ocr_results[index] is not None:
             ocr_result = ocr_results[index]
             row["ocr_confidence"] = ocr_result.confidence

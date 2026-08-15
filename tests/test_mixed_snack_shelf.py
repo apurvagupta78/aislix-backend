@@ -137,3 +137,28 @@ def test_lays_flavor_scoring_picks_correct_sku():
     match = match_product_for_brand("Lays", "lays magic masala potato chips", scan_context=ctx)
     assert match is not None
     assert "magic masala" in (match.get("product_name") or "").lower()
+
+
+def test_vatika_ocr_does_not_resolve_to_hajmola():
+    ctx = {"aislix_category": "Personal Care", "sub_category": "shampoo"}
+    match = match_from_text("dabur vatika naturals health shine shampoo", scan_context=ctx)
+    assert match is not None
+    assert "hajmola" not in (match.get("product_name") or "").lower()
+    assert "vatika" in (match.get("product_name") or "").lower()
+
+
+def test_lays_ocr_conflicts_with_bingo_label():
+    from app.brand_dictionary import label_conflicts_with_pack_text
+
+    label = {"brand": "Bingo", "product_name": "Mad Angles Chips Pizza Aah"}
+    assert label_conflicts_with_pack_text(label, "Lays Classic Salted Potato Chips")
+
+
+def test_hajmola_blocked_on_shampoo_scan():
+    from app.brand_dictionary import personal_care_food_mismatch
+    from app.recognizer import _accept_ocr_label
+
+    ctx = {"aislix_category": "Personal Care", "sub_category": "shampoo"}
+    label = {"brand": "Dabur", "product_name": "Hajmola Imli Digestive Tablets"}
+    assert personal_care_food_mismatch(label, ctx)
+    assert not _accept_ocr_label(label, ctx)
