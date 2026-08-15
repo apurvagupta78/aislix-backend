@@ -30,6 +30,26 @@ def test_normalize_classified_labels_canonical_display():
     assert rows[1]["product_name"] == "Potato Chips"
 
 
+def test_merges_same_sku_with_different_product_text():
+    classified = [
+        {
+            "brand": "Dove",
+            "product_name": "Daily Shine Shampoo",
+            "sku": "dove_daily_shine_shampoo_180ml",
+            "confidence": 0.98,
+        },
+        {
+            "brand": "Dove",
+            "product_name": "Daily Shine Shampoo 180 Ml Bottle",
+            "sku": "dove_daily_shine_shampoo_180ml",
+            "confidence": 0.96,
+        },
+    ]
+    inventory = aggregate_inventory(classified)
+    assert len(inventory) == 1
+    assert inventory[0]["quantity"] == 2
+
+
 def test_merges_variant_placeholders_into_one_row():
     classified = [
         {"brand": "Tata", "product_name": "Tea Agni", "variant": "Unknown", "confidence": 0.86},

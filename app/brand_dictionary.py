@@ -688,6 +688,21 @@ def _label_from_brand_product(
     }
 
 
+def _is_ambiguous_lays_cream_fragment(text_l: str) -> bool:
+    """Short OCR fragments like 'Cream' must not map to Cream & Onion without row consensus."""
+    blob = re.sub(r"\s+", " ", (text_l or "").lower().strip())
+    if not blob or len(blob) > 18:
+        return False
+    if any(token in blob for token in ("magic", "masala", "tomato", "tango", "india")):
+        return False
+    if "onion" in blob:
+        return False
+    ambiguous = {
+        "cream", "crear", "crea", "cre", "c", "cream &", "cream & o", "cream & on", "eam & o", "eam & on",
+    }
+    return blob in ambiguous or blob.startswith("cream")
+
+
 def _lays_flavor_fragment_allowed(text_l: str, sub: str) -> bool:
     """Allow Lay's flavor fragments on chip aisles, but not generic '… potato chips' phrases."""
     if sub not in {"chips", "potato_chips"}:
@@ -741,6 +756,8 @@ def _match_partial_fragments(normalized: str, scan_context: dict | None = None) 
         return _label_from_brand_product(
             "Lays", "Tomato Tango Potato Chips", normalized, confidence=0.82, scan_context=scan_context
         )
+    if re.search(r"\bcream\b", text_l) and _is_ambiguous_lays_cream_fragment(text_l):
+        return None
     if (
         re.search(r"\bcream\b", text_l)
         and "onion" in text_l

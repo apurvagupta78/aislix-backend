@@ -10,6 +10,7 @@ from app.scan_context import (
     AISLE_PRODUCT_KEYWORDS,
     COMPLIANCE_ALERT_INTERPRETATION,
     COMPLIANCE_ALERT_TITLE,
+    SNACK_AISLE_KEYS,
     SUB_CATEGORY_BRAND_HINTS,
     SUB_CATEGORY_PRODUCT_KEYWORDS,
     aisle_category_matches,
@@ -18,6 +19,7 @@ from app.scan_context import (
     resolve_subcategory_label,
     sku_allowed_in_context,
     sub_categories_match,
+    _pc_brand_in_any_subcategory,
 )
 
 MIN_COMPLIANCE_CONFIDENCE = 0.5
@@ -199,6 +201,54 @@ def infer_detected_subcategory(item: dict, scan_context: dict | None) -> str | N
     return None
 
 
+def _snack_aisle_brand_guard(brand: str, scan_context: dict) -> bool:
+    """Snack brands on a snack-aisle audit are never cross-aisle violations."""
+    aislix_key = _normalize_key(scan_context.get("aislix_category") or "")
+    if aislix_key not in SNACK_AISLE_KEYS:
+        return False
+    brand_l = brand.lower().strip()
+    hints = scan_context.get("brand_hints") or set()
+    return brand_l in hints or brand_l in {"lays", "lay's", "kurkure", "bingo", "crax", "pringles", "doritos", "balaji", "tooyumm"}
+
+
+def _pc_aisle_brand_guard(item: dict, scan_context: dict) -> bool:
+    """
+    Mixed PC shelves: allow deodorant/skincare/shaving on a shampoo-focused audit
+    when the product text clearly belongs to another PC sub-category.
+    """
+    aislix_key = _normalize_key(scan_context.get("aislix_category") or "")
+    if aislix_key != "personal care":
+        return False
+    brand = (item.get("brand") or "").strip()
+    if not _pc_brand_in_any_subcategory(brand.lower()) and not _pc_brand_in_context(brand, scan_context):
+        return False
+
+    selected = effective_sub_category(scan_context) or scan_context.get("sub_category") or ""
+    haystack = _haystack(item)
+    pack_text = (item.get("pack_text") or "").strip()
+    combined = _normalize_key(f"{haystack} {pack_text}")
+
+    if selected == "shampoo" and _shampoo_product_text(combined):
+        return False
+    if selected == "soap":
+        soap_kw = SUB_CATEGORY_PRODUCT_KEYWORDS.get("soap") or []
+        if any(kw in combined for kw in soap_kw):
+            return False
+    if selected == "toothpaste":
+        tp_kw = SUB_CATEGORY_PRODUCT_KEYWORDS.get("toothpaste") or []
+        if any(kw in combined for kw in tp_kw):
+            return False
+
+    sibling_subs = ("deodorant", "skincare", "shaving", "cosmetics", "hand_care")
+    for sub_id in sibling_subs:
+        if sub_id == selected:
+            continue
+        keywords = SUB_CATEGORY_PRODUCT_KEYWORDS.get(sub_id) or []
+        if keywords and any(kw in combined for kw in keywords):
+            return True
+    return False
+
+
 def _evaluate_compliance(
     item: dict,
     scan_context: dict,
@@ -214,6 +264,12 @@ def _evaluate_compliance(
     brand = (item.get("brand") or "").strip()
     pack_text = (item.get("pack_text") or "").strip()
     selected = effective_sub_category(scan_context) or scan_context.get("sub_category") or ""
+
+    if _snack_aisle_brand_guard(brand, scan_context):
+        return True, selected, selected_label
+
+    if _pc_aisle_brand_guard(item, scan_context):
+        return True, selected, selected_label
 
     if not sku_allowed_in_context(
         brand,
@@ -232,6 +288,8 @@ def _evaluate_compliance(
         pass
     elif allowed_catalog and item_cat not in {"", "general"} and item_cat not in allowed_catalog:
         if aislix_key == "personal care" and _pc_brand_in_context(brand, scan_context):
+            pass
+        elif aislix_key in SNACK_AISLE_KEYS and _snack_aisle_brand_guard(brand, scan_context):
             pass
         else:
             foreign = _infer_foreign_aisle(haystack, aislix_key, scan_context, pack_text)

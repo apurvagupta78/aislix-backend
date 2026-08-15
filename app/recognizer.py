@@ -883,6 +883,16 @@ def _strict_faiss_accept(
             return False
         if label_conflicts_with_pack_text(match, ocr_text):
             return False
+        text_l = (ocr_text or "").lower()
+        label_brand = re.sub(r"[^a-z0-9]", "", (match.get("brand") or "").lower())
+        if label_brand == "bingo" and re.search(
+            r"\b(lay(?:'|s)?s|curls|rings|kurkure|crax|pringles)\b", text_l
+        ):
+            return False
+        if label_brand == "lays" and re.search(
+            r"\b(bingo|mad\s+angles|tedhe\s+medhe)\b", text_l
+        ):
+            return False
         if not _ocr_supports_faiss_match(match, ocr_text, score, scan_context):
             return False
         if source == "learned" and not ocr_agrees_with_label(

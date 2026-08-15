@@ -278,6 +278,67 @@ def _has_distinct_lays_flavor(row: dict) -> bool:
     )
 
 
+def _is_row_unknown(rec: dict) -> bool:
+    brand = _norm_brand(rec.get("brand") or "")
+    product = (rec.get("product_name") or "").lower()
+    if brand in {"", "unknown"}:
+        return True
+    return product in {"", "unknown", "unidentified sku"}
+
+
+def _recover_mixed_snack_unknowns(
+    row_clusters: list[list[dict]],
+    stats: dict[str, Any],
+) -> None:
+    """Assign unknown facings from labeled snack neighbors on the same shelf row."""
+    for cluster in row_clusters:
+        if len(cluster) < 2:
+            continue
+        labeled: dict[str, dict] = {}
+        for rec in cluster:
+            if _is_row_unknown(rec):
+                continue
+            brand = _norm_brand(rec.get("brand") or "")
+            if brand in MIXED_SNACK_BRANDS | {"lays"}:
+                labeled.setdefault(brand, rec)
+        if not labeled:
+            continue
+        for rec in cluster:
+            if not _is_row_unknown(rec):
+                continue
+            pack = (rec.get("pack_text") or "").lower()
+            matched: dict | None = None
+            for brand, ref in labeled.items():
+                if brand == "lays":
+                    if re.search(r"lay(?:'|s)?s\b", pack):
+                        matched = ref
+                        break
+                elif brand in pack:
+                    matched = ref
+                    break
+            if not matched:
+                continue
+            rec.update(
+                {
+                    "brand": matched["brand"],
+                    "product_name": matched["product_name"],
+                    "sku": matched.get("sku") or "",
+                    "category": matched.get("category") or "Snacks",
+                    "confidence": max(float(rec.get("confidence") or 0), 0.82),
+                    "recognition_source": "snack_row_neighbor",
+                }
+            )
+            stats["snack_row_recovery"] += 1
+
+
+def _snack_aisle_mixed_recovery_enabled(scan_context: dict | None) -> bool:
+    if not SNACK_ROW_RECOVERY or not scan_context:
+        return False
+    from app.scan_context import _normalize_key
+
+    return _normalize_key(scan_context.get("aislix_category") or "") == "packaged food & snacks"
+
+
 def should_use_snack_row_recovery(
     classified: list[dict],
     scan_context: dict | None,
@@ -306,11 +367,19 @@ def recover_snack_variants_by_row(
 ) -> tuple[list[dict], dict[str, Any]]:
     """Label unknown/generic Lay's facings from row-level bag color consensus."""
     stats: dict[str, Any] = {"snack_row_recovery": 0, "snack_row_rows": 0}
-    if not should_use_snack_row_recovery(classified, scan_context, override_only=override_only):
-        return classified, stats
-
     row_clusters = cluster_records_by_shelf_row(classified)
     stats["snack_row_rows"] = len(row_clusters)
+
+    if not should_use_snack_row_recovery(classified, scan_context, override_only=override_only):
+        if _snack_aisle_mixed_recovery_enabled(scan_context):
+            _recover_mixed_snack_unknowns(row_clusters, stats)
+            if stats["snack_row_recovery"]:
+                print(
+                    f"Snack row recovery: {stats['snack_row_recovery']} facings "
+                    f"across {stats['snack_row_rows']} rows"
+                )
+        return classified, stats
+
     image_height = int(source_image.shape[0]) if source_image is not None else 0
 
     for cluster in row_clusters:
@@ -348,7 +417,7 @@ def recover_snack_variants_by_row(
 
         for rec in cluster:
             if _is_top_partial_facing(rec, image_height) and _is_unknown_or_generic_lays(rec):
-                if float(rec.get("confidence") or 0) < 0.55:
+                if dominant_ratio < 0.65 and float(rec.get("confidence") or 0) < 0.55:
                     continue
             force = dominant_ratio >= force_ratio and _should_force_row_reconcile(rec, dominant_color)
             if override_only and not force and not _color_label_mismatch(rec, dominant_color):
@@ -428,6 +497,9 @@ def recover_snack_variants_by_row(
                 }
             )
             stats["snack_row_recovery"] += 1
+
+    if _snack_aisle_mixed_recovery_enabled(scan_context):
+        _recover_mixed_snack_unknowns(row_clusters, stats)
 
     if stats["snack_row_recovery"]:
         print(

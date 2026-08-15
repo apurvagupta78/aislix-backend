@@ -134,7 +134,11 @@ def aggregate_inventory(classified: list[dict]) -> list[dict]:
         brand_key = _normalize_brand_key(brand, product)
         product_key = _normalize_product_key(product)
         variant_key = _normalize_variant_key(variant)
-        key = (brand_key, product_key, variant_key, sku.lower())
+        sku_key = sku.lower()
+        if sku_key:
+            key = (brand_key, sku_key)
+        else:
+            key = (brand_key, product_key, variant_key)
         bucket = buckets[key]
         bucket["brand"] = _display_brand_name(brand, brand_key)
         bucket["product_name"] = _display_product_name(product)

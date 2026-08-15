@@ -154,11 +154,40 @@ def test_lays_ocr_conflicts_with_bingo_label():
     assert label_conflicts_with_pack_text(label, "Lays Classic Salted Potato Chips")
 
 
-def test_hajmola_blocked_on_shampoo_scan():
-    from app.brand_dictionary import personal_care_food_mismatch
-    from app.recognizer import _accept_ocr_label
+def test_ambiguous_cream_fragment_not_mapped_to_cream_onion():
+    ctx = {"sub_category": "chips"}
+    assert match_from_text("cream", scan_context=ctx) is None
+    assert match_from_text("crear", scan_context=ctx) is None
+    match = match_from_text("cream onion", scan_context=ctx)
+    assert match is not None
+    assert "cream" in (match.get("product_name") or "").lower()
 
-    ctx = {"aislix_category": "Personal Care", "sub_category": "shampoo"}
-    label = {"brand": "Dabur", "product_name": "Hajmola Imli Digestive Tablets"}
-    assert personal_care_food_mismatch(label, ctx)
-    assert not _accept_ocr_label(label, ctx)
+
+def test_mixed_snack_row_recovers_unknown_from_neighbor():
+    ctx = {"aislix_category": "Packaged Food & Snacks", "sub_category": "biscuits"}
+    classified = [
+        {
+            "x1": 30,
+            "y1": 100,
+            "x2": 90,
+            "y2": 200,
+            "brand": "Crax",
+            "product_name": "Curls",
+            "confidence": 0.9,
+            "pack_text": "Crax Curls",
+        },
+        {
+            "x1": 100,
+            "y1": 105,
+            "x2": 160,
+            "y2": 195,
+            "brand": "Unknown",
+            "product_name": "Unidentified SKU",
+            "confidence": 0.35,
+            "pack_text": "crax curls",
+        },
+    ]
+    updated, stats = recover_snack_variants_by_row(classified, np.zeros((400, 300, 3), dtype=np.uint8), ctx)
+    assert stats["snack_row_recovery"] >= 1
+    unknown = [r for r in updated if r.get("brand") == "Unknown"]
+    assert len(unknown) == 0

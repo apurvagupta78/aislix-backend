@@ -37,7 +37,8 @@ AISLE_BRAND_HINTS: dict[str, set[str]] = {
     },
     "packaged food & snacks": {
         "haldiram", "haldiram's", "britannia", "parle", "bisk farm", "sunfeast", "mtr",
-        "maggi", "maggie", "lays", "lay's", "kurkure", "bingo", "too yumm", "act ii",
+        "maggi", "maggie", "lays", "lay's", "kurkure", "bingo", "crax", "pringles",
+        "balaji", "tooyumm", "too yumm", "doritos", "act ii",
         "cadbury", "nestle", "amul", "itc", "priya gold", "snickers", "mars", "figaro",
     },
     "personal care": {
@@ -46,6 +47,8 @@ AISLE_BRAND_HINTS: dict[str, set[str]] = {
         "dettol", "pears", "tresemme", "tresemmé", "sensodyne", "loreal", "l'oreal",
         "lakme", "lakmé", "clinic plus", "indulekha", "mamaearth", "garnier", "joy",
         "simple", "clear", "meera", "oral-b", "oral b", "tressemme",
+        "axe", "fogg", "wild stone", "park avenue", "old spice", "vaseline", "medimix",
+        "dabur", "vatika", "santoor", "hamam", "cinthol", "fiama",
     },
     "home care": {
         "surf excel", "ariel", "rin", "tide", "vim", "harpic", "lizol", "domex",
@@ -92,6 +95,11 @@ CROSS_AISLE_PC_TOKENS = (
 
 # Aisle keys where snack / beverage / PC product tokens are expected (not cross-aisle).
 SNACK_AISLE_KEYS = frozenset({"packaged food & snacks"})
+SNACK_PRODUCT_MARKERS = (
+    "kurkure", "crax", "bingo", "lays", "lay's", "pringles", "doritos", "tooyumm",
+    "masala munch", "mad angles", "tedhe medhe", "potato chips", "potato chip",
+    "curls", "rings", "namkeen", "bhujia", "wafer", "nacho",
+)
 BEVERAGE_AISLE_KEYS = frozenset({"beverages"})
 PC_AISLE_KEYS = frozenset({"personal care", "health & wellness"})
 GROCERY_AISLE_KEYS = frozenset({"grocery & staples"})
@@ -260,7 +268,7 @@ SUB_CATEGORY_PRODUCT_KEYWORDS: dict[str, list[str]] = {
     "air_fresheners": ["air freshener", "room freshener", "odonil"],
     "insecticides": ["mosquito", "insecticide", "repellent", "good knight", "all out"],
     "biscuits": ["biscuit", "cookie", "cracker", "marie"],
-    "chips": ["chips", "crisps", "wafers", "potato chips", "nacho", "nachos", "masala munch", "masala"],
+    "chips": ["chips", "crisps", "wafers", "potato chips", "nacho", "nachos", "masala munch", "mad angles", "tedhe medhe", "curls", "rings"],
     "namkeen": ["namkeen", "bhujia", "mixture"],
     "bread": ["bread", "whole wheat", "brown bread", "white bread", "multigrain", "pav", "bun", "loaf"],
     "noodles": ["noodles", "maggi", "instant noodles"],
@@ -464,6 +472,11 @@ def effective_sub_category(context: dict | None) -> str:
     return sub or "others"
 
 
+def _haystack_has_snack_markers(haystack: str) -> bool:
+    hay = _normalize_key(haystack)
+    return any(marker in hay for marker in SNACK_PRODUCT_MARKERS)
+
+
 def foreign_aisle_conflict(
     haystack: str,
     scan_context: dict | None,
@@ -480,6 +493,8 @@ def foreign_aisle_conflict(
         keywords = SUB_CATEGORY_PRODUCT_KEYWORDS.get(selected) or []
         if keywords and sum(1 for kw in keywords if kw in _normalize_key(combined)) > 0:
             return None
+    if aislix_key in SNACK_AISLE_KEYS and _haystack_has_snack_markers(combined):
+        return None
     return _infer_foreign_aisle_local(combined, aislix_key)
 
 
@@ -503,6 +518,12 @@ def _infer_foreign_aisle_local(haystack: str, scan_aisle_key: str) -> tuple[str,
             best_score = score
             best_aisle = aisle_key
     if best_score > 0 and best_aisle:
+        if (
+            scan_aisle_key in SNACK_AISLE_KEYS
+            and best_aisle == "grocery & staples"
+            and _haystack_has_snack_markers(haystack_l)
+        ):
+            return None
         if (
             scan_aisle_key == "beverages"
             and best_aisle == "grocery & staples"
@@ -865,6 +886,21 @@ def _ocr_confirms_brand(brand_l: str, ocr_text: str) -> bool:
     return False
 
 
+def _pc_brand_in_any_subcategory(brand_l: str) -> bool:
+    """True when brand appears in any personal-care sub-category hint set."""
+    if not brand_l:
+        return False
+    hints = SUB_CATEGORY_BRAND_HINTS.get("personal care") or {}
+    for brands in hints.values():
+        if brand_l in brands:
+            return True
+        for hint in brands:
+            hint_l = hint.lower()
+            if brand_l == hint_l or brand_l in hint_l or hint_l in brand_l:
+                return True
+    return False
+
+
 def sub_category_blocks_brand(
     context: dict | None,
     brand: str,
@@ -901,6 +937,8 @@ def sub_category_blocks_brand(
             if brand_l not in sub_hints and brand_l not in general_hints:
                 return True
         elif aislix_key == "personal care" and sub in NARROW_PC_SUBCATEGORIES:
+            if _pc_brand_in_any_subcategory(brand_l):
+                return False
             if brand_l not in sub_hints and brand_l not in general_hints:
                 return True
 
@@ -1074,6 +1112,8 @@ def sku_allowed_in_context(
             pass
         else:
             if brand_l in hints and sku_cat.lower() not in {"dairy", "snacks", "personal care", "household"}:
+                return True
+            if aislix_key in SNACK_AISLE_KEYS and brand_l in hints and sku_cat == "staples":
                 return True
             if aislix_key == "personal care" and brand_l in hints:
                 return True

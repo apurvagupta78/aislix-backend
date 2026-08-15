@@ -233,3 +233,42 @@ def test_planogram_guided_lays_not_misplaced_on_chips_audit():
     assert result["misplaced_facings"] == 0
     assert all(item["subcategory_match"] is True for item in classified)
 
+
+def test_kurkure_not_flagged_as_grocery_staples_on_biscuits_audit():
+    ctx = {
+        "aislix_category": "Packaged Food & Snacks",
+        "sub_category": "biscuits",
+        "sub_category_label": "Biscuits",
+        "catalog_categories": ["snacks", "bakery & biscuits"],
+        "brand_hints": {"lays", "kurkure", "bingo", "crax"},
+    }
+    classified = [_facing("Kurkure", "Masala Munch", pack_text="masala munch kurkure")]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 0
+
+
+def test_lays_staples_category_not_mismatch_on_chips_audit():
+    ctx = {
+        "aislix_category": "Packaged Food & Snacks",
+        "sub_category": "chips",
+        "sub_category_label": "Chips",
+        "catalog_categories": ["snacks", "bakery & biscuits"],
+        "brand_hints": {"lays", "kurkure", "bingo"},
+    }
+    classified = [_facing("Lays", "Indias Magic Masala Potato Chips", category="Staples")]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 0
+
+
+def test_axe_deodorant_not_mismatch_on_mixed_pc_shelf():
+    ctx = {
+        "aislix_category": "Personal Care",
+        "sub_category": "shampoo",
+        "sub_category_label": "Shampoo",
+        "catalog_categories": ["personal care"],
+        "brand_hints": {"dove", "pantene", "axe", "fogg", "nivea"},
+    }
+    classified = [_facing("Axe", "Deodorant Body Spray", category="Personal Care")]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 0
+
