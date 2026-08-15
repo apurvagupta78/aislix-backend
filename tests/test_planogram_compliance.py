@@ -8,6 +8,7 @@ from app.planogram_compliance import (
     ISSUE_QTY_MISMATCH,
     ISSUE_UNEXPECTED,
     compare_planogram,
+    _norm,
 )
 from app.planogram_csv import normalize_planogram_row, parse_csv_text
 
@@ -384,4 +385,40 @@ def test_lays_planogram_product_level_compliance_not_zero_on_three_skus():
     assert result["planogram_sku_match_percent"] == 100.0
     assert result["compliance_percent"] == 100.0
     assert result["planogram_qty_compliance_percent"] >= 75.0
+
+
+def test_lays_planogram_merges_split_inventory_name_variants():
+    """Split catalog names (Cream & Onion vs …Potato Chips) must not create false unexpected rows."""
+    expected = [
+        {"brand": "Lay's", "product_name": "India's Magic Masala", "expected_qty": 13, "sub_category": "chips"},
+        {"brand": "Lay's", "product_name": "Tomato Tango", "expected_qty": 6, "sub_category": "chips"},
+        {"brand": "Lay's", "product_name": "American Style Cream & Onion", "expected_qty": 12, "sub_category": "chips"},
+    ]
+    inventory = [
+        {"brand": "Lays", "product_name": "Indias Magic Masala Potato Chips", "quantity": 13},
+        {"brand": "Lays", "product_name": "American Style Cream and Onion Potato Chips", "quantity": 10},
+        {"brand": "Lays", "product_name": "American Style Cream & Onion", "quantity": 8},
+        {"brand": "Lays", "product_name": "Tomato Tango Potato Chips", "quantity": 4},
+        {"brand": "Lays", "product_name": "Tomato Tango", "quantity": 2},
+    ]
+    result = compare_planogram(
+        expected,
+        inventory,
+        scan_context={"sub_category": "chips", "aislix_category": "Packaged Food & Snacks", "location": "A-1-L"},
+    )
+    assert result["summary"]["unexpected_products"] == 0
+    assert result["planogram_sku_match_percent"] == 100.0
+    tomato_lines = [
+        ln for ln in result["lines"]
+        if "tomato" in _norm(ln.get("expected_product") or "")
+    ]
+    assert len(tomato_lines) == 1
+    assert tomato_lines[0]["issue_type"] == ISSUE_CORRECT
+    assert tomato_lines[0]["actual_qty"] == 6
+    magic_lines = [
+        ln for ln in result["lines"]
+        if "magic" in _norm(ln.get("expected_product") or "")
+    ]
+    assert magic_lines[0]["issue_type"] == ISSUE_CORRECT
+    assert magic_lines[0]["actual_qty"] == 13
 

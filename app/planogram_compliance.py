@@ -96,16 +96,55 @@ def _inventory_key(item: dict) -> str:
 def _normalize_product_tokens(product: str) -> str:
     """Collapse planogram vs catalog naming (India's Magic Masala ↔ Indias Magic Masala Potato Chips)."""
     p = _norm(product)
-    p = p.replace("india's", "indias")
-    for drop in ("potato chips", "potato chip", "  "):
+    p = p.replace("india's", "indias").replace("&", "and")
+    for drop in ("potato chips", "potato chip", "american style", "  "):
         p = p.replace(drop, " ")
     return re.sub(r"\s+", " ", p).strip()
 
 
-def _product_match_key(item: dict) -> str:
+def _canonical_compliance_key(item: dict) -> str:
+    """Stable product key for planogram ↔ inventory matching (merges Lay's flavor aliases)."""
     brand = _brand_key(item)
     product = _normalize_product_tokens(item.get("product_name") or item.get("name") or "")
+    if brand in {"lays", "lay s"} or brand.startswith("lay"):
+        if "magic masala" in product or ("indias" in product and "masala" in product):
+            return f"{brand}|lays_magic_masala"
+        if "tomato" in product:
+            return f"{brand}|lays_tomato_tango"
+        if "cream" in product and "onion" in product:
+            return f"{brand}|lays_cream_onion"
     return f"{brand}|{product}"
+
+
+def _product_match_key(item: dict) -> str:
+    return _canonical_compliance_key(item)
+
+
+def _merge_inventory_by_product(inventory: list[dict]) -> list[dict]:
+    """Sum quantities for inventory rows that are the same SKU under different display names."""
+    buckets: dict[str, dict] = {}
+    for item in inventory:
+        key = _canonical_compliance_key(item)
+        qty = int(item.get("quantity") or item.get("facings") or 0)
+        if key not in buckets:
+            buckets[key] = {**item, "quantity": 0, "facings": 0, "_confidences": []}
+        bucket = buckets[key]
+        bucket["quantity"] += qty
+        bucket["facings"] = int(bucket.get("facings") or 0) + qty
+        if item.get("confidence") is not None:
+            bucket["_confidences"].append(float(item.get("confidence") or 0))
+        if len((item.get("product_name") or "")) > len((bucket.get("product_name") or "")):
+            bucket["product_name"] = item.get("product_name")
+        if item.get("sku") and not bucket.get("sku"):
+            bucket["sku"] = item.get("sku")
+
+    merged: list[dict] = []
+    for bucket in buckets.values():
+        confidences = bucket.pop("_confidences", [])
+        if confidences:
+            bucket["confidence"] = round(sum(confidences) / len(confidences), 4)
+        merged.append(bucket)
+    return merged
 
 
 def _aggregate_planogram_by_product(items: list[dict]) -> list[dict]:
@@ -289,6 +328,7 @@ def compare_planogram(
 ) -> dict[str, Any]:
     """Compare expected planogram rows vs detected inventory."""
     scan_context = scan_context or {}
+    inventory = _merge_inventory_by_product(list(inventory))
     scoped_expected = filter_planogram_by_scope(planogram_items, scope_type, scope_values, scan_context)
     scoped_expected = _aggregate_planogram_by_product(scoped_expected)
     full_store = full_store_items or planogram_items
