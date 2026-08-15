@@ -310,3 +310,61 @@ def test_assign_planogram_shelf_rows_labels_unknown_facings_by_row():
     assert masala == 14
     assert tomato == 7
     assert cream == 14
+
+
+def test_assign_planogram_shelf_rows_rejects_cream_ocr_on_blue_top_row():
+    """Partial top-row blue bags must not become Cream from OCR fragment 'Cream'."""
+    import numpy as np
+
+    cands = _lays_candidates()
+    source = np.zeros((800, 700, 3), dtype=np.uint8)
+    records = []
+    row_y = [30, 150, 280, 410, 540, 670]
+    for row_idx, y in enumerate(row_y):
+        for col in range(6):
+            x1 = col * 110
+            records.append({
+                "x1": x1,
+                "y1": y,
+                "x2": x1 + 90,
+                "y2": y + 100,
+                "brand": "Lays" if row_idx > 0 else "Unknown",
+                "product_name": (
+                    "American Style Cream & Onion"
+                    if row_idx == 0
+                    else "Unidentified SKU"
+                ),
+                "confidence": 0.84 if row_idx == 0 else 0.35,
+                "pack_text": "Cream" if row_idx == 0 else "",
+            })
+        if row_idx == 0:
+            source[y : y + 100, 0:660, 0] = 140
+            source[y : y + 100, 0:660, 1] = 90
+            source[y : y + 100, 0:660, 2] = 100
+        elif row_idx in {1, 2}:
+            source[y : y + 100, 0:660, 0] = 140
+            source[y : y + 100, 0:660, 1] = 90
+            source[y : y + 100, 0:660, 2] = 100
+        elif row_idx == 3:
+            source[y : y + 100, 0:660, 2] = 40
+            source[y : y + 100, 0:660, 1] = 120
+            source[y : y + 100, 0:660, 0] = 200
+        elif row_idx in {4, 5}:
+            source[y : y + 100, 0:660, 2] = 40
+            source[y : y + 100, 0:660, 1] = 150
+            source[y : y + 100, 0:660, 0] = 90
+
+    assigned = assign_planogram_shelf_rows(
+        records,
+        cands,
+        scan_context={"shelf_mode": "multi_row", "sub_category": "chips"},
+        source_image=source,
+    )
+    top_row = [r for r in assigned if r["y1"] < 100]
+    assert len(top_row) == 6
+    assert all(r["product_name"] == "Unidentified SKU" for r in top_row)
+    cream = sum(
+        1 for r in assigned if r["product_name"] == "American Style Cream & Onion"
+    )
+    assert cream == 12
+

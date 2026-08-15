@@ -124,6 +124,16 @@ def _color_families_compatible(a: str, b: str) -> bool:
     return False
 
 
+def _color_label_mismatch(rec: dict, bag_color: str) -> bool:
+    """True when facing label color family disagrees with sampled bag pixels."""
+    if bag_color in {"", "unknown"}:
+        return False
+    label_color = _lays_color_for_product(rec)
+    if not label_color:
+        return False
+    return not _color_families_compatible(label_color, bag_color)
+
+
 def _should_skip_row_recovery(rec: dict, dominant_color: str) -> bool:
     """Skip only when OCR flavor already matches row bag color."""
     product = (rec.get("product_name") or "").lower()
@@ -142,6 +152,14 @@ def _should_skip_row_recovery(rec: dict, dominant_color: str) -> bool:
         if dominant_color == "green" and "tomato" in product:
             return False
         if dominant_color == "red" and ("cream" in product or "onion" in product):
+            return False
+        if dominant_color == "blue" and ("cream" in product or "onion" in product):
+            return False
+        if dominant_color == "blue" and "tomato" in product:
+            return False
+        if dominant_color == "green" and (
+            "magic masala" in product or ("india" in product and "masala" in product)
+        ):
             return False
         return True
     if _ocr_has_lays_flavor(pack_text) and not _is_unknown_or_generic_lays(rec):
@@ -202,10 +220,12 @@ def should_use_snack_row_recovery(
 ) -> bool:
     if not SNACK_ROW_RECOVERY or not scan_context:
         return False
-    if scan_context.get("planogram_candidates") and not override_only:
-        return False
     sub = (scan_context.get("sub_category") or "").lower()
     if sub not in {"chips", "potato_chips"}:
+        return False
+    if override_only:
+        return True
+    if scan_context.get("planogram_candidates") and not override_only:
         return False
     rows = cluster_records_by_shelf_row(classified)
     return len(rows) >= 2
@@ -262,7 +282,7 @@ def recover_snack_variants_by_row(
                 if float(rec.get("confidence") or 0) < 0.55:
                     continue
             force = dominant_ratio >= force_ratio and _should_force_row_reconcile(rec, dominant_color)
-            if override_only and not force:
+            if override_only and not force and not _color_label_mismatch(rec, dominant_color):
                 continue
             if _should_skip_row_recovery(rec, dominant_color) and not force:
                 continue
@@ -275,6 +295,41 @@ def recover_snack_variants_by_row(
                     "category": product["category"],
                     "confidence": max(float(rec.get("confidence") or 0), 0.84 if force else 0.82),
                     "recognition_source": "snack_row_color_force" if force else "snack_row_color",
+                }
+            )
+            stats["snack_row_recovery"] += 1
+
+    if override_only and source_image is not None:
+        for rec in classified:
+            bag_color = _bag_color_family(source_image, rec)
+            if bag_color == "unknown":
+                continue
+            if _is_top_partial_facing(rec, image_height) and not _is_unknown_or_generic_lays(rec):
+                if _color_label_mismatch(rec, bag_color):
+                    rec.update(
+                        {
+                            "brand": "Unknown",
+                            "product_name": "Unidentified SKU",
+                            "sku": "",
+                            "confidence": min(float(rec.get("confidence") or 0.35), 0.4),
+                            "recognition_source": "top_partial_demote",
+                        }
+                    )
+                    stats["snack_row_recovery"] += 1
+                continue
+            if not _color_label_mismatch(rec, bag_color):
+                continue
+            product = LAYS_ROW_PRODUCTS.get(bag_color)
+            if not product:
+                continue
+            rec.update(
+                {
+                    "brand": product["brand"],
+                    "product_name": product["product_name"],
+                    "sku": product["sku"],
+                    "category": product["category"],
+                    "confidence": max(float(rec.get("confidence") or 0), 0.84),
+                    "recognition_source": "snack_row_color_force",
                 }
             )
             stats["snack_row_recovery"] += 1

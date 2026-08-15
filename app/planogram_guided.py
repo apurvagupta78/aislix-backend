@@ -200,12 +200,18 @@ def allocate_cluster_candidates(candidates: list[dict], n_clusters: int) -> list
     if not visual:
         return [None] * n_clusters
 
-    if len(visual) == n_clusters:
+    has_shelf_positions = any(parse_shelf_number(row.get("shelf_position")) is not None for row in candidates)
+
+    if len(visual) >= n_clusters:
+        if len(visual) > n_clusters:
+            offset = len(visual) - n_clusters
+            return visual[offset:]
         return visual
 
-    if len(visual) > n_clusters:
-        offset = len(visual) - n_clusters
-        return visual[offset:]
+    if has_shelf_positions:
+        # Photo includes extra partial row(s) above the planogram — leave top clusters unassigned.
+        offset = n_clusters - len(visual)
+        return [None] * offset + visual
 
     weights = [_expected_qty_for_product(candidates, row) for row in visual]
     total_w = sum(weights) or len(visual)
@@ -259,6 +265,17 @@ def _is_unknown_record(record: dict) -> bool:
     brand = _norm(record.get("brand") or "")
     product = _norm(record.get("product_name") or record.get("name") or "")
     return brand in {"", "unknown"} or product in {"", "unknown", "unidentified sku"}
+
+
+def _is_unidentified_facing(rec: dict) -> bool:
+    """True only when both brand and product are genuinely unidentified."""
+    brand = _norm(rec.get("brand") or "")
+    product = _norm(rec.get("product_name") or rec.get("name") or "")
+    if product in {"", "unknown", "unidentified sku"}:
+        return True
+    if brand in {"", "unknown"}:
+        return product in {"", "unknown", "unidentified sku", "potato chips", "lays", "lay's"}
+    return False
 
 
 def _pick_best_in_slot(slot: list[dict]) -> dict:
@@ -800,6 +817,40 @@ def should_use_planogram_shelf_rows(
     return True
 
 
+def _planogram_candidate_bag_color(candidate: dict) -> str | None:
+    """Map planogram Lay's flavor row to bag color family."""
+    product = _norm(candidate.get("product_name") or "")
+    if "magic masala" in product or ("india" in product and "masala" in product):
+        return "blue"
+    if "tomato" in product:
+        return "red"
+    if "cream" in product and "onion" in product:
+        return "green"
+    return None
+
+
+def _candidate_matches_bag_color(candidate: dict, bag_color: str) -> bool:
+    from app.snack_row_recovery import _color_families_compatible
+
+    expected = _planogram_candidate_bag_color(candidate)
+    if not expected or bag_color in {"", "unknown"}:
+        return True
+    return _color_families_compatible(bag_color, expected)
+
+
+def _pick_color_compatible_candidate(
+    candidates: list[dict],
+    bag_color: str,
+    preferred: dict | None = None,
+) -> dict | None:
+    if preferred and _candidate_matches_bag_color(preferred, bag_color):
+        return preferred
+    for row in candidates:
+        if _candidate_matches_bag_color(row, bag_color):
+            return row
+    return preferred
+
+
 def assign_planogram_shelf_rows(
     records: list[dict],
     candidates: list[dict],
@@ -808,12 +859,16 @@ def assign_planogram_shelf_rows(
     source_image: np.ndarray | None = None,
 ) -> list[dict]:
     """Label every facing on a multi-row rack from planogram shelf rows or product order."""
+    from app.snack_row_recovery import _bag_color_family, _color_label_mismatch, _is_top_partial_facing
+
     if not records or not candidates:
         return records
 
     row_clusters = cluster_records_by_shelf_row(records)
     if not row_clusters:
         return records
+
+    image_height = int(source_image.shape[0]) if source_image is not None else 0
 
     cluster_candidates = allocate_cluster_candidates(candidates, len(row_clusters))
     if not cluster_candidates:
@@ -828,7 +883,20 @@ def assign_planogram_shelf_rows(
             else None
         )
         if default_candidate is None:
-            output.extend(row)
+            for rec in row:
+                if _is_unidentified_facing(rec):
+                    output.append(rec)
+                else:
+                    output.append(
+                        {
+                            **rec,
+                            "brand": "Unknown",
+                            "product_name": "Unidentified SKU",
+                            "sku": "",
+                            "confidence": min(float(rec.get("confidence") or 0.35), 0.4),
+                            "recognition_source": "extra_row_unknown",
+                        }
+                    )
             continue
 
         product_key = _product_key(default_candidate)
@@ -869,21 +937,56 @@ def assign_planogram_shelf_rows(
         row_candidate = text_match[0] if text_match else default_candidate
         text_score = text_match[1] if text_match else 0.0
 
+        row_color_votes: dict[str, int] = {}
+        if source_image is not None:
+            for rec in row:
+                color = _bag_color_family(source_image, rec)
+                if color != "unknown":
+                    row_color_votes[color] = row_color_votes.get(color, 0) + 1
+        if row_color_votes:
+            row_bag_color = max(row_color_votes, key=row_color_votes.get)
+            row_candidate = (
+                _pick_color_compatible_candidate(shelf_candidates, row_bag_color, row_candidate)
+                or row_candidate
+            )
+
         for rec, ocr in zip(row, row_ocrs):
-            if not _is_unknown_record(rec):
-                existing = best_candidate_from_label(
-                    rec,
-                    shelf_candidates,
-                    ocr_text=ocr or merged_ocr,
-                    min_score=0.45,
-                )
-                if existing and existing[0].get("product_name") == row_candidate.get("product_name"):
+            bag_color = _bag_color_family(source_image, rec) if source_image is not None else "unknown"
+            if _is_top_partial_facing(rec, image_height):
+                if _is_unidentified_facing(rec):
                     output.append(rec)
-                    continue
+                else:
+                    output.append(
+                        {
+                            **rec,
+                            "brand": "Unknown",
+                            "product_name": "Unidentified SKU",
+                            "sku": "",
+                            "confidence": min(float(rec.get("confidence") or 0.35), 0.4),
+                            "recognition_source": "top_partial_demote",
+                        }
+                    )
+                continue
+
+            if not _is_unknown_record(rec):
+                if bag_color != "unknown" and _color_label_mismatch(rec, bag_color):
+                    pass
+                else:
+                    existing = best_candidate_from_label(
+                        rec,
+                        shelf_candidates,
+                        ocr_text=ocr or merged_ocr,
+                        min_score=0.45,
+                    )
+                    if existing and existing[0].get("product_name") == row_candidate.get("product_name"):
+                        output.append(rec)
+                        continue
 
             per_match = best_candidate_from_text(ocr, shelf_candidates, min_score=PLANOGRAM_MATCH_MIN_SCORE * 0.8)
             candidate = per_match[0] if per_match else row_candidate
             score = per_match[1] if per_match else text_score
+            if bag_color != "unknown":
+                candidate = _pick_color_compatible_candidate(shelf_candidates, bag_color, candidate) or candidate
             conf = max(0.74, score, float(rec.get("confidence") or 0) * 0.5)
             if ocr.strip() and re.search(r"lay'?s\b", ocr, flags=re.IGNORECASE):
                 conf = max(conf, 0.84)

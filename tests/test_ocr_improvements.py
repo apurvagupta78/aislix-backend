@@ -248,3 +248,65 @@ def test_snack_row_recovery_assigns_unknowns_by_row():
     products = {(row["product_name"]) for row in updated}
     assert "Indias Magic Masala Potato Chips" in products
     assert "American Style Cream and Onion Potato Chips" in products
+
+
+def test_snack_row_override_fixes_cream_on_blue_bag():
+    ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
+    source = np.zeros((800, 400, 3), dtype=np.uint8)
+    # Magic Masala blue-teal pixels (BGR)
+    source[20:80, 20:380, 0] = 140
+    source[20:80, 20:380, 1] = 90
+    source[20:80, 20:380, 2] = 100
+
+    classified = [
+        {
+            "x1": 20,
+            "y1": 20,
+            "x2": 80,
+            "y2": 80,
+            "brand": "Lays",
+            "product_name": "American Style Cream and Onion Potato Chips",
+            "confidence": 0.84,
+            "pack_text": "Cream",
+        },
+        {
+            "x1": 100,
+            "y1": 25,
+            "x2": 160,
+            "y2": 75,
+            "brand": "Lays",
+            "product_name": "American Style Cream & Onion",
+            "confidence": 0.82,
+            "pack_text": "Cream &",
+        },
+    ]
+    updated, stats = recover_snack_variants_by_row(classified, source, ctx, override_only=True)
+    assert stats["snack_row_recovery"] >= 2
+    assert all(
+        row["product_name"] == "Indias Magic Masala Potato Chips" for row in updated
+    )
+
+
+def test_snack_row_override_demotes_top_partial_mislabel_to_unknown():
+    ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
+    source = np.zeros((800, 400, 3), dtype=np.uint8)
+    source[20:80, 20:380, 0] = 140
+    source[20:80, 20:380, 1] = 90
+    source[20:80, 20:380, 2] = 100
+
+    classified = [
+        {
+            "x1": 20,
+            "y1": 20,
+            "x2": 80,
+            "y2": 80,
+            "brand": "Lays",
+            "product_name": "American Style Cream and Onion Potato Chips",
+            "confidence": 0.84,
+        },
+    ]
+    updated, stats = recover_snack_variants_by_row(classified, source, ctx, override_only=True)
+    assert stats["snack_row_recovery"] == 1
+    assert updated[0]["brand"] == "Unknown"
+    assert updated[0]["product_name"] == "Unidentified SKU"
+
