@@ -12,8 +12,8 @@ from app.ocr_reader import score_ocr_candidate
 
 def test_build_ocr_variants_includes_core_and_heavy():
     img = Image.new("RGB", (80, 120), color=(180, 120, 90))
-    standard = build_ocr_variants(img, heavy=False)
-    heavy = build_ocr_variants(img, heavy=True)
+    standard = build_ocr_variants(img, heavy=False, fast=False)
+    heavy = build_ocr_variants(img, heavy=True, fast=False)
     names_std = {v.name for v in standard}
     names_heavy = {v.name for v in heavy}
     assert "original" in names_std
@@ -23,6 +23,14 @@ def test_build_ocr_variants_includes_core_and_heavy():
     assert "adaptive_thresh" in names_heavy
     assert "perspective" in names_heavy
     assert len(heavy) > len(standard)
+
+
+def test_build_ocr_variants_fast_mode_is_smaller():
+    img = Image.new("RGB", (80, 120), color=(180, 120, 90))
+    fast = build_ocr_variants(img, heavy=False, fast=True)
+    full = build_ocr_variants(img, heavy=False, fast=False)
+    assert len(fast) < len(full)
+    assert {v.name for v in fast} <= {"original", "clahe", "sharpen"}
 
 
 def test_clahe_preserves_shape():

@@ -88,6 +88,60 @@ def test_bag_color_orange_red_green():
     blue_cast_green[:, :, 2] = 85
     assert _bag_color_family(blue_cast_green, record) == "green"
 
+    cool_blue_tomato = np.zeros((120, 80, 3), dtype=np.uint8)
+    cool_blue_tomato[:, :, 0] = 90
+    cool_blue_tomato[:, :, 1] = 75
+    cool_blue_tomato[:, :, 2] = 110
+    assert _bag_color_family(cool_blue_tomato, record) == "red"
+
+
+def test_snack_row_recovery_overrides_magic_masala_on_blue_tomato_row():
+    ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
+    source = np.zeros((600, 400, 3), dtype=np.uint8)
+    # orange Magic Masala row (BGR)
+    source[50:150, 20:380, 2] = 200
+    source[50:150, 20:380, 1] = 120
+    source[50:150, 20:380, 0] = 40
+    # cool blue Tomato row (BGR: B=110, G=75, R=90 → RGB R=90,G=75,B=110)
+    source[350:450, 20:380, 0] = 110
+    source[350:450, 20:380, 1] = 75
+    source[350:450, 20:380, 2] = 90
+
+    classified = [
+        {
+            "x1": 20,
+            "y1": 50,
+            "x2": 80,
+            "y2": 150,
+            "brand": "Lays",
+            "product_name": "Indias Magic Masala Potato Chips",
+            "confidence": 0.88,
+        },
+        {
+            "x1": 20,
+            "y1": 350,
+            "x2": 80,
+            "y2": 450,
+            "brand": "Lays",
+            "product_name": "Indias Magic Masala Potato Chips",
+            "confidence": 0.88,
+        },
+        {
+            "x1": 100,
+            "y1": 355,
+            "x2": 160,
+            "y2": 445,
+            "brand": "Lays",
+            "product_name": "Indias Magic Masala Potato Chips",
+            "confidence": 0.88,
+        },
+    ]
+    updated, stats = recover_snack_variants_by_row(classified, source, ctx)
+    assert stats["snack_row_recovery"] >= 2
+    tomato_row = [r for r in updated if r["y1"] > 300]
+    assert len(tomato_row) == 2
+    assert all(row["product_name"] == "Tomato Tango Potato Chips" for row in tomato_row)
+
 
 def test_snack_row_recovery_overrides_wrong_magic_masala_on_green_row():
     ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})

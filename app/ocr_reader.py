@@ -36,7 +36,12 @@ OCR_PADDLE_REC_MODEL = os.getenv("OCR_PADDLE_REC_MODEL", "mobile").strip().lower
 OCR_DET_DB_UNCLIP_RATIO = float(os.getenv("OCR_DET_DB_UNCLIP_RATIO", "1.6"))
 OCR_REC_ONLY_BANDS = os.getenv("OCR_REC_ONLY_BANDS", "true").lower() in {"1", "true", "yes"}
 OCR_PADDLE_REC_MODEL_DIR = os.getenv("OCR_PADDLE_REC_MODEL_DIR", "").strip()
-OCR_MULTILANG_MERGE = os.getenv("OCR_MULTILANG_MERGE", "true").lower() in {"1", "true", "yes"}
+OCR_FULL_MODE = os.getenv("OCR_FULL_MODE", "false").lower() in {"1", "true", "yes"}
+OCR_FAST_MODE = os.getenv("OCR_FAST_MODE", "true").lower() in {"1", "true", "yes"} and not OCR_FULL_MODE
+OCR_MULTILANG_MERGE = (
+    os.getenv("OCR_MULTILANG_MERGE", "false" if OCR_FAST_MODE else "true").lower()
+    in {"1", "true", "yes"}
+)
 
 SIZE_TOKEN_PATTERN = re.compile(
     r"\b(\d+(?:\.\d+)?)\s*(gms?|gm|g|kg|ml|ltr|l|unit|units|bags?|bag|pack|packs|pcs|pc)\b",
@@ -113,7 +118,8 @@ def _enrich_text_for_matching(text: str) -> str:
 
 
 def _paddle_languages() -> list[str]:
-    raw = os.getenv("OCR_LANGUAGES", "en,hi")
+    default = "en" if OCR_FAST_MODE else "en,hi"
+    raw = os.getenv("OCR_LANGUAGES", default)
     langs = [part.strip() for part in raw.split(",") if part.strip()]
     return langs or ["en"]
 
@@ -453,6 +459,7 @@ def ocr_engine_status() -> dict:
         "ocr_engine_requested": requested,
         "ocr_paddle_rec_model": OCR_PADDLE_REC_MODEL,
         "ocr_languages": _paddle_languages(),
+        "ocr_fast_mode": OCR_FAST_MODE,
         "ocr_fallback_reason": fallback,
     }
 
@@ -519,19 +526,25 @@ def read_packaging_text_result(
 
     logo_band = logo_focus_crop(pack_crop)
     flavor_band = flavor_focus_crop(pack_crop)
-    band_results = [
-        _read_band(logo_band, band_rec_only=True),
-        _read_band(flavor_band, band_rec_only=True),
-        _read_band(pack_crop),
-    ]
+    if OCR_FAST_MODE and not heavy:
+        band_results = [
+            _read_band(flavor_band, band_rec_only=True),
+            _read_band(pack_crop),
+        ]
+    else:
+        band_results = [
+            _read_band(logo_band, band_rec_only=True),
+            _read_band(flavor_band, band_rec_only=True),
+            _read_band(pack_crop),
+        ]
 
-    if pack_bottom >= 40:
-        band_h = max(1, int(pack_bottom * 0.45))
-        top_band = pack_crop.crop((0, 0, width, band_h))
-        center_top = max(1, int(pack_bottom * 0.2))
-        center_bottom = min(pack_bottom, int(pack_bottom * 0.65))
-        center_band = pack_crop.crop((0, center_top, width, center_bottom))
-        band_results.extend([_read_band(top_band, band_rec_only=True), _read_band(center_band)])
+        if pack_bottom >= 40:
+            band_h = max(1, int(pack_bottom * 0.45))
+            top_band = pack_crop.crop((0, 0, width, band_h))
+            center_top = max(1, int(pack_bottom * 0.2))
+            center_bottom = min(pack_bottom, int(pack_bottom * 0.65))
+            center_band = pack_crop.crop((0, center_top, width, center_bottom))
+            band_results.extend([_read_band(top_band, band_rec_only=True), _read_band(center_band)])
 
     merged = _merge_results(*band_results)
     if merged.text:
@@ -559,7 +572,10 @@ def read_packaging_text_tiered(
 ) -> OcrReadResult:
     """Standard multi-pass OCR; heavy preprocessing only when text is empty or low-confidence."""
     result = read_packaging_text_result(image, scan_context=scan_context, heavy=False)
-    if len(result.text.strip()) < 3 or result.confidence < OCR_LOW_CONFIDENCE:
+    needs_heavy = len(result.text.strip()) < 3
+    if not OCR_FAST_MODE:
+        needs_heavy = needs_heavy or result.confidence < OCR_LOW_CONFIDENCE
+    if needs_heavy:
         heavy = read_packaging_text_result(image, scan_context=scan_context, heavy=True)
         if heavy.score >= result.score or len(heavy.text.strip()) > len(result.text.strip()):
             return heavy

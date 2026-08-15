@@ -17,6 +17,8 @@ OCR_VARIANT_DENOISE = os.getenv("OCR_VARIANT_DENOISE", "true").lower() in {"1", 
 OCR_PERSPECTIVE = os.getenv("OCR_PERSPECTIVE", "true").lower() in {"1", "true", "yes"}
 OCR_SUPER_RES_FACTOR = float(os.getenv("OCR_SUPER_RES_FACTOR", "3.0"))
 OCR_SUPER_RES_MIN = int(os.getenv("OCR_SUPER_RES_MIN", "1280"))
+OCR_FULL_MODE = os.getenv("OCR_FULL_MODE", "false").lower() in {"1", "true", "yes"}
+OCR_FAST_MODE = os.getenv("OCR_FAST_MODE", "true").lower() in {"1", "true", "yes"} and not OCR_FULL_MODE
 
 
 @dataclass(frozen=True)
@@ -179,26 +181,47 @@ def apply_super_resolution(rgb: np.ndarray) -> np.ndarray:
     return np.clip(sharpened, 0, 255).astype(np.uint8)
 
 
-def build_ocr_variants(image: Image.Image, *, heavy: bool = False) -> list[OcrVariant]:
+def build_ocr_variants(
+    image: Image.Image,
+    *,
+    heavy: bool = False,
+    fast: bool | None = None,
+) -> list[OcrVariant]:
     """
     Produce OCR-ready RGB variants from a product crop.
     Standard: original+upscale, 2x, CLAHE, sharpen.
+    Fast (default on Railway): original, CLAHE, sharpen — skips super-res and extra bands.
     Heavy: adds deskew + adaptive threshold (for tiered retry).
     """
+    use_fast = OCR_FAST_MODE if fast is None else fast
     base = pil_to_rgb_np(image)
     base = _upscale_np(base, min_longest=OCR_UPSCALE_MIN)
-    if OCR_PERSPECTIVE:
+    if OCR_PERSPECTIVE and not use_fast:
         base = correct_perspective(base)
 
-    variants: list[OcrVariant] = [
-        OcrVariant("original", base),
-        OcrVariant("upscale_2x", _upscale_np(base, factor=OCR_UPSCALE_FACTOR)),
-        OcrVariant("clahe", apply_clahe(base)),
-        OcrVariant("sharpen", apply_sharpen_contrast(base)),
-        OcrVariant("super_res", apply_super_resolution(base)),
-    ]
+    if use_fast and not heavy:
+        variants: list[OcrVariant] = [
+            OcrVariant("original", base),
+            OcrVariant("clahe", apply_clahe(base)),
+            OcrVariant("sharpen", apply_sharpen_contrast(base)),
+        ]
+    elif use_fast and heavy:
+        variants = [
+            OcrVariant("original", base),
+            OcrVariant("clahe", apply_clahe(base)),
+            OcrVariant("sharpen", apply_sharpen_contrast(base)),
+            OcrVariant("adaptive_thresh", apply_denoise_adaptive_threshold(base)),
+        ]
+    else:
+        variants = [
+            OcrVariant("original", base),
+            OcrVariant("upscale_2x", _upscale_np(base, factor=OCR_UPSCALE_FACTOR)),
+            OcrVariant("clahe", apply_clahe(base)),
+            OcrVariant("sharpen", apply_sharpen_contrast(base)),
+            OcrVariant("super_res", apply_super_resolution(base)),
+        ]
 
-    if heavy:
+    if heavy and not use_fast:
         deskewed = deskew_if_needed(base)
         perspective = correct_perspective(base) if OCR_PERSPECTIVE else base
         variants.extend(

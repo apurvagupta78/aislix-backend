@@ -96,6 +96,9 @@ def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
         return "orange"
     if r > 95 and r > g + 15 and r > b + 12:
         return "red"
+    # Cool blue-dominant packs (Tomato Tango) — before warm teal Magic Masala.
+    if b > 85 and b >= r and (b - r) >= 8 and r < 95:
+        return "red"
     # Dark blue Tomato Tango — blue-dominant, low warmth (not Magic Masala orange-blue).
     if b > 95 and b > r + 18 and b > g + 12 and r < 85:
         return "red"
@@ -124,6 +127,9 @@ def _color_families_compatible(a: str, b: str) -> bool:
 
 def _should_skip_row_recovery(rec: dict, dominant_color: str) -> bool:
     """Skip only when OCR flavor already matches row bag color."""
+    product = (rec.get("product_name") or "").lower()
+    if "magic masala" in product and dominant_color in {"red", "green"}:
+        return False
     pack_text = (rec.get("pack_text") or "").strip()
     current_color = _lays_color_for_product(rec)
     if current_color and not _color_families_compatible(current_color, dominant_color):
@@ -136,6 +142,26 @@ def _should_skip_row_recovery(rec: dict, dominant_color: str) -> bool:
         brand = _norm_brand(rec.get("brand") or "")
         if brand not in {"lays"}:
             return True
+    return False
+
+
+def _is_top_partial_facing(rec: dict, image_height: int) -> bool:
+    """Top-of-shelf partial facings — keep unknown when OCR was weak."""
+    if image_height <= 0:
+        return False
+    y_center = (int(rec.get("y1") or 0) + int(rec.get("y2") or 0)) / 2.0
+    return y_center < image_height * 0.14
+
+
+def _should_force_row_reconcile(rec: dict, dominant_color: str) -> bool:
+    """Force row color when OCR flavor clearly disagrees with bag color consensus."""
+    current_color = _lays_color_for_product(rec)
+    if not current_color:
+        return True
+    if not _color_families_compatible(current_color, dominant_color):
+        return True
+    if "magic masala" in (rec.get("product_name") or "").lower() and dominant_color in {"red", "green"}:
+        return True
     return False
 
 
@@ -174,6 +200,7 @@ def recover_snack_variants_by_row(
 
     row_clusters = cluster_records_by_shelf_row(classified)
     stats["snack_row_rows"] = len(row_clusters)
+    image_height = int(source_image.shape[0]) if source_image is not None else 0
 
     for cluster in row_clusters:
         if len(cluster) < 2:
@@ -191,7 +218,9 @@ def recover_snack_variants_by_row(
         dominant_color = max(color_votes, key=color_votes.get)
         unknown_count = sum(1 for rec in cluster if _is_unknown_or_generic_lays(rec))
         min_ratio = 0.45 if unknown_count >= len(cluster) // 2 else 0.55
-        if color_votes[dominant_color] / len(cluster) < min_ratio:
+        force_ratio = 0.5
+        dominant_ratio = color_votes[dominant_color] / len(cluster)
+        if dominant_ratio < min_ratio:
             continue
 
         product = LAYS_ROW_PRODUCTS.get(dominant_color)
@@ -199,7 +228,11 @@ def recover_snack_variants_by_row(
             continue
 
         for rec in cluster:
-            if _should_skip_row_recovery(rec, dominant_color):
+            if _is_top_partial_facing(rec, image_height) and _is_unknown_or_generic_lays(rec):
+                if float(rec.get("confidence") or 0) < 0.55:
+                    continue
+            force = dominant_ratio >= force_ratio and _should_force_row_reconcile(rec, dominant_color)
+            if _should_skip_row_recovery(rec, dominant_color) and not force:
                 continue
 
             rec.update(
@@ -208,8 +241,8 @@ def recover_snack_variants_by_row(
                     "product_name": product["product_name"],
                     "sku": product["sku"],
                     "category": product["category"],
-                    "confidence": max(float(rec.get("confidence") or 0), 0.82),
-                    "recognition_source": "snack_row_color",
+                    "confidence": max(float(rec.get("confidence") or 0), 0.84 if force else 0.82),
+                    "recognition_source": "snack_row_color_force" if force else "snack_row_color",
                 }
             )
             stats["snack_row_recovery"] += 1
