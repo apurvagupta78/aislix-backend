@@ -126,6 +126,15 @@
     },
     {
       "category": "Fresh Food",
+      "sub_category": "bread",
+      "sub_category_label": "Bread",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Fresh Food",
       "sub_category": "others",
       "sub_category_label": "Others",
       "target_labeled_facings": 12,

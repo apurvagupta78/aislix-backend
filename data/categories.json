@@ -17,13 +17,14 @@
   {
     "id": "fresh_food",
     "name": "Fresh Food",
-    "examples": "Fruits, vegetables, fresh meat, fish, eggs",
+    "examples": "Fruits, vegetables, fresh meat, fish, eggs, bread",
     "subcategories": [
       {"id": "fruits", "label": "Fruits"},
       {"id": "vegetables", "label": "Vegetables"},
       {"id": "fresh_meat", "label": "Fresh meat"},
       {"id": "fish", "label": "Fish"},
       {"id": "eggs", "label": "Eggs"},
+      {"id": "bread", "label": "Bread"},
       {"id": "others", "label": "Others", "allow_custom": true}
     ]
   },
