@@ -13,7 +13,10 @@ OCR_UPSCALE_MIN = int(os.getenv("OCR_UPSCALE_MIN", "480"))
 OCR_UPSCALE_FACTOR = float(os.getenv("OCR_UPSCALE_FACTOR", "2.0"))
 OCR_TARGET_TEXT_HEIGHT = int(os.getenv("OCR_TARGET_TEXT_HEIGHT", "36"))
 OCR_DESKEW_MIN_DEG = float(os.getenv("OCR_DESKEW_MIN_DEG", "3.0"))
-OCR_VARIANT_DENOISE = os.getenv("OCR_VARIANT_DENOISE", "false").lower() in {"1", "true", "yes"}
+OCR_VARIANT_DENOISE = os.getenv("OCR_VARIANT_DENOISE", "true").lower() in {"1", "true", "yes"}
+OCR_PERSPECTIVE = os.getenv("OCR_PERSPECTIVE", "true").lower() in {"1", "true", "yes"}
+OCR_SUPER_RES_FACTOR = float(os.getenv("OCR_SUPER_RES_FACTOR", "3.0"))
+OCR_SUPER_RES_MIN = int(os.getenv("OCR_SUPER_RES_MIN", "1280"))
 
 
 @dataclass(frozen=True)
@@ -101,6 +104,81 @@ def deskew_if_needed(rgb: np.ndarray) -> np.ndarray:
     return rotated
 
 
+def _order_quad_points(pts: np.ndarray) -> np.ndarray:
+    """Order 4 points: top-left, top-right, bottom-right, bottom-left."""
+    rect = np.zeros((4, 2), dtype=np.float32)
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
+    return rect
+
+
+def correct_perspective(rgb: np.ndarray) -> np.ndarray:
+    """Warp angled pack face to a frontal rectangle when a quad is detected."""
+    h, w = rgb.shape[:2]
+    if h < 48 or w < 48:
+        return rgb
+
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blur, 40, 140)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return rgb
+
+    contour = max(contours, key=cv2.contourArea)
+    area = cv2.contourArea(contour)
+    if area < 0.12 * h * w:
+        return rgb
+
+    peri = cv2.arcLength(contour, True)
+    approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
+    if len(approx) != 4:
+        return rgb
+
+    pts = _order_quad_points(approx.reshape(4, 2).astype(np.float32))
+    width_a = np.linalg.norm(pts[1] - pts[0])
+    width_b = np.linalg.norm(pts[2] - pts[3])
+    height_a = np.linalg.norm(pts[3] - pts[0])
+    height_b = np.linalg.norm(pts[2] - pts[1])
+    max_w = int(max(width_a, width_b))
+    max_h = int(max(height_a, height_b))
+    if max_w < 24 or max_h < 24:
+        return rgb
+
+    dst = np.array(
+        [[0, 0], [max_w - 1, 0], [max_w - 1, max_h - 1], [0, max_h - 1]],
+        dtype=np.float32,
+    )
+    matrix = cv2.getPerspectiveTransform(pts, dst)
+    warped = cv2.warpPerspective(rgb, matrix, (max_w, max_h), flags=cv2.INTER_CUBIC)
+    return warped
+
+
+def apply_gamma(rgb: np.ndarray, gamma: float = 0.75) -> np.ndarray:
+    """Brighten dark bottle/carton crops."""
+    inv = 1.0 / max(gamma, 0.01)
+    table = np.array([((i / 255.0) ** inv) * 255 for i in range(256)]).astype("uint8")
+    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    corrected = cv2.LUT(bgr, table)
+    return cv2.cvtColor(corrected, cv2.COLOR_BGR2RGB)
+
+
+def apply_super_resolution(rgb: np.ndarray) -> np.ndarray:
+    """High-quality upscale + unsharp mask (lightweight super-resolution)."""
+    upscaled = _upscale_np(
+        rgb,
+        factor=OCR_SUPER_RES_FACTOR,
+        min_longest=max(OCR_SUPER_RES_MIN, OCR_UPSCALE_MIN),
+    )
+    blurred = cv2.GaussianBlur(upscaled, (0, 0), sigmaX=1.2)
+    sharpened = cv2.addWeighted(upscaled, 1.55, blurred, -0.55, 0)
+    return np.clip(sharpened, 0, 255).astype(np.uint8)
+
+
 def build_ocr_variants(image: Image.Image, *, heavy: bool = False) -> list[OcrVariant]:
     """
     Produce OCR-ready RGB variants from a product crop.
@@ -109,24 +187,31 @@ def build_ocr_variants(image: Image.Image, *, heavy: bool = False) -> list[OcrVa
     """
     base = pil_to_rgb_np(image)
     base = _upscale_np(base, min_longest=OCR_UPSCALE_MIN)
+    if OCR_PERSPECTIVE:
+        base = correct_perspective(base)
 
     variants: list[OcrVariant] = [
         OcrVariant("original", base),
         OcrVariant("upscale_2x", _upscale_np(base, factor=OCR_UPSCALE_FACTOR)),
         OcrVariant("clahe", apply_clahe(base)),
         OcrVariant("sharpen", apply_sharpen_contrast(base)),
+        OcrVariant("super_res", apply_super_resolution(base)),
     ]
 
     if heavy:
         deskewed = deskew_if_needed(base)
+        perspective = correct_perspective(base) if OCR_PERSPECTIVE else base
         variants.extend(
             [
+                OcrVariant("perspective", perspective),
+                OcrVariant("perspective_clahe", apply_clahe(perspective)),
+                OcrVariant("gamma", apply_gamma(base)),
                 OcrVariant("deskew", deskewed),
                 OcrVariant("deskew_clahe", apply_clahe(deskewed)),
                 OcrVariant("adaptive_thresh", apply_denoise_adaptive_threshold(base)),
                 OcrVariant(
                     "heavy_upscale",
-                    _upscale_np(base, min_longest=max(OCR_UPSCALE_MIN * 2, 960)),
+                    _upscale_np(base, min_longest=max(OCR_SUPER_RES_MIN, OCR_UPSCALE_MIN * 2)),
                 ),
             ]
         )

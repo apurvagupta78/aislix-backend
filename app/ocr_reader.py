@@ -17,6 +17,7 @@ EngineName = Literal["paddle", "easyocr"]
 ActiveEngine = EngineName | None
 
 _paddle_ocr: Any | None = None
+_paddle_ocr_by_lang: dict[str, Any] = {}
 _easyocr_reader: Any | None = None
 _active_engine: ActiveEngine = None
 _init_attempted = False
@@ -34,6 +35,8 @@ OCR_ENGINE = os.getenv("OCR_ENGINE", "paddle").strip().lower()
 OCR_PADDLE_REC_MODEL = os.getenv("OCR_PADDLE_REC_MODEL", "mobile").strip().lower()
 OCR_DET_DB_UNCLIP_RATIO = float(os.getenv("OCR_DET_DB_UNCLIP_RATIO", "1.6"))
 OCR_REC_ONLY_BANDS = os.getenv("OCR_REC_ONLY_BANDS", "true").lower() in {"1", "true", "yes"}
+OCR_PADDLE_REC_MODEL_DIR = os.getenv("OCR_PADDLE_REC_MODEL_DIR", "").strip()
+OCR_MULTILANG_MERGE = os.getenv("OCR_MULTILANG_MERGE", "true").lower() in {"1", "true", "yes"}
 
 SIZE_TOKEN_PATTERN = re.compile(
     r"\b(\d+(?:\.\d+)?)\s*(gms?|gm|g|kg|ml|ltr|l|unit|units|bags?|bag|pack|packs|pcs|pc)\b",
@@ -109,15 +112,20 @@ def _enrich_text_for_matching(text: str) -> str:
     return f"{text} {extra}"
 
 
-def _init_paddle() -> Any | None:
-    global _paddle_ocr, _paddle_init_error
-    if _paddle_ocr is not None:
-        return _paddle_ocr
+def _paddle_languages() -> list[str]:
+    raw = os.getenv("OCR_LANGUAGES", "en,hi")
+    langs = [part.strip() for part in raw.split(",") if part.strip()]
+    return langs or ["en"]
+
+
+def _init_paddle_for_lang(lang: str) -> Any | None:
+    global _paddle_init_error
+    if lang in _paddle_ocr_by_lang:
+        return _paddle_ocr_by_lang[lang]
     try:
         os.environ["FLAGS_use_mkldnn"] = "0"
         from paddleocr import PaddleOCR
 
-        lang = (os.getenv("OCR_LANGUAGES", "en").split(",")[0] or "en").strip()
         base_kwargs: dict[str, Any] = {
             "use_angle_cls": True,
             "lang": lang,
@@ -129,22 +137,38 @@ def _init_paddle() -> Any | None:
         }
         if OCR_PADDLE_REC_MODEL == "server":
             base_kwargs["ocr_version"] = "PP-OCRv4"
+        if OCR_PADDLE_REC_MODEL_DIR and OCR_PADDLE_REC_MODEL in {"custom", "server", "mobile"}:
+            base_kwargs["rec_model_dir"] = OCR_PADDLE_REC_MODEL_DIR
         try:
-            _paddle_ocr = PaddleOCR(**base_kwargs, enable_mkldnn=False)
+            engine = PaddleOCR(**base_kwargs, enable_mkldnn=False)
         except TypeError:
             try:
-                _paddle_ocr = PaddleOCR(**base_kwargs)
+                engine = PaddleOCR(**base_kwargs)
             except TypeError:
                 base_kwargs.pop("ocr_version", None)
                 base_kwargs.pop("det_db_unclip_ratio", None)
-                _paddle_ocr = PaddleOCR(**base_kwargs)
+                base_kwargs.pop("rec_model_dir", None)
+                engine = PaddleOCR(**base_kwargs)
+        _paddle_ocr_by_lang[lang] = engine
         _paddle_init_error = None
         print(f"PaddleOCR ready (lang={lang}, model={OCR_PADDLE_REC_MODEL})")
-        return _paddle_ocr
+        return engine
     except Exception as exc:
         _paddle_init_error = str(exc)
-        print(f"PaddleOCR unavailable: {exc}")
+        print(f"PaddleOCR unavailable for lang={lang}: {exc}")
         return None
+
+
+def _init_paddle() -> Any | None:
+    global _paddle_ocr, _paddle_init_error
+    if _paddle_ocr is not None:
+        return _paddle_ocr
+    for lang in _paddle_languages():
+        engine = _init_paddle_for_lang(lang)
+        if engine is not None:
+            _paddle_ocr = engine
+            return _paddle_ocr
+    return None
 
 
 def _init_easyocr() -> Any | None:
@@ -263,28 +287,42 @@ def _parse_paddle_lines(result: Any, *, relaxed: bool) -> tuple[str, float, list
     return merged, mean_conf, confidences
 
 
+def _postprocess_ocr_text(text: str) -> str:
+    from app.ocr_spell_correct import enrich_ocr_with_catalog_phrases
+
+    return enrich_ocr_with_catalog_phrases(_clean_ocr_text(text))
+
+
 def _read_with_paddle(
     arr: np.ndarray,
     *,
     relaxed: bool = False,
     rec_only: bool = False,
 ) -> tuple[str, float]:
-    ocr = _init_paddle()
-    if ocr is None:
-        return "", 0.0
-    try:
-        if rec_only:
-            try:
-                result = ocr.ocr(arr, det=False, rec=True, cls=True)
-            except TypeError:
+    langs = _paddle_languages() if OCR_MULTILANG_MERGE else [_paddle_languages()[0]]
+    best_text = ""
+    best_conf = 0.0
+
+    for lang in langs:
+        ocr = _init_paddle_for_lang(lang)
+        if ocr is None:
+            continue
+        try:
+            if rec_only:
+                try:
+                    result = ocr.ocr(arr, det=False, rec=True, cls=True)
+                except TypeError:
+                    result = ocr.ocr(arr, cls=True)
+            else:
                 result = ocr.ocr(arr, cls=True)
-        else:
-            result = ocr.ocr(arr, cls=True)
-    except Exception as exc:
-        print(f"PaddleOCR read failed: {exc}")
-        return "", 0.0
-    text, conf, _ = _parse_paddle_lines(result, relaxed=relaxed)
-    return text, conf
+        except Exception as exc:
+            print(f"PaddleOCR read failed ({lang}): {exc}")
+            continue
+        text, conf, _ = _parse_paddle_lines(result, relaxed=relaxed)
+        if conf > best_conf or (conf == best_conf and len(text) > len(best_text)):
+            best_text, best_conf = text, conf
+
+    return best_text, best_conf
 
 
 def _read_with_easyocr(arr: np.ndarray, *, relaxed: bool = False) -> tuple[str, float]:
@@ -374,7 +412,7 @@ def _run_multipass_on_crop(
 
     for variant in variants:
         text, ocr_conf = _read_variant(variant, relaxed=relaxed, rec_only=rec_only)
-        text = _clean_ocr_text(text)
+        text = _postprocess_ocr_text(text)
         if not text:
             continue
         score, catalog = score_ocr_candidate(text, ocr_conf, scan_context)
@@ -414,6 +452,7 @@ def ocr_engine_status() -> dict:
         "ocr_engine": active or "none",
         "ocr_engine_requested": requested,
         "ocr_paddle_rec_model": OCR_PADDLE_REC_MODEL,
+        "ocr_languages": _paddle_languages(),
         "ocr_fallback_reason": fallback,
     }
 
@@ -495,10 +534,15 @@ def read_packaging_text_result(
         band_results.extend([_read_band(top_band, band_rec_only=True), _read_band(center_band)])
 
     merged = _merge_results(*band_results)
-    if scan_context is not None and merged.text:
-        score, catalog = score_ocr_candidate(merged.text, merged.confidence, scan_context)
+    if merged.text:
+        post = _postprocess_ocr_text(merged.text)
+        score, catalog = score_ocr_candidate(
+            post,
+            merged.confidence,
+            scan_context,
+        )
         merged = OcrReadResult(
-            text=merged.text,
+            text=post,
             confidence=merged.confidence,
             variant=merged.variant,
             catalog_score=round(catalog, 4),

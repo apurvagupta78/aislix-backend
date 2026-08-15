@@ -19,7 +19,9 @@ def test_build_ocr_variants_includes_core_and_heavy():
     assert "original" in names_std
     assert "clahe" in names_std
     assert "upscale_2x" in names_std
+    assert "super_res" in names_std
     assert "adaptive_thresh" in names_heavy
+    assert "perspective" in names_heavy
     assert len(heavy) > len(standard)
 
 
