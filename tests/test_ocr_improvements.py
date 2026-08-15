@@ -94,6 +94,39 @@ def test_bag_color_orange_red_green():
     cool_blue_tomato[:, :, 2] = 110
     assert _bag_color_family(cool_blue_tomato, record) == "red"
 
+    warm_lit_green = np.zeros((120, 80, 3), dtype=np.uint8)
+    warm_lit_green[:, :, 0] = 80
+    warm_lit_green[:, :, 1] = 100
+    warm_lit_green[:, :, 2] = 115
+    assert _bag_color_family(warm_lit_green, record) == "green"
+
+    blue_cast_green2 = np.zeros((120, 80, 3), dtype=np.uint8)
+    blue_cast_green2[:, :, 0] = 118  # BGR: cool cast on green pack
+    blue_cast_green2[:, :, 1] = 98
+    blue_cast_green2[:, :, 2] = 92
+    assert _bag_color_family(blue_cast_green2, record) == "green"
+
+
+def test_snack_row_recovery_overrides_tomato_on_green_row():
+    ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
+    source = np.zeros((600, 400, 3), dtype=np.uint8)
+    source[50:150, 20:380, 2] = 200
+    source[50:150, 20:380, 1] = 120
+    source[50:150, 20:380, 0] = 40
+    source[450:550, 20:380, 0] = 115
+    source[450:550, 20:380, 1] = 100
+    source[450:550, 20:380, 2] = 80
+
+    classified = [
+        {"x1": 20, "y1": 50, "x2": 80, "y2": 150, "brand": "Lays", "product_name": "Indias Magic Masala Potato Chips", "confidence": 0.88},
+        {"x1": 20, "y1": 450, "x2": 80, "y2": 550, "brand": "Lays", "product_name": "Tomato Tango Potato Chips", "confidence": 0.86, "pack_text": "Tomato Tango"},
+        {"x1": 100, "y1": 455, "x2": 160, "y2": 545, "brand": "Lays", "product_name": "Tomato Tango Potato Chips", "confidence": 0.86, "pack_text": "Tomato"},
+    ]
+    updated, stats = recover_snack_variants_by_row(classified, source, ctx)
+    assert stats["snack_row_recovery"] >= 2
+    green_row = [r for r in updated if r["y1"] > 400]
+    assert all(row["product_name"] == "American Style Cream and Onion Potato Chips" for row in green_row)
+
 
 def test_snack_row_recovery_overrides_magic_masala_on_blue_tomato_row():
     ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})

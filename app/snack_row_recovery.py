@@ -83,16 +83,17 @@ def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
     g = float(sample[:, :, 1].mean())
     b = float(sample[:, :, 2].mean())
 
-    # Green Cream & Onion — allow blue photo cast (b can exceed g slightly).
-    if g > 70 and g >= r - 5 and g >= b - 28 and (g - min(r, b)) >= 8:
-        return "green"
-    # Warm orange/red Tomato Tango — must not map to Magic Masala (blue/teal packs).
-    if r > 95 and r > g + 10 and r > b + 10:
+    # Green Cream & Onion — allow warm lighting and blue freezer cast.
+    if g > 75 and g >= r - 18 and g >= b - 35:
+        if (g - min(r, b)) >= 5 or (g > r and g > b - 10):
+            return "green"
+    # Warm orange/red Tomato Tango — not greenish packs.
+    if r > 95 and r > g + 15 and r > b + 10 and g < r - 5:
         return "red"
-    if r > 105 and g > 65 and r > b + 25:
+    if r > 105 and g > 65 and r > b + 25 and g < r - 5:
         return "red"
-    # Cool blue-dominant packs (Tomato Tango) — before warm teal Magic Masala.
-    if b > 85 and b >= r and (b - r) >= 8 and r < 95:
+    # Cool blue-dominant Tomato — skip when green channel is strong (Cream & Onion under blue light).
+    if b > 85 and b >= r and (b - r) >= 8 and r < 95 and g < r + 5:
         return "red"
     # Dark blue Tomato Tango — blue-dominant, low warmth (not Magic Masala orange-blue).
     if b > 95 and b > r + 18 and b > g + 12 and r < 85:
@@ -128,13 +129,26 @@ def _should_skip_row_recovery(rec: dict, dominant_color: str) -> bool:
     product = (rec.get("product_name") or "").lower()
     if "magic masala" in product and dominant_color in {"red", "green", "orange"}:
         return False
+    if "tomato" in product and dominant_color == "green":
+        return False
+    if ("cream" in product or "onion" in product) and dominant_color == "red":
+        return False
     pack_text = (rec.get("pack_text") or "").strip()
+    pack_lower = pack_text.lower()
     current_color = _lays_color_for_product(rec)
     if current_color and not _color_families_compatible(current_color, dominant_color):
         return False
     if _has_distinct_lays_flavor(rec) and not _is_unknown_or_generic_lays(rec):
+        if dominant_color == "green" and "tomato" in product:
+            return False
+        if dominant_color == "red" and ("cream" in product or "onion" in product):
+            return False
         return True
     if _ocr_has_lays_flavor(pack_text) and not _is_unknown_or_generic_lays(rec):
+        if dominant_color == "green" and "tomato" in pack_lower:
+            return False
+        if dominant_color == "red" and ("cream" in pack_lower or "onion" in pack_lower):
+            return False
         return True
     if not _is_unknown_or_generic_lays(rec):
         brand = _norm_brand(rec.get("brand") or "")
@@ -163,6 +177,11 @@ def _should_force_row_reconcile(rec: dict, dominant_color: str) -> bool:
         "green",
         "orange",
     }:
+        return True
+    product_lower = (rec.get("product_name") or "").lower()
+    if "tomato" in product_lower and dominant_color == "green":
+        return True
+    if ("cream" in product_lower or "onion" in product_lower) and dominant_color == "red":
         return True
     return False
 
