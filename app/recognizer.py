@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 from io import BytesIO
 
 import numpy as np
@@ -26,7 +27,7 @@ from app.brand_dictionary import (
 from app.clip_embeddings import embed_pil_images
 from app.faiss_matcher import is_ready, match_embeddings_batch, match_embeddings_batch_topk
 from app.learned_catalog import learn_sku, metadata_to_sku
-from app.ocr_reader import classify_with_ocr, read_packaging_text
+from app.ocr_reader import classify_with_ocr, load_facing_image, read_packaging_text
 from app.scan_context import (
     gpt_context_prompt,
     label_fits_scan_context,
@@ -798,11 +799,39 @@ def _finalize_classification_strict(
         classified[index] = row
 
 
+def _ocr_has_lays_brand_only(ocr_text: str) -> bool:
+    text = (ocr_text or "").lower()
+    if not re.search(r"lay'?s\b", text):
+        return False
+    flavor_tokens = (
+        "magic masala",
+        "tomato tango",
+        "cream",
+        "onion",
+        "american style",
+        "classic salted",
+        "india",
+    )
+    return not any(token in text for token in flavor_tokens)
+
+
+def _is_generic_lays_faiss_match(match: dict, ocr_text: str) -> bool:
+    """Block default Classic Salted FAISS when OCR only read the Lay's logo."""
+    brand = re.sub(r"[^a-z0-9]", "", (match.get("brand") or "").lower())
+    if brand != "lays":
+        return False
+    product = (match.get("product_name") or "").lower()
+    if "classic salted" not in product:
+        return False
+    return _ocr_has_lays_brand_only(ocr_text)
+
+
 def classify_records_strict(
     records: list[dict],
     scan_id: str | None = None,
     scan_category: str | None = None,
     scan_context: dict | None = None,
+    source_image: np.ndarray | None = None,
 ) -> tuple[list[dict], dict]:
     """
     Production pipeline: OCR → FAISS (OCR-gated on snacks) → GPT fallback → Unknown.
@@ -811,16 +840,18 @@ def classify_records_strict(
     if not records:
         return [], {}
 
-    images = [Image.open(record["image_path"]).convert("RGB") for record in records]
+    images = [load_facing_image(record, source_image) for record in records]
     embeddings = embed_pil_images(images)
     classified: list[dict | None] = [None] * len(records)
-    stats = {"ocr": 0, "faiss": 0, "learned": 0, "propagate": 0, "gpt": 0, "none": 0, "gpt_calls": 0}
+    stats = {"ocr": 0, "faiss": 0, "learned": 0, "propagate": 0, "gpt": 0, "none": 0, "gpt_calls": 0, "ocr_empty": 0}
     ocr_texts: list[str] = [""] * len(records)
 
     for index in range(len(records)):
         pack_text = read_packaging_text(images[index])
         if len(pack_text.strip()) < 3:
             pack_text = read_packaging_text(images[index], aggressive=True)
+            if len(pack_text.strip()) < 3:
+                stats["ocr_empty"] = int(stats.get("ocr_empty") or 0) + 1
         ocr_texts[index] = pack_text
 
         ocr_label = classify_with_ocr(
@@ -862,6 +893,9 @@ def classify_records_strict(
             )
             if picked:
                 faiss_label, faiss_score = picked
+            if faiss_label and _is_generic_lays_faiss_match(faiss_label, pack_text):
+                faiss_label = None
+                faiss_score = 0.0
 
         if faiss_label:
             merged = _merge_label(records[index], faiss_label)
@@ -1540,6 +1574,7 @@ def classify_records(
     scan_id: str | None = None,
     scan_category: str | None = None,
     scan_context: dict | None = None,
+    source_image: np.ndarray | None = None,
 ) -> tuple[list[dict], dict]:
     if scan_context and scan_context.get("planogram_candidates"):
         from app.planogram_guided import classify_records_planogram_guided
@@ -1549,6 +1584,7 @@ def classify_records(
             scan_id=scan_id,
             scan_category=scan_category,
             scan_context=scan_context,
+            source_image=source_image,
         )
         print(
             "Recognition planogram-guided:",
@@ -1567,6 +1603,7 @@ def classify_records(
             scan_id=scan_id,
             scan_category=scan_category,
             scan_context=scan_context,
+            source_image=source_image,
         )
         print(
             "Recognition strict (FAISS→OCR→Unknown):",

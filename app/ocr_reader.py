@@ -25,12 +25,28 @@ OCR_LINE_MIN_CONFIDENCE = float(os.getenv("OCR_LINE_MIN_CONFIDENCE", "0.45"))
 OCR_SHORT_WORD_MIN_CONFIDENCE = float(os.getenv("OCR_SHORT_WORD_MIN_CONFIDENCE", "0.32"))
 OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() in {"1", "true", "yes"}
 OCR_UPSCALE_MIN = int(os.getenv("OCR_UPSCALE_MIN", "480"))
+OCR_AGGRESSIVE_TARGET = int(os.getenv("OCR_AGGRESSIVE_TARGET", "1280"))
+OCR_CROP_PADDING = float(os.getenv("OCR_CROP_PADDING", "0.08"))
 OCR_ENGINE = os.getenv("OCR_ENGINE", "easyocr").strip().lower()
 
 SIZE_TOKEN_PATTERN = re.compile(
     r"\b(\d+(?:\.\d+)?)\s*(gms?|gm|g|kg|ml|ltr|l|unit|units|bags?|bag|pack|packs|pcs|pc)\b",
     re.IGNORECASE,
 )
+
+
+def flavor_focus_crop(image: Image.Image) -> Image.Image:
+    """Middle band where Lay's flavor names sit (below logo, above weight)."""
+    width, height = image.size
+    if width < 12 or height < 12:
+        return image
+    left = int(width * 0.06)
+    right = int(width * 0.94)
+    top = int(height * 0.35)
+    bottom = int(height * 0.72)
+    if right - left < 8 or bottom - top < 8:
+        return image
+    return image.crop((left, top, right, bottom))
 
 
 def logo_focus_crop(image: Image.Image) -> Image.Image:
@@ -157,14 +173,59 @@ def _resolve_engine() -> ActiveEngine:
     return None
 
 
-def _line_confidence_ok(text: str, conf: float) -> bool:
+def _line_confidence_ok(text: str, conf: float, *, relaxed: bool = False) -> bool:
     token = re.sub(r"[^a-zA-Z0-9]", "", text)
+    short_min = max(0.22, OCR_SHORT_WORD_MIN_CONFIDENCE - (0.07 if relaxed else 0.0))
+    line_min = max(0.35, OCR_LINE_MIN_CONFIDENCE - (0.08 if relaxed else 0.0))
     if len(token) <= 5:
-        return conf >= OCR_SHORT_WORD_MIN_CONFIDENCE
-    return conf >= OCR_LINE_MIN_CONFIDENCE
+        return conf >= short_min
+    return conf >= line_min
 
 
-def _read_with_paddle(arr: np.ndarray) -> str:
+def pil_from_bbox(
+    source_image: np.ndarray,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    padding: float | None = None,
+) -> Image.Image:
+    """Re-crop a facing from the full-resolution shelf image (no JPEG round-trip)."""
+    import cv2
+
+    pad = OCR_CROP_PADDING if padding is None else padding
+    height, width = source_image.shape[:2]
+    box_w = max(1, x2 - x1)
+    box_h = max(1, y2 - y1)
+    pad_x = int(box_w * pad)
+    pad_y = int(box_h * pad)
+    nx1 = max(0, x1 - pad_x)
+    ny1 = max(0, y1 - pad_y)
+    nx2 = min(width, x2 + pad_x)
+    ny2 = min(height, y2 + pad_y)
+    crop = source_image[ny1:ny2, nx1:nx2]
+    if crop.size == 0:
+        crop = source_image[max(0, y1) : min(height, y2), max(0, x1) : min(width, x2)]
+    rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+    return Image.fromarray(rgb)
+
+
+def load_facing_image(record: dict, source_image: np.ndarray | None = None) -> Image.Image:
+    """Prefer full-res bbox crop over the temp JPEG written during detection."""
+    if source_image is not None:
+        return pil_from_bbox(
+            source_image,
+            int(record["x1"]),
+            int(record["y1"]),
+            int(record["x2"]),
+            int(record["y2"]),
+        )
+    from PIL import Image as PILImage
+
+    return PILImage.open(record["image_path"]).convert("RGB")
+
+
+def _read_with_paddle(arr: np.ndarray, *, relaxed: bool = False) -> str:
     ocr = _init_paddle()
     if ocr is None:
         return ""
@@ -185,12 +246,12 @@ def _read_with_paddle(arr: np.ndarray) -> str:
             if not isinstance(text_conf, (list, tuple)) or len(text_conf) < 2:
                 continue
             text, conf = str(text_conf[0]), float(text_conf[1])
-            if text.strip() and _line_confidence_ok(text, conf):
+            if text.strip() and _line_confidence_ok(text, conf, relaxed=relaxed):
                 lines.append(text.strip())
     return " ".join(lines)
 
 
-def _read_with_easyocr(arr: np.ndarray) -> str:
+def _read_with_easyocr(arr: np.ndarray, *, relaxed: bool = False) -> str:
     reader = _init_easyocr()
     if reader is None:
         return ""
@@ -201,7 +262,7 @@ def _read_with_easyocr(arr: np.ndarray) -> str:
             if not item or len(item) < 3:
                 continue
             text, conf = str(item[1]), float(item[2])
-            if text.strip() and _line_confidence_ok(text, conf):
+            if text.strip() and _line_confidence_ok(text, conf, relaxed=relaxed):
                 lines.append(text.strip())
         if lines:
             return " ".join(lines)
@@ -327,7 +388,7 @@ def read_packaging_text(image: Image.Image, *, aggressive: bool = False) -> str:
         if use_aggressive:
             crop = _upscale_if_small(crop)
             longest = max(crop.size)
-            target = 960 if max(crop.size) < 120 else 640
+            target = OCR_AGGRESSIVE_TARGET if max(crop.size) < 160 else max(640, OCR_AGGRESSIVE_TARGET // 2)
             if longest < target:
                 scale = target / float(longest)
                 crop = crop.resize(
@@ -340,12 +401,19 @@ def read_packaging_text(image: Image.Image, *, aggressive: bool = False) -> str:
             if engine is None:
                 return ""
             arr = np.asarray(prepared)
-            raw = _read_with_paddle(arr) if engine == "paddle" else _read_with_easyocr(arr)
+            relaxed = force_aggressive or aggressive
+            raw = (
+                _read_with_paddle(arr, relaxed=relaxed)
+                if engine == "paddle"
+                else _read_with_easyocr(arr, relaxed=relaxed)
+            )
             return _clean_ocr_text(raw)
         return _clean_ocr_text(read_text_from_pil(crop))
 
     logo_band = logo_focus_crop(pack_crop)
+    flavor_band = flavor_focus_crop(pack_crop)
     logo_text = _read_crop(logo_band)
+    flavor_text = _read_crop(flavor_band)
     full_text = _read_crop(pack_crop)
     if pack_bottom >= 40:
         band_h = max(1, int(pack_bottom * 0.45))
@@ -355,14 +423,23 @@ def read_packaging_text(image: Image.Image, *, aggressive: bool = False) -> str:
         center_bottom = min(pack_bottom, int(pack_bottom * 0.65))
         center_band = pack_crop.crop((0, center_top, width, center_bottom))
         center_text = _read_crop(center_band)
-        merged = _merge_ocr_texts(logo_text, top_text, center_text, full_text)
+        merged = _merge_ocr_texts(logo_text, flavor_text, top_text, center_text, full_text)
         if len(merged.strip()) < 3:
             merged = _merge_ocr_texts(
                 _read_crop(logo_band, force_aggressive=True),
+                _read_crop(flavor_band, force_aggressive=True),
                 merged,
             )
+        if len(merged.strip()) < 3:
+            merged = _merge_ocr_texts(_read_crop(pack_crop, force_aggressive=True), merged)
         return merged
-    merged = _merge_ocr_texts(logo_text, full_text)
+    merged = _merge_ocr_texts(logo_text, flavor_text, full_text)
     if len(merged.strip()) < 3:
-        merged = _merge_ocr_texts(_read_crop(logo_band, force_aggressive=True), merged)
+        merged = _merge_ocr_texts(
+            _read_crop(logo_band, force_aggressive=True),
+            _read_crop(flavor_band, force_aggressive=True),
+            merged,
+        )
+    if len(merged.strip()) < 3:
+        merged = _merge_ocr_texts(_read_crop(pack_crop, force_aggressive=True), merged)
     return merged

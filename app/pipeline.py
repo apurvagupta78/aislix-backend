@@ -191,9 +191,19 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             scan_id=scan_id,
             scan_category=scan_category,
             scan_context=scan_context,
+            source_image=image,
         )
         classified = normalize_classified_labels(classified)
         classified = filter_nested_facings(classified, layout=shelf_mode)
+        if not scan_context.get("planogram_candidates"):
+            from app.snack_row_recovery import recover_snack_variants_by_row
+
+            classified, row_stats = recover_snack_variants_by_row(
+                classified,
+                image,
+                scan_context,
+            )
+            recognition_engine_stats.update(row_stats)
         if scan_context.get("planogram_mode") and scan_context.get("planogram_candidates"):
             from app.planogram_guided import (
                 assign_planogram_shelf_rows,
@@ -278,6 +288,10 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             "planogram_guided" if scan_context.get("planogram_candidates") else active_recognition_mode()
         )
         metrics["gpt_vision_calls"] = int(recognition_engine_stats.get("gpt_calls") or 0)
+        if recognition_engine_stats.get("ocr_empty") is not None:
+            metrics["ocr_empty_facings"] = int(recognition_engine_stats.get("ocr_empty") or 0)
+        if recognition_engine_stats.get("snack_row_recovery"):
+            metrics["snack_row_recovery"] = int(recognition_engine_stats["snack_row_recovery"])
         if scan_context.get("planogram_mode"):
             metrics["planogram_guided_recognition"] = True
             metrics["planogram_candidate_count"] = len(scan_context.get("planogram_candidates") or [])

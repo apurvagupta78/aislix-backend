@@ -13,7 +13,7 @@ from PIL import Image
 
 from app.inventory import _normalize_brand_key
 from app.learned_catalog import metadata_to_sku
-from app.ocr_reader import classify_with_ocr, read_packaging_text
+from app.ocr_reader import classify_with_ocr, load_facing_image, read_packaging_text
 from app.planogram_compliance import _brand_key, _norm, _text_has_kind, _token_overlap
 from app.planogram_csv import build_match_key
 
@@ -633,6 +633,7 @@ def classify_records_planogram_guided(
     scan_id: str | None = None,
     scan_category: str | None = None,
     scan_context: dict | None = None,
+    source_image: np.ndarray | None = None,
 ) -> tuple[list[dict], dict]:
     """Recognize crops using only planogram candidate SKUs."""
     from app.clip_embeddings import embed_pil_images
@@ -647,7 +648,7 @@ def classify_records_planogram_guided(
         classify_fn = classify_records_v3 if v3_on() else classify_records_v2
         return classify_fn(records, scan_id=scan_id, scan_category=scan_category, scan_context=scan_context)
 
-    images = [Image.open(record["image_path"]).convert("RGB") for record in records]
+    images = [load_facing_image(record, source_image) for record in records]
     embeddings = embed_pil_images(images)
     classified: list[dict | None] = [None] * len(records)
     stats = {"ocr": 0, "gpt": 0, "faiss": 0, "planogram": 0, "none": 0, "gpt_calls": 0}
