@@ -128,3 +128,12 @@ def test_personal_care_blocks_food_skus():
     label = {"brand": "Dabur", "product_name": "Hajmola Imli Digestive Tablets"}
     assert personal_care_food_mismatch(label, ctx)
     assert not personal_care_food_mismatch({"brand": "Dove", "product_name": "Shampoo"}, ctx)
+
+
+def test_lays_flavor_scoring_picks_correct_sku():
+    from app.brand_dictionary import match_product_for_brand
+
+    ctx = {"sub_category": "chips"}
+    match = match_product_for_brand("Lays", "lays magic masala potato chips", scan_context=ctx)
+    assert match is not None
+    assert "magic masala" in (match.get("product_name") or "").lower()

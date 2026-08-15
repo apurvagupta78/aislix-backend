@@ -666,10 +666,10 @@ def _flavor_token_bonus(normalized: str, product_l: str) -> float:
     """Prefer SKUs whose flavor tokens appear in OCR when scores tie."""
     bonus = 0.0
     groups = (
-        (("magic", "masala"),),
-        (("tomato", "tango"),),
-        (("cream", "onion"),),
-        (("classic", "salted"),),
+        ("magic", "masala"),
+        ("tomato", "tango"),
+        ("cream", "onion"),
+        ("classic", "salted"),
     )
     for tokens in groups:
         if all(token in normalized for token in tokens) and all(token in product_l for token in tokens):
