@@ -53,9 +53,9 @@ def test_bag_color_orange_red_green():
     record = {"x1": 0, "y1": 0, "x2": 80, "y2": 120}
 
     blue_bgr = np.zeros((120, 80, 3), dtype=np.uint8)
-    blue_bgr[:, :, 0] = 180  # B channel in BGR
-    blue_bgr[:, :, 1] = 100
-    blue_bgr[:, :, 2] = 60
+    blue_bgr[:, :, 0] = 140  # B channel in BGR — Magic Masala teal with warm tone
+    blue_bgr[:, :, 1] = 90
+    blue_bgr[:, :, 2] = 100
     assert _bag_color_family(blue_bgr, record) == "blue"
 
     orange_bgr = np.zeros((120, 80, 3), dtype=np.uint8)
@@ -71,10 +71,16 @@ def test_bag_color_orange_red_green():
     assert _bag_color_family(red_bgr, record) == "red"
 
     green_bgr = np.zeros((120, 80, 3), dtype=np.uint8)
-    green_bgr[:, :, 2] = 40
-    green_bgr[:, :, 1] = 150
     green_bgr[:, :, 0] = 90
+    green_bgr[:, :, 1] = 150
+    green_bgr[:, :, 2] = 40
     assert _bag_color_family(green_bgr, record) == "green"
+
+    tomato_bgr = np.zeros((120, 80, 3), dtype=np.uint8)
+    tomato_bgr[:, :, 0] = 160  # cool dark blue Tomato Tango pack
+    tomato_bgr[:, :, 1] = 50
+    tomato_bgr[:, :, 2] = 55
+    assert _bag_color_family(tomato_bgr, record) == "red"
 
 
 def test_snack_row_recovery_assigns_unknowns_by_row():

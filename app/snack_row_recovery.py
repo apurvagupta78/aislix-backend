@@ -89,16 +89,28 @@ def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
     g = float(sample[:, :, 1].mean())
     b = float(sample[:, :, 2].mean())
 
-    # India's Magic Masala — often blue/teal bags on Indian racks.
-    if b > 80 and b >= r - 5 and b > g - 25:
-        return "blue"
-    if r > 105 and g > 75 and b < 95 and (r + g) > (b + 120) and abs(r - g) < 85:
-        return "orange"
-    if r > 95 and r > g + 22 and r > b + 22:
-        return "red"
-    if g > 85 and g >= r and g > b - 10:
+    # Order matters: green first, then orange (before warm red), then tomato tango dark blue.
+    if g > 88 and g > r + 10 and g >= b - 8:
         return "green"
+    if r > 105 and g > 65 and r > b + 25:
+        return "orange"
+    if r > 95 and r > g + 15 and r > b + 12:
+        return "red"
+    # Dark blue Tomato Tango — blue-dominant, low warmth (not Magic Masala orange-blue).
+    if b > 95 and b > r + 18 and b > g + 12 and r < 85:
+        return "red"
+    # India's Magic Masala — blue-teal with warm orange undertone (not pure cool blue).
+    if b > 85 and r > 65 and g > 45 and b >= r - 12 and b < r + 45:
+        return "blue"
     return "unknown"
+
+
+def _has_distinct_lays_flavor(row: dict) -> bool:
+    product = (row.get("product_name") or "").lower()
+    return any(
+        token in product
+        for token in ("magic masala", "tomato tango", "cream", "onion", "classic salted")
+    )
 
 
 def should_use_snack_row_recovery(
@@ -154,11 +166,13 @@ def recover_snack_variants_by_row(
 
         for rec in cluster:
             pack_text = (rec.get("pack_text") or "").strip()
+            if _has_distinct_lays_flavor(rec) and not _is_unknown_or_generic_lays(rec):
+                continue
             if _ocr_has_lays_flavor(pack_text) and not _is_unknown_or_generic_lays(rec):
                 continue
             if not _is_unknown_or_generic_lays(rec):
                 brand = _norm_brand(rec.get("brand") or "")
-                if brand not in {"lays", "lays"}:
+                if brand not in {"lays"}:
                     continue
 
             rec.update(

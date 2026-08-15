@@ -10,11 +10,49 @@ import numpy as np
 from app.report_generator import (
     PDF_SUMMARY_IMAGE_MAX_HEIGHT,
     PDF_SUMMARY_IMAGE_WIDTH,
+    _annotation_label,
     _fit_image_size,
     encode_annotated_image_bytes,
+    encode_shelf_image_bytes,
     generate_annotated_image,
     generate_pdf_bytes,
 )
+
+
+def test_annotation_uses_short_flavor_on_small_boxes():
+    label = _annotation_label(
+        {
+            "brand": "Lays",
+            "product_name": "Indias Magic Masala Potato Chips",
+            "x1": 0,
+            "x2": 70,
+            "y1": 0,
+            "y2": 100,
+        },
+        img_w=400,
+    )
+    assert "Magic Masala" in label
+    assert "Potato Chips" not in label
+
+
+def test_original_and_annotated_share_dimensions():
+    image = np.random.randint(0, 255, (200, 300, 3), dtype=np.uint8)
+    classified = [
+        {
+            "brand": "Lays",
+            "product_name": "Tomato Tango Potato Chips",
+            "x1": 10,
+            "y1": 10,
+            "x2": 80,
+            "y2": 120,
+        }
+    ]
+    original = encode_shelf_image_bytes(image)
+    annotated = encode_annotated_image_bytes(generate_annotated_image(image, classified))
+    assert original[:2] == b"\xff\xd8"
+    assert annotated[:2] == b"\xff\xd8"
+    assert len(original) > 1000
+    assert len(annotated) > 1000
 
 
 def test_pdf_uses_same_jpeg_bytes_as_download():

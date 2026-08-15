@@ -147,6 +147,37 @@ Use `scan_images` kind=`annotated` signed URL when available; fall back to `raw_
 When uploading to Supabase storage, store JPEG bytes **as-is** — do not crop, resize, or re-encode the annotated image.
 Use `annotated_image_width` / `annotated_image_height` from metrics or raw_payload so the browser preserves aspect ratio (never force square `object-fit: cover`).
 
+## STEP 6 — Show backend JPEG directly (fix blue/blur overlay)
+
+The blurred blue tint happens when the frontend **re-draws** detections on a `<canvas>` or applies CSS filters over a low-res crop. **Do not do that.**
+
+Backend now returns both:
+- `annotated_image_base64` — original photo + green/red boxes + flavor labels (same bytes as PDF)
+- `original_image_base64` — clean shelf photo with no boxes (fallback if annotated URL missing)
+
+```tsx
+// Display annotated shelf — NEVER canvas overlay from products[]
+const annotatedSrc =
+  downloads?.annotated_image_url ??
+  (rawPayload?.annotated_image_base64
+    ? `data:image/jpeg;base64,${rawPayload.annotated_image_base64}`
+    : rawPayload?.original_image_base64
+      ? `data:image/jpeg;base64,${rawPayload.original_image_base64}`
+      : null);
+
+{annotatedSrc && (
+  <img
+    src={annotatedSrc}
+    alt="Annotated shelf"
+    className="w-full rounded-lg"
+    style={{ objectFit: "contain", maxHeight: "70vh" }}
+  />
+)}
+```
+
+Remove: canvas/SVG box overlays, `filter: blur()`, blue tint layers, `object-fit: cover` on shelf photos.
+Store `scan_images` kind=`annotated` using the exact base64 JPEG from Railway — no client-side re-encode.
+
 ## TEST
 
 1. Complete a new scan → Downloads → Annotated image → file saves as `aislix-{id}-annotated.jpg` (not new tab)

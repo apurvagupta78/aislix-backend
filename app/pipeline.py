@@ -39,6 +39,7 @@ from app.recognizer import classify_records
 from app.report_generator import (
     annotated_image_dimensions,
     encode_annotated_image_bytes,
+    encode_shelf_image_bytes,
     generate_annotated_image,
     generate_csv_bytes,
     generate_pdf_bytes,
@@ -309,6 +310,10 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
                 metrics["detection_mode"] = gap_stats["detection_mode"]
         if planogram_compliance:
             metrics["planogram_compliance_percent"] = planogram_compliance.get("compliance_percent")
+            metrics["planogram_sku_match_percent"] = planogram_compliance.get("planogram_sku_match_percent")
+            metrics["planogram_qty_compliance_percent"] = planogram_compliance.get(
+                "planogram_qty_compliance_percent"
+            )
             metrics["planogram_summary"] = planogram_compliance.get("summary")
         shares = brand_share(inventory)
         categories = category_breakdown(inventory)
@@ -322,11 +327,15 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         learned_updates = pop_learned_updates()
 
         annotated = generate_annotated_image(image, classified)
+        original_jpeg = encode_shelf_image_bytes(image)
         annotated_jpeg = encode_annotated_image_bytes(annotated)
         annotated_dims = annotated_image_dimensions(annotated)
+        original_b64 = base64.b64encode(original_jpeg).decode("utf-8")
         annotated_b64 = base64.b64encode(annotated_jpeg).decode("utf-8")
         metrics["annotated_image_width"] = annotated_dims["width"]
         metrics["annotated_image_height"] = annotated_dims["height"]
+        metrics["original_image_width"] = annotated_dims["width"]
+        metrics["original_image_height"] = annotated_dims["height"]
 
         pdf_b64 = generate_pdf_bytes(
             scan_id=scan_id,
@@ -364,6 +373,10 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             "annotated_image_mime": "image/jpeg",
             "annotated_image_width": annotated_dims["width"],
             "annotated_image_height": annotated_dims["height"],
+            "original_image_base64": original_b64,
+            "original_image_mime": "image/jpeg",
+            "original_image_width": annotated_dims["width"],
+            "original_image_height": annotated_dims["height"],
             "planogram_compliance": planogram_compliance,
             "assignment_id": metadata.get("assignment_id"),
             "pdf_base64": pdf_b64,

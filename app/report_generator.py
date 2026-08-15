@@ -37,21 +37,35 @@ def _ascii_label(text: str) -> str:
     return normalized.encode("ascii", "ignore").decode("ascii").strip()
 
 
+def _short_product_name(product: str) -> str:
+    """Compact flavor label for small bounding boxes on chip facings."""
+    p = (product or "").lower()
+    if "magic masala" in p:
+        return "Magic Masala"
+    if "tomato tango" in p:
+        return "Tomato Tango"
+    if "cream" in p and "onion" in p:
+        return "Cream & Onion"
+    if "classic salted" in p:
+        return "Classic Salted"
+    words = (product or "").split()
+    return " ".join(words[:3]) if words else ""
+
+
 def _annotation_label(item: dict, img_w: int | None = None) -> str:
     brand = _ascii_label((item.get("brand") or "?").strip())
     product = _ascii_label((item.get("product_name") or "").strip())
+    short_product = _short_product_name(product)
     skip_product = product.lower() in {"", "unknown", "unidentified sku", brand.lower()}
     box_w = int(item.get("x2", 0)) - int(item.get("x1", 0))
     near_edge = img_w is not None and int(item.get("x2", 0)) >= img_w - 12
-    max_len = 22 if (box_w < 90 or near_edge) else 40
+    max_len = 28 if (box_w < 90 or near_edge) else 44
     if item.get("subcategory_match") is False:
         prefix = "WRONG: "
         budget = max_len - len(prefix)
         return f"{prefix}{brand[:max(budget, 8)]}"
-    if product and not skip_product:
-        label = f"{brand} - {product}"
-        if len(label) > max_len:
-            return brand[:max_len]
+    if short_product and not skip_product:
+        label = f"{brand} - {short_product}"
         return label[:max_len]
     return brand[:max_len]
 
@@ -102,7 +116,16 @@ def generate_annotated_image(image: np.ndarray, classified: list[dict]) -> np.nd
     return annotated
 
 
-def encode_annotated_image_bytes(annotated: np.ndarray, *, quality: int = 95) -> bytes:
+def encode_shelf_image_bytes(image: np.ndarray, *, quality: int = 92) -> bytes:
+    """Encode the original shelf photo as JPEG (no boxes) — same color path as annotated output."""
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    ok, encoded = cv2.imencode(".jpg", rgb, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    if not ok:
+        raise ValueError("Could not encode shelf image.")
+    return encoded.tobytes()
+
+
+def encode_annotated_image_bytes(annotated: np.ndarray, *, quality: int = 92) -> bytes:
     """Encode annotated shelf image once — shared by download JPEG and PDF embed."""
     rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
     ok, encoded = cv2.imencode(".jpg", rgb, [int(cv2.IMWRITE_JPEG_QUALITY), quality])

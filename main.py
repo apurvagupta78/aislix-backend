@@ -265,6 +265,7 @@ async def export_assets(request: Request):
     return {
         "pdf_base64": result.get("pdf_base64"),
         "annotated_image_base64": result.get("annotated_image_base64"),
+        "original_image_base64": result.get("original_image_base64"),
         "csv_base64": result.get("csv_base64"),
     }
 

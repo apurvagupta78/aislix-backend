@@ -448,6 +448,9 @@ def compare_planogram(
     }
 
     total_checks = len(scoped_expected) or 1
+    sku_matched = total_checks - summary["missing_products"] - summary["wrong_products"]
+    planogram_sku_match_percent = round(100.0 * sku_matched / total_checks, 2)
+
     correct_weight = float(summary["correct_products"])
     for ln in lines:
         if ln["issue_type"] != ISSUE_QTY_MISMATCH:
@@ -463,7 +466,9 @@ def compare_planogram(
         }
         if int(ln.get("actual_qty") or 0) > 0 and _brand_and_type_match(exp, act, scan_context):
             correct_weight += 0.75
-    compliance_percent = round(100.0 * correct_weight / total_checks, 2)
+    qty_compliance_percent = round(100.0 * correct_weight / total_checks, 2)
+    # Headline compliance = SKU presence (3/3 found). Qty detail stays in lines / qty_compliance_percent.
+    compliance_percent = planogram_sku_match_percent
 
     corrective_actions = [
         {
@@ -485,6 +490,8 @@ def compare_planogram(
 
     return {
         "compliance_percent": compliance_percent,
+        "planogram_sku_match_percent": planogram_sku_match_percent,
+        "planogram_qty_compliance_percent": qty_compliance_percent,
         "summary": summary,
         "lines": lines,
         "corrective_actions": corrective_actions,

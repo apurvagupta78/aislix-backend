@@ -381,5 +381,7 @@ def test_lays_planogram_product_level_compliance_not_zero_on_three_skus():
     )
     assert result["summary"]["expected_products"] == 3
     assert result["summary"]["missing_products"] == 0
-    assert result["compliance_percent"] >= 75.0
+    assert result["planogram_sku_match_percent"] == 100.0
+    assert result["compliance_percent"] == 100.0
+    assert result["planogram_qty_compliance_percent"] >= 75.0
 
