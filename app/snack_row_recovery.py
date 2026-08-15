@@ -23,6 +23,22 @@ LAYS_FLAVOR_TOKENS = (
     "india",
 )
 
+MIXED_SNACK_BRANDS = frozenset(
+    {"crax", "kurkure", "bingo", "pringles", "haldiram", "balaji", "tooyumm", "too yumm"}
+)
+
+OTHER_SNACK_OCR_MARKERS = (
+    "kurkure",
+    "bingo",
+    "crax",
+    "pringles",
+    "tedhe medhe",
+    "mad angles",
+    "masala munch",
+    "rings",
+    "curls",
+)
+
 LAYS_ROW_PRODUCTS: dict[str, dict[str, str]] = {
     "blue": {
         "brand": "Lays",
@@ -47,6 +63,39 @@ LAYS_ROW_PRODUCTS: dict[str, dict[str, str]] = {
 
 def _norm_brand(brand: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (brand or "").lower())
+
+
+def _is_non_lays_snack_brand(rec: dict) -> bool:
+    brand = _norm_brand(rec.get("brand") or "")
+    return brand in MIXED_SNACK_BRANDS
+
+
+def _pack_text_indicates_other_snack(text: str) -> bool:
+    text_l = (text or "").lower()
+    if re.search(r"lay(?:'|s)?s\b", text_l):
+        return False
+    return any(marker in text_l for marker in OTHER_SNACK_OCR_MARKERS)
+
+
+def _facing_indicates_lays(rec: dict) -> bool:
+    if _norm_brand(rec.get("brand") or "") == "lays":
+        return True
+    combined = f"{rec.get('pack_text') or ''} {rec.get('product_name') or ''}".lower()
+    return bool(re.search(r"lay(?:'|s)?s\b", combined))
+
+
+def _row_allows_lays_color_recovery(cluster: list[dict]) -> bool:
+    """Lay's color→SKU mapping only on Lay's-dominant rows, not mixed-brand racks."""
+    if any(_is_non_lays_snack_brand(rec) for rec in cluster):
+        return False
+    for rec in cluster:
+        if _pack_text_indicates_other_snack(rec.get("pack_text") or ""):
+            return False
+    if any(_facing_indicates_lays(rec) for rec in cluster):
+        return True
+    if all(_is_unknown_or_generic_lays(rec) for rec in cluster):
+        return True
+    return False
 
 
 def _is_unknown_or_generic_lays(row: dict) -> bool:
@@ -173,6 +222,10 @@ def _should_skip_row_recovery(rec: dict, dominant_color: str) -> bool:
         if dominant_color == "blue" and ("cream" in pack_lower or "onion" in pack_lower):
             return False
         return True
+    if _is_non_lays_snack_brand(rec):
+        return True
+    if _pack_text_indicates_other_snack(pack_text):
+        return True
     if not _is_unknown_or_generic_lays(rec):
         brand = _norm_brand(rec.get("brand") or "")
         if brand not in {"lays"}:
@@ -190,9 +243,17 @@ def _is_top_partial_facing(rec: dict, image_height: int) -> bool:
 
 def _should_force_row_reconcile(rec: dict, dominant_color: str) -> bool:
     """Force row color when OCR flavor clearly disagrees with bag color consensus."""
+    if _is_non_lays_snack_brand(rec):
+        return False
+    if _pack_text_indicates_other_snack(rec.get("pack_text") or ""):
+        return False
+    if not _is_unknown_or_generic_lays(rec):
+        brand = _norm_brand(rec.get("brand") or "")
+        if brand != "lays":
+            return False
     current_color = _lays_color_for_product(rec)
     if not current_color:
-        return True
+        return _is_unknown_or_generic_lays(rec)
     if not _color_families_compatible(current_color, dominant_color):
         return True
     if "magic masala" in (rec.get("product_name") or "").lower() and dominant_color in {
@@ -282,6 +343,9 @@ def recover_snack_variants_by_row(
         if not product:
             continue
 
+        if not _row_allows_lays_color_recovery(cluster):
+            continue
+
         for rec in cluster:
             if _is_top_partial_facing(rec, image_height) and _is_unknown_or_generic_lays(rec):
                 if float(rec.get("confidence") or 0) < 0.55:
@@ -345,6 +409,10 @@ def recover_snack_variants_by_row(
                     stats["snack_row_recovery"] += 1
                 continue
             if not _color_label_mismatch(rec, bag_color):
+                continue
+            if _is_non_lays_snack_brand(rec) or _pack_text_indicates_other_snack(rec.get("pack_text") or ""):
+                continue
+            if not _facing_indicates_lays(rec) and not _is_unknown_or_generic_lays(rec):
                 continue
             product = LAYS_ROW_PRODUCTS.get(bag_color)
             if not product:

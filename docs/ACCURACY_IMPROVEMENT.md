@@ -36,22 +36,19 @@ Each case = one real phone photo + optional per-facing ground truth:
 
 ```json
 {
-  "id": "tea_a1s",
-  "category": "Beverages · Tea",
-  "sub_category": "tea",
-  "image": "images/tea_a1s.jpg",
-  "expected_facing_count": 7,
-  "facings": [
-    {
-      "id": "f1",
-      "brand": "Lipton",
-      "product_name": "Green Tea",
-      "ocr_label": "Lipton Green Tea 25 tea bags",
-      "box": [0.08, 0.15, 0.22, 0.85]
-    }
-  ]
+  "id": "mixed_snacks_a1s",
+  "category": "Packaged Food & Snacks · Chips",
+  "sub_category": "chips",
+  "image": "images/mixed_snacks_a1s.jpg",
+  "expected_facing_count": 21,
+  "notes": "Mixed Crax/Kurkure/Bingo/Lay's — regression for snack_row_recovery (no single-SKU collapse)",
+  "facings": []
 }
 ```
+
+**Mixed snack shelves:** When a rack has multiple brands (Crax, Kurkure, Bingo, Lay's), never apply Lay's-only bag-color recovery unless the row is Lay's-dominant. Regression tests: `tests/test_mixed_snack_shelf.py`.
+
+**Lay's-only shelves:** Row color recovery still applies on A-1-L style racks where all bags are Lay's variants — see `tests/test_ocr_improvements.py`.
 
 **Coverage target:** ≥12 labeled facings per priority subcategory (chips, tea, shampoo, ice cream, biscuits, noodles, …).
 
@@ -137,9 +134,26 @@ OCR_PADDLE_REC_MODEL=custom
 
 Re-run `eval_accuracy.py` before Railway deploy.
 
+### Global OCR pipeline (all categories)
+
+| Stage | Module | Behavior |
+|-------|--------|----------|
+| Preprocess | `app/ocr_preprocess.py` | CLAHE, sharpen, text-height upscale (`OCR_TARGET_TEXT_HEIGHT`), deskew on heavy retry |
+| Bands | `app/ocr_reader.py` | Logo + center + flavor + full crop (fast mode now reads 4 bands) |
+| Retry | `read_packaging_text_tiered` | Heavy pass when text empty, low confidence, low catalog score, or no brand match |
+| Post-process | `app/brand_dictionary.py` | Lay's flavor hints require `Lay's` in OCR text; Crax/Kurkure/Bingo conflict guards |
+| Recovery | `app/snack_row_recovery.py` | **Lay's-only** row color mapping — skipped on mixed-brand rows |
+
+Env tuning for hard shelves:
+
+```env
+OCR_TARGET_TEXT_HEIGHT=36
+OCR_LOW_CONFIDENCE=0.55
+OCR_UPSCALE_MIN=480
+```
+
 ---
 
-## 5. Visual catalog learning (FAISS / learned SKUs)
 
 When OCR is weak but visual match works:
 - High-confidence identifications auto-save to `learned_catalog.json`

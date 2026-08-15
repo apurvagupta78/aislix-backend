@@ -885,7 +885,12 @@ def assign_planogram_shelf_rows(
     source_image: np.ndarray | None = None,
 ) -> list[dict]:
     """Label every facing on a multi-row rack from planogram shelf rows or product order."""
-    from app.snack_row_recovery import _bag_color_family, _color_label_mismatch, _is_top_partial_facing
+    from app.snack_row_recovery import (
+        _bag_color_family,
+        _color_label_mismatch,
+        _is_top_partial_facing,
+        _row_allows_lays_color_recovery,
+    )
 
     if not records or not candidates:
         return records
@@ -969,7 +974,7 @@ def assign_planogram_shelf_rows(
                 color = _bag_color_family(source_image, rec)
                 if color != "unknown":
                     row_color_votes[color] = row_color_votes.get(color, 0) + 1
-        if row_color_votes:
+        if row_color_votes and _row_allows_lays_color_recovery(row):
             row_bag_color = max(row_color_votes, key=row_color_votes.get)
             row_candidate = (
                 _pick_color_compatible_candidate(shelf_candidates, row_bag_color, row_candidate)
@@ -1016,7 +1021,7 @@ def assign_planogram_shelf_rows(
                     per_match = None
             candidate = per_match[0] if per_match else row_candidate
             score = per_match[1] if per_match else text_score
-            if bag_color != "unknown":
+            if bag_color != "unknown" and _row_allows_lays_color_recovery(row):
                 candidate = _pick_color_compatible_candidate(shelf_candidates, bag_color, candidate) or candidate
             conf = max(0.74, score, float(rec.get("confidence") or 0) * 0.5)
             if ocr.strip() and re.search(r"lay'?s\b", ocr, flags=re.IGNORECASE):

@@ -58,8 +58,9 @@ def test_score_ocr_candidate_prefers_catalog_match():
     assert high > low
 
 
-def test_match_from_text_standalone_magic_masala():
+def test_match_from_text_standalone_magic_masala_requires_lays():
     ctx = {"sub_category": "chips"}
-    match = match_from_text("magic masala potato chips", scan_context=ctx)
+    assert match_from_text("magic masala potato chips", scan_context=ctx) is None
+    match = match_from_text("lays magic masala potato chips", scan_context=ctx)
     assert match is not None
     assert (match.get("brand") or "").lower().startswith("lay")

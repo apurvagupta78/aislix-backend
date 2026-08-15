@@ -35,6 +35,16 @@
       ]
     },
     {
+      "id": "mixed_snacks_a1s",
+      "location": "A-1-S",
+      "category": "Packaged Food & Snacks · Chips",
+      "sub_category": "chips",
+      "image": "images/mixed_snacks_a1s.jpg",
+      "expected_facing_count": 21,
+      "notes": "Mixed end-cap: Crax, Kurkure, Bingo, Lay's — must NOT collapse to single Lay's Tomato Tango SKU. Copy scan 90d792c2 photo here.",
+      "facings": []
+    },
+    {
       "id": "ice_cream_a1s",
       "location": "A-1-S",
       "category": "Frozen Foods & Ice Cream · Ice cream",

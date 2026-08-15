@@ -181,6 +181,23 @@ def apply_super_resolution(rgb: np.ndarray) -> np.ndarray:
     return np.clip(sharpened, 0, 255).astype(np.uint8)
 
 
+def _scale_to_target_text_height(rgb: np.ndarray) -> np.ndarray:
+    """Upscale small crops so pack text approaches OCR_TARGET_TEXT_HEIGHT pixels."""
+    if OCR_TARGET_TEXT_HEIGHT <= 0:
+        return rgb
+    h, w = rgb.shape[:2]
+    if h <= 0:
+        return rgb
+    # Heuristic: logo/flavor text occupies ~18–35% of facing height on retail packs.
+    estimated_text_h = max(8.0, h * 0.22)
+    if estimated_text_h >= OCR_TARGET_TEXT_HEIGHT:
+        return rgb
+    scale = OCR_TARGET_TEXT_HEIGHT / estimated_text_h
+    new_w = max(1, int(w * scale))
+    new_h = max(1, int(h * scale))
+    return cv2.resize(rgb, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+
+
 def build_ocr_variants(
     image: Image.Image,
     *,
@@ -196,6 +213,7 @@ def build_ocr_variants(
     use_fast = OCR_FAST_MODE if fast is None else fast
     base = pil_to_rgb_np(image)
     base = _upscale_np(base, min_longest=OCR_UPSCALE_MIN)
+    base = _scale_to_target_text_height(base)
     if OCR_PERSPECTIVE and not use_fast:
         base = correct_perspective(base)
 
@@ -210,6 +228,7 @@ def build_ocr_variants(
             OcrVariant("original", base),
             OcrVariant("clahe", apply_clahe(base)),
             OcrVariant("sharpen", apply_sharpen_contrast(base)),
+            OcrVariant("deskew", deskew_if_needed(base)),
             OcrVariant("adaptive_thresh", apply_denoise_adaptive_threshold(base)),
         ]
     else:

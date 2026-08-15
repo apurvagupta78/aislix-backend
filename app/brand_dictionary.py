@@ -146,9 +146,9 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bbingo\b", "Bingo", ""),
     (r"\bkurkure\b.*\bmasala\s+munch\b", "Kurkure", "Masala Munch"),
     (r"\bkurkure\b", "Kurkure", ""),
-    (r"\bmagic\s+masala\b", "Lays", "Indias Magic Masala Potato Chips"),
-    (r"\btomato\s+tango\b", "Lays", "Tomato Tango Potato Chips"),
-    (r"\bcream\s*(?:&|and)\s*onion\b", "Lays", "American Style Cream and Onion Potato Chips"),
+    (r"\blay(?:\'|s)?s\b.*\bmagic\s+masala\b|\bmagic\s+masala\b.*\blay(?:\'|s)?s\b", "Lays", "Indias Magic Masala Potato Chips"),
+    (r"\blay(?:\'|s)?s\b.*\btomato\s+tango\b|\btomato\s+tango\b.*\blay(?:\'|s)?s\b", "Lays", "Tomato Tango Potato Chips"),
+    (r"\blay(?:\'|s)?s\b.*\bcream\s*(?:&|and)\s*onion\b|\bcream\s*(?:&|and)\s*onion\b.*\blay(?:\'|s)?s\b", "Lays", "American Style Cream and Onion Potato Chips"),
     (r"\blay(?:\'|s)?s\b.*\bpotato\s+chips\b", "Lays", "Potato Chips"),
     (r"\blay(?:\'|s)?s\b.*\bclassic\b", "Lays", "Classic Salted Potato Chips"),
     (r"\blay(?:\'|s)?s\b.*\bmasala\b", "Lays", "Indias Magic Masala Potato Chips"),
@@ -284,6 +284,16 @@ def label_conflicts_with_pack_text(label: dict, text: str) -> bool:
     if re.search(r"\bcrax\b", text_l) and label_brand not in {"", "crax", "unknown"}:
         return True
     if re.search(r"\bkurkure\b", text_l) and label_brand not in {"", "kurkure", "unknown"}:
+        return True
+    if re.search(r"\bbingo\b|\btedhe\s+medhe\b|\bmad\s+angles\b", text_l) and label_brand not in {
+        "",
+        "bingo",
+        "unknown",
+    }:
+        return True
+    if label_brand == "lays" and any(
+        marker in text_l for marker in ("kurkure", "bingo", "crax", "pringles", "tedhe medhe", "mad angles")
+    ):
         return True
     if re.search(r"yellow\s+label", text_l) and "darjeeling" in product_l:
         return True

@@ -87,6 +87,20 @@ def logo_focus_crop(image: Image.Image) -> Image.Image:
     return image.crop((left, top, right, bottom))
 
 
+def center_logo_crop(image: Image.Image) -> Image.Image:
+    """Brand-agnostic logo band for mixed snack/carton packs."""
+    width, height = image.size
+    if width < 12 or height < 12:
+        return image
+    left = int(width * 0.10)
+    right = int(width * 0.90)
+    top = int(height * 0.15)
+    bottom = int(height * 0.50)
+    if right - left < 8 or bottom - top < 8:
+        return image
+    return image.crop((left, top, right, bottom))
+
+
 def _upscale_if_small(image: Image.Image) -> Image.Image:
     width, height = image.size
     longest = max(width, height)
@@ -526,8 +540,11 @@ def read_packaging_text_result(
 
     logo_band = logo_focus_crop(pack_crop)
     flavor_band = flavor_focus_crop(pack_crop)
+    center_band = center_logo_crop(pack_crop)
     if OCR_FAST_MODE and not heavy:
         band_results = [
+            _read_band(center_band, band_rec_only=True),
+            _read_band(logo_band, band_rec_only=True),
             _read_band(flavor_band, band_rec_only=True),
             _read_band(pack_crop),
         ]
@@ -565,16 +582,29 @@ def read_packaging_text_result(
     return merged
 
 
+def _ocr_needs_heavy_retry(result: OcrReadResult, scan_context: dict | None = None) -> bool:
+    """Decide whether to run heavy preprocessing + extra OCR bands."""
+    text = (result.text or "").strip()
+    if len(text) < 3:
+        return True
+    if result.confidence < OCR_LOW_CONFIDENCE:
+        return True
+    if result.catalog_score < 0.35:
+        return True
+    enriched = _enrich_text_for_matching(normalize_ocr_text(text))
+    if match_from_text(enriched, scan_context=scan_context) is None:
+        return True
+    return False
+
+
 def read_packaging_text_tiered(
     image: Image.Image,
     *,
     scan_context: dict | None = None,
 ) -> OcrReadResult:
-    """Standard multi-pass OCR; heavy preprocessing only when text is empty or low-confidence."""
+    """Standard multi-pass OCR; heavy preprocessing when text is weak or unmatched."""
     result = read_packaging_text_result(image, scan_context=scan_context, heavy=False)
-    needs_heavy = len(result.text.strip()) < 3
-    if not OCR_FAST_MODE:
-        needs_heavy = needs_heavy or result.confidence < OCR_LOW_CONFIDENCE
+    needs_heavy = _ocr_needs_heavy_retry(result, scan_context)
     if needs_heavy:
         heavy = read_packaging_text_result(image, scan_context=scan_context, heavy=True)
         if heavy.score >= result.score or len(heavy.text.strip()) > len(result.text.strip()):

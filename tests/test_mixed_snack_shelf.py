@@ -1,0 +1,107 @@
+"""Regression: mixed snack racks must not collapse to Lay's Tomato Tango."""
+
+from __future__ import annotations
+
+import numpy as np
+
+from app.brand_dictionary import label_conflicts_with_pack_text, match_from_text
+from app.scan_context import resolve_scan_context
+from app.snack_row_recovery import recover_snack_variants_by_row
+
+
+def test_flavor_hints_require_lays_brand_in_ocr():
+    ctx = {"sub_category": "chips"}
+    assert match_from_text("magic masala potato chips", scan_context=ctx) is None
+    assert match_from_text("tomato tango potato chips", scan_context=ctx) is None
+    match = match_from_text("lays magic masala potato chips", scan_context=ctx)
+    assert match is not None
+    assert (match.get("brand") or "").lower().startswith("lay")
+
+
+def test_label_conflict_lays_vs_kurkure_pack_text():
+    label = {"brand": "Lays", "product_name": "Tomato Tango Potato Chips"}
+    assert label_conflicts_with_pack_text(label, "Kurkure Masala Munch")
+    assert label_conflicts_with_pack_text(label, "Bingo Tedhe Medhe")
+    assert not label_conflicts_with_pack_text(label, "Lays Tomato Tango")
+
+
+def test_mixed_snack_row_does_not_force_tomato_tango():
+    ctx = resolve_scan_context(
+        {"category": "Packaged Food & Snacks", "sub_category": "chips"}
+    )
+    source = np.zeros((600, 500, 3), dtype=np.uint8)
+    # Warm orange/red snack-bag pixels (Kurkure/Bingo-like).
+    source[100:200, 30:470, 0] = 50
+    source[100:200, 30:470, 1] = 80
+    source[100:200, 30:470, 2] = 200
+
+    classified = [
+        {
+            "x1": 30,
+            "y1": 100,
+            "x2": 90,
+            "y2": 200,
+            "brand": "Kurkure",
+            "product_name": "Masala Munch",
+            "confidence": 0.88,
+            "pack_text": "Kurkure Masala Munch",
+        },
+        {
+            "x1": 100,
+            "y1": 105,
+            "x2": 160,
+            "y2": 195,
+            "brand": "Kurkure",
+            "product_name": "Masala Munch",
+            "confidence": 0.86,
+            "pack_text": "kurkure",
+        },
+        {
+            "x1": 170,
+            "y1": 110,
+            "x2": 230,
+            "y2": 190,
+            "brand": "Unknown",
+            "product_name": "Unidentified SKU",
+            "confidence": 0.35,
+        },
+        {
+            "x1": 240,
+            "y1": 350,
+            "x2": 300,
+            "y2": 450,
+            "brand": "Bingo",
+            "product_name": "Tedhe Medhe",
+            "confidence": 0.87,
+            "pack_text": "Bingo Tedhe Medhe",
+        },
+        {
+            "x1": 310,
+            "y1": 355,
+            "x2": 370,
+            "y2": 445,
+            "brand": "Bingo",
+            "product_name": "Tedhe Medhe",
+            "confidence": 0.85,
+            "pack_text": "bingo",
+        },
+    ]
+
+    updated, stats = recover_snack_variants_by_row(classified, source, ctx)
+
+    kurkure = [r for r in updated if (r.get("brand") or "").lower() == "kurkure"]
+    bingo = [r for r in updated if (r.get("brand") or "").lower() == "bingo"]
+    assert len(kurkure) == 2
+    assert all(r["product_name"] == "Masala Munch" for r in kurkure)
+    assert len(bingo) == 2
+    assert all(r["product_name"] == "Tedhe Medhe" for r in bingo)
+
+    tomato = [
+        r
+        for r in updated
+        if r.get("product_name") == "Tomato Tango Potato Chips"
+    ]
+    assert tomato == []
+
+    unknown = [r for r in updated if r.get("brand") == "Unknown"]
+    assert len(unknown) == 1
