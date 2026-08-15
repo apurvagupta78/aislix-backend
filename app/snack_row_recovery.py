@@ -89,8 +89,8 @@ def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
     g = float(sample[:, :, 1].mean())
     b = float(sample[:, :, 2].mean())
 
-    # Order matters: green first, then orange (before warm red), then tomato tango dark blue.
-    if g > 88 and g > r + 10 and g >= b - 8:
+    # Green Cream & Onion — allow blue photo cast (b can exceed g slightly).
+    if g > 70 and g >= r - 5 and g >= b - 28 and (g - min(r, b)) >= 8:
         return "green"
     if r > 105 and g > 65 and r > b + 25:
         return "orange"
@@ -103,6 +103,40 @@ def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
     if b > 85 and r > 65 and g > 45 and b >= r - 12 and b < r + 45:
         return "blue"
     return "unknown"
+
+
+def _lays_color_for_product(row: dict) -> str | None:
+    product = (row.get("product_name") or "").lower()
+    if "magic masala" in product or ("india" in product and "masala" in product):
+        return "blue"
+    if "tomato tango" in product or "tomato" in product:
+        return "red"
+    if ("cream" in product and "onion" in product) or "cream & onion" in product:
+        return "green"
+    return None
+
+
+def _color_families_compatible(a: str, b: str) -> bool:
+    if a == b:
+        return True
+    return {a, b} <= {"blue", "orange"}
+
+
+def _should_skip_row_recovery(rec: dict, dominant_color: str) -> bool:
+    """Skip only when OCR flavor already matches row bag color."""
+    pack_text = (rec.get("pack_text") or "").strip()
+    current_color = _lays_color_for_product(rec)
+    if current_color and not _color_families_compatible(current_color, dominant_color):
+        return False
+    if _has_distinct_lays_flavor(rec) and not _is_unknown_or_generic_lays(rec):
+        return True
+    if _ocr_has_lays_flavor(pack_text) and not _is_unknown_or_generic_lays(rec):
+        return True
+    if not _is_unknown_or_generic_lays(rec):
+        brand = _norm_brand(rec.get("brand") or "")
+        if brand not in {"lays"}:
+            return True
+    return False
 
 
 def _has_distinct_lays_flavor(row: dict) -> bool:
@@ -165,15 +199,8 @@ def recover_snack_variants_by_row(
             continue
 
         for rec in cluster:
-            pack_text = (rec.get("pack_text") or "").strip()
-            if _has_distinct_lays_flavor(rec) and not _is_unknown_or_generic_lays(rec):
+            if _should_skip_row_recovery(rec, dominant_color):
                 continue
-            if _ocr_has_lays_flavor(pack_text) and not _is_unknown_or_generic_lays(rec):
-                continue
-            if not _is_unknown_or_generic_lays(rec):
-                brand = _norm_brand(rec.get("brand") or "")
-                if brand not in {"lays"}:
-                    continue
 
             rec.update(
                 {

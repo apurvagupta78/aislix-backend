@@ -65,6 +65,8 @@ def _annotation_label(item: dict, img_w: int | None = None) -> str:
         budget = max_len - len(prefix)
         return f"{prefix}{brand[:max(budget, 8)]}"
     if short_product and not skip_product:
+        if box_w < 80 or near_edge:
+            return short_product[:max_len]
         label = f"{brand} - {short_product}"
         return label[:max_len]
     return brand[:max_len]

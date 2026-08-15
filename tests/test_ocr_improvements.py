@@ -82,6 +82,60 @@ def test_bag_color_orange_red_green():
     tomato_bgr[:, :, 2] = 55
     assert _bag_color_family(tomato_bgr, record) == "red"
 
+    blue_cast_green = np.zeros((120, 80, 3), dtype=np.uint8)
+    blue_cast_green[:, :, 0] = 120  # B high — blue photo cast
+    blue_cast_green[:, :, 1] = 105
+    blue_cast_green[:, :, 2] = 85
+    assert _bag_color_family(blue_cast_green, record) == "green"
+
+
+def test_snack_row_recovery_overrides_wrong_magic_masala_on_green_row():
+    ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
+    source = np.zeros((600, 400, 3), dtype=np.uint8)
+    source[50:150, 20:380, 2] = 200
+    source[50:150, 20:380, 1] = 120
+    source[50:150, 20:380, 0] = 40
+    source[350:450, 20:380, 0] = 120
+    source[350:450, 20:380, 1] = 105
+    source[350:450, 20:380, 2] = 85
+
+    classified = [
+        {
+            "x1": 20,
+            "y1": 50,
+            "x2": 80,
+            "y2": 150,
+            "brand": "Unknown",
+            "product_name": "Unidentified SKU",
+            "confidence": 0.35,
+        },
+        {
+            "x1": 20,
+            "y1": 350,
+            "x2": 80,
+            "y2": 450,
+            "brand": "Lays",
+            "product_name": "Indias Magic Masala Potato Chips",
+            "confidence": 0.84,
+        },
+        {
+            "x1": 100,
+            "y1": 355,
+            "x2": 160,
+            "y2": 445,
+            "brand": "Lays",
+            "product_name": "Indias Magic Masala Potato Chips",
+            "confidence": 0.84,
+        },
+    ]
+    updated, stats = recover_snack_variants_by_row(classified, source, ctx)
+    assert stats["snack_row_recovery"] >= 2
+    green_row = [r for r in updated if r["y1"] > 300]
+    assert len(green_row) == 2
+    assert all(
+        row["product_name"] == "American Style Cream and Onion Potato Chips" for row in green_row
+    )
+
 
 def test_snack_row_recovery_assigns_unknowns_by_row():
     ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})

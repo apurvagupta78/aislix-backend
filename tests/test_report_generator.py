@@ -31,8 +31,7 @@ def test_annotation_uses_short_flavor_on_small_boxes():
         },
         img_w=400,
     )
-    assert "Magic Masala" in label
-    assert "Potato Chips" not in label
+    assert label == "Magic Masala"
 
 
 def test_original_and_annotated_share_dimensions():
