@@ -146,6 +146,9 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bbingo\b", "Bingo", ""),
     (r"\bkurkure\b.*\bmasala\s+munch\b", "Kurkure", "Masala Munch"),
     (r"\bkurkure\b", "Kurkure", ""),
+    (r"\bmagic\s+masala\b", "Lays", "Indias Magic Masala Potato Chips"),
+    (r"\btomato\s+tango\b", "Lays", "Tomato Tango Potato Chips"),
+    (r"\bcream\s*(?:&|and)\s*onion\b", "Lays", "American Style Cream and Onion Potato Chips"),
     (r"\blay(?:\'|s)?s\b.*\bpotato\s+chips\b", "Lays", "Potato Chips"),
     (r"\blay(?:\'|s)?s\b.*\bclassic\b", "Lays", "Classic Salted Potato Chips"),
     (r"\blay(?:\'|s)?s\b.*\bmasala\b", "Lays", "Indias Magic Masala Potato Chips"),
@@ -447,6 +450,25 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower().strip())
 
 
+_OCR_CHAR_FIXES = (
+    (re.compile(r"\b0(?=[a-z])", re.I), "O"),
+    (re.compile(r"(?<=[a-z])0(?=\s|$)", re.I), "o"),
+    (re.compile(r"\bl\s*(?:'|')?\s*s\b", re.I), "lays"),
+    (re.compile(r"\b1(?=[a-z])"), "l"),
+)
+
+
+def normalize_ocr_text(text: str) -> str:
+    """Clean common OCR noise before catalog matching."""
+    cleaned = _normalize(text)
+    if not cleaned:
+        return ""
+    for pattern, repl in _OCR_CHAR_FIXES:
+        cleaned = pattern.sub(repl, cleaned)
+    cleaned = re.sub(r"(.)\1{2,}", r"\1\1", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
 def _load() -> None:
     global _brands, _brand_products, _brand_aliases
     if _brands is not None:
@@ -548,6 +570,7 @@ def _catalog_entry(brand: str, product_name: str) -> dict | None:
 
 def match_from_text(text: str, scan_context: dict | None = None) -> dict | None:
     """Best catalog match from OCR text: product hints → brand → SKU."""
+    text = normalize_ocr_text(text)
     if not text or len(text.strip()) < 3:
         return None
     normalized = _normalize(text)

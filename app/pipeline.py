@@ -34,6 +34,7 @@ from app.metrics import (
     category_breakdown,
     compute_metrics,
     executive_summary,
+    ocr_quality_metrics,
 )
 from app.recognizer import classify_records
 from app.report_generator import (
@@ -79,6 +80,7 @@ def _recognition_stats(classified: list[dict]) -> dict:
         "recognition_learned": counts["learned"],
         "recognition_propagate": counts["propagate"],
         "recognition_unknown": counts["none"],
+        **ocr_quality_metrics(classified),
     }
 
 

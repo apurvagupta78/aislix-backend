@@ -19,6 +19,29 @@
       "expected_facing_count": 7,
       "notes": "7 tea cartons; Taj Maharaja (black) and Vahdam (dark green) often missed.",
       "facings": []
+    },
+    {
+      "id": "lays_a1l",
+      "location": "A-1-L",
+      "category": "Packaged Food & Snacks · Chips",
+      "sub_category": "chips",
+      "image": "images/lays_a1l.jpg",
+      "expected_facing_count": 37,
+      "notes": "Lay's 3-flavor rack — copy scan photo here; facings are fractional placeholders until labeled.",
+      "facings": [
+        {"id": "r2c1", "brand": "Lays", "product_name": "Indias Magic Masala Potato Chips", "box": [0.05, 0.12, 0.12, 0.22]},
+        {"id": "r5c1", "brand": "Lays", "product_name": "American Style Cream and Onion Potato Chips", "box": [0.05, 0.62, 0.12, 0.78]},
+        {"id": "r4c1", "brand": "Lays", "product_name": "Tomato Tango Potato Chips", "box": [0.05, 0.48, 0.12, 0.58]}
+      ]
+    },
+    {
+      "id": "ice_cream_a1s",
+      "location": "A-1-S",
+      "category": "Frozen Foods & Ice Cream · Ice cream",
+      "image": "images/ice_cream_a1s.jpg",
+      "expected_facing_count": 5,
+      "notes": "Freezer photo — Brooklyn 109/55, Amul Kulfi/Sandwich, Baskin Funwich; copy your scan photo here.",
+      "facings": []
     }
   ]
 }

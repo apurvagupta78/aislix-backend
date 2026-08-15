@@ -5,6 +5,34 @@ from __future__ import annotations
 from app.scan_context import COMPLIANCE_ALERT_INTERPRETATION, COMPLIANCE_ALERT_TITLE
 
 LOW_STOCK_THRESHOLD = 2
+OCR_LOW_CONFIDENCE_THRESHOLD = 0.55
+
+
+def ocr_quality_metrics(classified: list[dict]) -> dict:
+    """Aggregate OCR health across facings for scan summary."""
+    if not classified:
+        return {
+            "ocr_empty_facings": 0,
+            "ocr_low_confidence_facings": 0,
+            "ocr_avg_confidence": 0.0,
+        }
+    empty = 0
+    low = 0
+    confidences: list[float] = []
+    for row in classified:
+        pack_text = (row.get("pack_text") or "").strip()
+        ocr_conf = float(row.get("ocr_confidence") or 0.0)
+        if len(pack_text) < 3:
+            empty += 1
+        elif ocr_conf < OCR_LOW_CONFIDENCE_THRESHOLD:
+            low += 1
+        if ocr_conf > 0:
+            confidences.append(ocr_conf)
+    return {
+        "ocr_empty_facings": empty,
+        "ocr_low_confidence_facings": low,
+        "ocr_avg_confidence": round(sum(confidences) / max(len(confidences), 1), 4),
+    }
 
 
 def shelf_utilization(classified: list[dict], image_shape: tuple[int, int, int]) -> float:

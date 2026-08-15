@@ -7,6 +7,7 @@ Measure **facing count** and (optionally) **SKU identification** on real phone s
 1. Copy shelf photos into `data/benchmark/images/`:
    - `shampoo_a1z.jpg` — A-1-Z 8-SKU shampoo row
    - `tea_a1s.jpg` — A-1-S 7-SKU tea row
+   - `ice_cream_a1s.jpg` — A-1-S freezer (5 planogram SKUs; copy from your scan photo)
 
 2. Optional: add per-facing ground truth in `manifest.json`:
 
@@ -29,6 +30,7 @@ cd C:\Users\Apaar\PycharmProjects\aislix-backend
 py scripts/eval_benchmark.py
 py scripts/eval_benchmark.py --mode sahi
 py scripts/eval_benchmark.py --compare
+py scripts/eval_ocr_crops.py
 ```
 
 Reports are written to `data/benchmark/reports/`.

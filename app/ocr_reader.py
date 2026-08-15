@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import dataclass
 from typing import Any, Literal
 
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 
-from app.brand_dictionary import match_from_text
+from app.brand_dictionary import match_from_text, normalize_ocr_text
+from app.ocr_preprocess import OcrVariant, build_ocr_variants
 
 EngineName = Literal["paddle", "easyocr"]
 ActiveEngine = EngineName | None
@@ -23,16 +25,30 @@ _paddle_init_error: str | None = None
 OCR_MIN_CONFIDENCE = float(os.getenv("OCR_MIN_CONFIDENCE", "0.6"))
 OCR_LINE_MIN_CONFIDENCE = float(os.getenv("OCR_LINE_MIN_CONFIDENCE", "0.45"))
 OCR_SHORT_WORD_MIN_CONFIDENCE = float(os.getenv("OCR_SHORT_WORD_MIN_CONFIDENCE", "0.32"))
+OCR_LOW_CONFIDENCE = float(os.getenv("OCR_LOW_CONFIDENCE", "0.55"))
 OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() in {"1", "true", "yes"}
 OCR_UPSCALE_MIN = int(os.getenv("OCR_UPSCALE_MIN", "480"))
 OCR_AGGRESSIVE_TARGET = int(os.getenv("OCR_AGGRESSIVE_TARGET", "1280"))
-OCR_CROP_PADDING = float(os.getenv("OCR_CROP_PADDING", "0.08"))
-OCR_ENGINE = os.getenv("OCR_ENGINE", "easyocr").strip().lower()
+OCR_CROP_PADDING = float(os.getenv("OCR_CROP_PADDING", "0.10"))
+OCR_ENGINE = os.getenv("OCR_ENGINE", "paddle").strip().lower()
+OCR_PADDLE_REC_MODEL = os.getenv("OCR_PADDLE_REC_MODEL", "mobile").strip().lower()
+OCR_DET_DB_UNCLIP_RATIO = float(os.getenv("OCR_DET_DB_UNCLIP_RATIO", "1.6"))
+OCR_REC_ONLY_BANDS = os.getenv("OCR_REC_ONLY_BANDS", "true").lower() in {"1", "true", "yes"}
 
 SIZE_TOKEN_PATTERN = re.compile(
     r"\b(\d+(?:\.\d+)?)\s*(gms?|gm|g|kg|ml|ltr|l|unit|units|bags?|bag|pack|packs|pcs|pc)\b",
     re.IGNORECASE,
 )
+
+
+@dataclass
+class OcrReadResult:
+    text: str
+    confidence: float
+    variant: str
+    catalog_score: float
+    score: float
+    attempts: int = 1
 
 
 def flavor_focus_crop(image: Image.Image) -> Image.Image:
@@ -50,10 +66,7 @@ def flavor_focus_crop(image: Image.Image) -> Image.Image:
 
 
 def logo_focus_crop(image: Image.Image) -> Image.Image:
-    """
-    Center band where brand logos sit on upright snack bags.
-    Skips shelf strips (top) and flavor/weight text (lower pack).
-    """
+    """Center band where brand logos sit on upright snack bags."""
     width, height = image.size
     if width < 12 or height < 12:
         return image
@@ -77,7 +90,6 @@ def _upscale_if_small(image: Image.Image) -> Image.Image:
 
 
 def _prepare_for_ocr(image: Image.Image, *, contrast: float = 1.35) -> Image.Image:
-    """Upscale small YOLO crops, sharpen, and boost contrast so pack text is readable."""
     image = _upscale_if_small(image.convert("RGB"))
     image = image.filter(ImageFilter.SHARPEN)
     return ImageEnhance.Contrast(image).enhance(contrast)
@@ -88,7 +100,6 @@ def _extract_size_tokens(text: str) -> list[str]:
 
 
 def _enrich_text_for_matching(text: str) -> str:
-    """Append normalized size/volume tokens to help catalog variant matching."""
     sizes = _extract_size_tokens(text)
     if not sizes:
         return text
@@ -103,25 +114,32 @@ def _init_paddle() -> Any | None:
     if _paddle_ocr is not None:
         return _paddle_ocr
     try:
-        # MKLDNN can crash on some Railway CPU hosts; prefer plain CPU ops.
         os.environ["FLAGS_use_mkldnn"] = "0"
         from paddleocr import PaddleOCR
 
         lang = (os.getenv("OCR_LANGUAGES", "en").split(",")[0] or "en").strip()
-        base_kwargs = {
+        base_kwargs: dict[str, Any] = {
             "use_angle_cls": True,
             "lang": lang,
             "use_gpu": False,
             "show_log": False,
             "det_db_thresh": 0.25,
+            "det_db_unclip_ratio": OCR_DET_DB_UNCLIP_RATIO,
             "rec_batch_num": 8,
         }
+        if OCR_PADDLE_REC_MODEL == "server":
+            base_kwargs["ocr_version"] = "PP-OCRv4"
         try:
             _paddle_ocr = PaddleOCR(**base_kwargs, enable_mkldnn=False)
         except TypeError:
-            _paddle_ocr = PaddleOCR(**base_kwargs)
+            try:
+                _paddle_ocr = PaddleOCR(**base_kwargs)
+            except TypeError:
+                base_kwargs.pop("ocr_version", None)
+                base_kwargs.pop("det_db_unclip_ratio", None)
+                _paddle_ocr = PaddleOCR(**base_kwargs)
         _paddle_init_error = None
-        print(f"PaddleOCR ready (lang={lang}, home={os.path.expanduser('~')})")
+        print(f"PaddleOCR ready (lang={lang}, model={OCR_PADDLE_REC_MODEL})")
         return _paddle_ocr
     except Exception as exc:
         _paddle_init_error = str(exc)
@@ -157,10 +175,10 @@ def _resolve_engine() -> ActiveEngine:
 
     preference = OCR_ENGINE
     order: list[EngineName]
-    if preference == "paddle":
-        order = ["paddle", "easyocr"]
+    if preference == "easyocr":
+        order = ["easyocr", "paddle"]
     else:
-        order = ["easyocr"]
+        order = ["paddle", "easyocr"]
 
     for engine in order:
         reader = _init_paddle() if engine == "paddle" else _init_easyocr()
@@ -211,7 +229,6 @@ def pil_from_bbox(
 
 
 def load_facing_image(record: dict, source_image: np.ndarray | None = None) -> Image.Image:
-    """Prefer full-res bbox crop over the temp JPEG written during detection."""
     if source_image is not None:
         return pil_from_bbox(
             source_image,
@@ -225,17 +242,9 @@ def load_facing_image(record: dict, source_image: np.ndarray | None = None) -> I
     return PILImage.open(record["image_path"]).convert("RGB")
 
 
-def _read_with_paddle(arr: np.ndarray, *, relaxed: bool = False) -> str:
-    ocr = _init_paddle()
-    if ocr is None:
-        return ""
-    try:
-        result = ocr.ocr(arr, cls=True)
-    except Exception as exc:
-        print(f"PaddleOCR read failed: {exc}")
-        return ""
-
+def _parse_paddle_lines(result: Any, *, relaxed: bool) -> tuple[str, float, list[float]]:
     lines: list[str] = []
+    confidences: list[float] = []
     for page in result or []:
         if not page:
             continue
@@ -248,66 +257,151 @@ def _read_with_paddle(arr: np.ndarray, *, relaxed: bool = False) -> str:
             text, conf = str(text_conf[0]), float(text_conf[1])
             if text.strip() and _line_confidence_ok(text, conf, relaxed=relaxed):
                 lines.append(text.strip())
-    return " ".join(lines)
+                confidences.append(conf)
+    merged = " ".join(lines)
+    mean_conf = sum(confidences) / len(confidences) if confidences else 0.0
+    return merged, mean_conf, confidences
 
 
-def _read_with_easyocr(arr: np.ndarray, *, relaxed: bool = False) -> str:
+def _read_with_paddle(
+    arr: np.ndarray,
+    *,
+    relaxed: bool = False,
+    rec_only: bool = False,
+) -> tuple[str, float]:
+    ocr = _init_paddle()
+    if ocr is None:
+        return "", 0.0
+    try:
+        if rec_only:
+            try:
+                result = ocr.ocr(arr, det=False, rec=True, cls=True)
+            except TypeError:
+                result = ocr.ocr(arr, cls=True)
+        else:
+            result = ocr.ocr(arr, cls=True)
+    except Exception as exc:
+        print(f"PaddleOCR read failed: {exc}")
+        return "", 0.0
+    text, conf, _ = _parse_paddle_lines(result, relaxed=relaxed)
+    return text, conf
+
+
+def _read_with_easyocr(arr: np.ndarray, *, relaxed: bool = False) -> tuple[str, float]:
     reader = _init_easyocr()
     if reader is None:
-        return ""
+        return "", 0.0
     try:
         detailed = reader.readtext(arr, detail=1, paragraph=False)
         lines: list[str] = []
+        confidences: list[float] = []
         for item in detailed or []:
             if not item or len(item) < 3:
                 continue
             text, conf = str(item[1]), float(item[2])
             if text.strip() and _line_confidence_ok(text, conf, relaxed=relaxed):
                 lines.append(text.strip())
+                confidences.append(conf)
         if lines:
-            return " ".join(lines)
+            merged = " ".join(lines)
+            return merged, sum(confidences) / len(confidences)
         fallback = reader.readtext(arr, detail=0, paragraph=True)
         if isinstance(fallback, list):
-            return " ".join(str(line) for line in fallback if line)
-        return str(fallback or "")
+            merged = " ".join(str(line) for line in fallback if line)
+            return merged, 0.45 if merged.strip() else 0.0
+        merged = str(fallback or "")
+        return merged, 0.45 if merged.strip() else 0.0
     except Exception as exc:
         print(f"EasyOCR read failed: {exc}")
-        return ""
+        return "", 0.0
 
 
-def _read_text_variants(image: Image.Image) -> str:
-    """Run OCR at multiple contrast levels and merge unique tokens."""
+def _text_richness(text: str) -> float:
+    cleaned = text.strip()
+    if not cleaned:
+        return 0.0
+    tokens = cleaned.split()
+    alpha_ratio = sum(ch.isalnum() for ch in cleaned) / max(len(cleaned), 1)
+    return min(1.0, len(tokens) / 8.0) * alpha_ratio
+
+
+def _catalog_score(text: str, scan_context: dict | None) -> float:
+    if len(text.strip()) < 3:
+        return 0.0
+    enriched = _enrich_text_for_matching(normalize_ocr_text(text))
+    product = match_from_text(enriched, scan_context=scan_context)
+    if not product:
+        return 0.0
+    return float(product.get("confidence") or 0.0)
+
+
+def score_ocr_candidate(
+    text: str,
+    ocr_confidence: float,
+    scan_context: dict | None = None,
+) -> tuple[float, float]:
+    catalog = _catalog_score(text, scan_context)
+    richness = _text_richness(text)
+    final = 0.5 * ocr_confidence + 0.4 * catalog + 0.1 * richness
+    return final, catalog
+
+
+def _read_variant(
+    variant: OcrVariant,
+    *,
+    relaxed: bool = False,
+    rec_only: bool = False,
+) -> tuple[str, float]:
     engine = _resolve_engine()
     if engine is None:
-        return ""
-
-    chunks: list[str] = []
-    seen_lower: set[str] = set()
-    for contrast in (1.25, 1.55):
-        prepared = _prepare_for_ocr(image, contrast=contrast)
-        arr = np.asarray(prepared.convert("RGB"))
-        raw = _read_with_paddle(arr) if engine == "paddle" else _read_with_easyocr(arr)
-        for token in raw.split():
-            key = token.lower()
-            if key not in seen_lower:
-                seen_lower.add(key)
-                chunks.append(token)
-    return " ".join(chunks)
+        return "", 0.0
+    arr = variant.image
+    if engine == "paddle":
+        return _read_with_paddle(arr, relaxed=relaxed, rec_only=rec_only)
+    return _read_with_easyocr(arr, relaxed=relaxed)
 
 
-def read_text_from_pil(image: Image.Image) -> str:
-    if _resolve_engine() is None:
-        return ""
-    return _read_text_variants(image)
+def _run_multipass_on_crop(
+    crop: Image.Image,
+    *,
+    scan_context: dict | None,
+    heavy: bool,
+    rec_only: bool = False,
+) -> OcrReadResult:
+    variants = build_ocr_variants(crop, heavy=heavy)
+    best = OcrReadResult(text="", confidence=0.0, variant="", catalog_score=0.0, score=0.0, attempts=0)
+    relaxed = heavy
+
+    for variant in variants:
+        text, ocr_conf = _read_variant(variant, relaxed=relaxed, rec_only=rec_only)
+        text = _clean_ocr_text(text)
+        if not text:
+            continue
+        score, catalog = score_ocr_candidate(text, ocr_conf, scan_context)
+        candidate = OcrReadResult(
+            text=text,
+            confidence=round(ocr_conf, 4),
+            variant=variant.name,
+            catalog_score=round(catalog, 4),
+            score=round(score, 4),
+            attempts=1,
+        )
+        if score > best.score or (score == best.score and len(text) > len(best.text)):
+            best = candidate
+
+    best.attempts = len(variants)
+    return best
+
+
+def read_text_from_pil(image: Image.Image, scan_context: dict | None = None) -> str:
+    return read_packaging_text_result(image, scan_context=scan_context).text
 
 
 def active_ocr_engine() -> str | None:
-    """Return the OCR engine in use ('paddle' or 'easyocr'), if any."""
     return _resolve_engine()
 
 
 def ocr_engine_status() -> dict:
-    """Configured vs active OCR engine — useful when Paddle falls back to EasyOCR."""
     _resolve_engine()
     active = _active_engine
     requested = OCR_ENGINE
@@ -319,6 +413,7 @@ def ocr_engine_status() -> dict:
     return {
         "ocr_engine": active or "none",
         "ocr_engine_requested": requested,
+        "ocr_paddle_rec_model": OCR_PADDLE_REC_MODEL,
         "ocr_fallback_reason": fallback,
     }
 
@@ -339,15 +434,119 @@ def _merge_ocr_texts(*parts: str) -> str:
     return " ".join(merged)
 
 
+def _merge_results(*results: OcrReadResult) -> OcrReadResult:
+    text = _merge_ocr_texts(*(r.text for r in results if r.text))
+    if not text:
+        return OcrReadResult(text="", confidence=0.0, variant="", catalog_score=0.0, score=0.0, attempts=0)
+    best = max(results, key=lambda r: (r.score, len(r.text)))
+    confidences = [r.confidence for r in results if r.confidence > 0]
+    mean_conf = sum(confidences) / len(confidences) if confidences else best.confidence
+    score, catalog = score_ocr_candidate(text, mean_conf, scan_context=None)
+    return OcrReadResult(
+        text=text,
+        confidence=round(mean_conf, 4),
+        variant=best.variant or "merged",
+        catalog_score=round(catalog, 4),
+        score=round(score, 4),
+        attempts=sum(r.attempts for r in results),
+    )
+
+
+def read_packaging_text_result(
+    image: Image.Image,
+    *,
+    scan_context: dict | None = None,
+    heavy: bool = False,
+) -> OcrReadResult:
+    """Multi-band, multi-variant OCR with confidence + catalog scoring."""
+    if not OCR_ENABLED:
+        return OcrReadResult(text="", confidence=0.0, variant="", catalog_score=0.0, score=0.0)
+
+    width, height = image.size
+    if max(width, height) < 160 and not heavy:
+        heavy = True
+
+    pack_bottom = max(1, int(height * 0.85))
+    pack_crop = image.crop((0, 0, width, pack_bottom))
+
+    def _read_band(crop: Image.Image, *, band_rec_only: bool = False) -> OcrReadResult:
+        use_rec_only = band_rec_only and OCR_REC_ONLY_BANDS and _resolve_engine() == "paddle"
+        return _run_multipass_on_crop(
+            crop,
+            scan_context=scan_context,
+            heavy=heavy,
+            rec_only=use_rec_only,
+        )
+
+    logo_band = logo_focus_crop(pack_crop)
+    flavor_band = flavor_focus_crop(pack_crop)
+    band_results = [
+        _read_band(logo_band, band_rec_only=True),
+        _read_band(flavor_band, band_rec_only=True),
+        _read_band(pack_crop),
+    ]
+
+    if pack_bottom >= 40:
+        band_h = max(1, int(pack_bottom * 0.45))
+        top_band = pack_crop.crop((0, 0, width, band_h))
+        center_top = max(1, int(pack_bottom * 0.2))
+        center_bottom = min(pack_bottom, int(pack_bottom * 0.65))
+        center_band = pack_crop.crop((0, center_top, width, center_bottom))
+        band_results.extend([_read_band(top_band, band_rec_only=True), _read_band(center_band)])
+
+    merged = _merge_results(*band_results)
+    if scan_context is not None and merged.text:
+        score, catalog = score_ocr_candidate(merged.text, merged.confidence, scan_context)
+        merged = OcrReadResult(
+            text=merged.text,
+            confidence=merged.confidence,
+            variant=merged.variant,
+            catalog_score=round(catalog, 4),
+            score=round(score, 4),
+            attempts=merged.attempts,
+        )
+    return merged
+
+
+def read_packaging_text_tiered(
+    image: Image.Image,
+    *,
+    scan_context: dict | None = None,
+) -> OcrReadResult:
+    """Standard multi-pass OCR; heavy preprocessing only when text is empty or low-confidence."""
+    result = read_packaging_text_result(image, scan_context=scan_context, heavy=False)
+    if len(result.text.strip()) < 3 or result.confidence < OCR_LOW_CONFIDENCE:
+        heavy = read_packaging_text_result(image, scan_context=scan_context, heavy=True)
+        if heavy.score >= result.score or len(heavy.text.strip()) > len(result.text.strip()):
+            return heavy
+    return result
+
+
+def read_packaging_text(
+    image: Image.Image,
+    *,
+    aggressive: bool = False,
+    scan_context: dict | None = None,
+) -> str:
+    """Backward-compatible text-only API."""
+    return read_packaging_text_result(
+        image,
+        scan_context=scan_context,
+        heavy=aggressive,
+    ).text
+
+
 def classify_with_ocr(
     image: Image.Image,
     raw_text: str | None = None,
     scan_context: dict | None = None,
 ) -> dict | None:
-    """Try to identify product from packaging text. Returns None if OCR fails or is unclear."""
     if not OCR_ENABLED:
         return None
-    raw = _clean_ocr_text(raw_text if raw_text is not None else read_text_from_pil(image))
+    raw = _clean_ocr_text(
+        raw_text if raw_text is not None else read_packaging_text_result(image, scan_context=scan_context).text
+    )
+    raw = normalize_ocr_text(raw)
     if len(raw) < 3:
         return None
 
@@ -371,75 +570,11 @@ def classify_with_ocr(
     return product
 
 
-def read_packaging_text(image: Image.Image, *, aggressive: bool = False) -> str:
-    """Always read visible text, even when brand matching fails."""
-    if not OCR_ENABLED:
-        return ""
-    width, height = image.size
-    # Small YOLO crops (typical chip facings) need aggressive upscale + contrast.
-    if max(width, height) < 160:
-        aggressive = True
-    # Exclude bottom 15% — yellow price tags read as wrong brands (Taj Mahal, etc.).
-    pack_bottom = max(1, int(height * 0.85))
-    pack_crop = image.crop((0, 0, width, pack_bottom))
-
-    def _read_crop(crop: Image.Image, *, force_aggressive: bool = False) -> str:
-        use_aggressive = aggressive or force_aggressive
-        if use_aggressive:
-            crop = _upscale_if_small(crop)
-            longest = max(crop.size)
-            target = OCR_AGGRESSIVE_TARGET if max(crop.size) < 160 else max(640, OCR_AGGRESSIVE_TARGET // 2)
-            if longest < target:
-                scale = target / float(longest)
-                crop = crop.resize(
-                    (max(1, int(crop.size[0] * scale)), max(1, int(crop.size[1] * scale))),
-                    Image.Resampling.LANCZOS,
-                )
-            prepared = crop.convert("RGB").filter(ImageFilter.SHARPEN)
-            prepared = ImageEnhance.Contrast(prepared).enhance(1.75)
-            engine = _resolve_engine()
-            if engine is None:
-                return ""
-            arr = np.asarray(prepared)
-            relaxed = force_aggressive or aggressive
-            raw = (
-                _read_with_paddle(arr, relaxed=relaxed)
-                if engine == "paddle"
-                else _read_with_easyocr(arr, relaxed=relaxed)
-            )
-            return _clean_ocr_text(raw)
-        return _clean_ocr_text(read_text_from_pil(crop))
-
-    logo_band = logo_focus_crop(pack_crop)
-    flavor_band = flavor_focus_crop(pack_crop)
-    logo_text = _read_crop(logo_band)
-    flavor_text = _read_crop(flavor_band)
-    full_text = _read_crop(pack_crop)
-    if pack_bottom >= 40:
-        band_h = max(1, int(pack_bottom * 0.45))
-        top_band = pack_crop.crop((0, 0, width, band_h))
-        top_text = _read_crop(top_band)
-        center_top = max(1, int(pack_bottom * 0.2))
-        center_bottom = min(pack_bottom, int(pack_bottom * 0.65))
-        center_band = pack_crop.crop((0, center_top, width, center_bottom))
-        center_text = _read_crop(center_band)
-        merged = _merge_ocr_texts(logo_text, flavor_text, top_text, center_text, full_text)
-        if len(merged.strip()) < 3:
-            merged = _merge_ocr_texts(
-                _read_crop(logo_band, force_aggressive=True),
-                _read_crop(flavor_band, force_aggressive=True),
-                merged,
-            )
-        if len(merged.strip()) < 3:
-            merged = _merge_ocr_texts(_read_crop(pack_crop, force_aggressive=True), merged)
-        return merged
-    merged = _merge_ocr_texts(logo_text, flavor_text, full_text)
-    if len(merged.strip()) < 3:
-        merged = _merge_ocr_texts(
-            _read_crop(logo_band, force_aggressive=True),
-            _read_crop(flavor_band, force_aggressive=True),
-            merged,
-        )
-    if len(merged.strip()) < 3:
-        merged = _merge_ocr_texts(_read_crop(pack_crop, force_aggressive=True), merged)
-    return merged
+def combined_facing_confidence(yolo_conf: float, ocr_conf: float, catalog_score: float) -> float:
+    """Blend detection, OCR, and catalog agreement into one facing confidence."""
+    yolo = max(0.0, min(1.0, float(yolo_conf or 0)))
+    ocr = max(0.0, min(1.0, float(ocr_conf or 0)))
+    catalog = max(0.0, min(1.0, float(catalog_score or 0)))
+    if ocr <= 0 and catalog <= 0:
+        return round(yolo * 0.85, 4)
+    return round(min(yolo, max(ocr, catalog * 0.95)) * (0.65 + 0.35 * catalog), 4)

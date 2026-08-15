@@ -27,7 +27,13 @@ from app.brand_dictionary import (
 from app.clip_embeddings import embed_pil_images
 from app.faiss_matcher import is_ready, match_embeddings_batch, match_embeddings_batch_topk
 from app.learned_catalog import learn_sku, metadata_to_sku
-from app.ocr_reader import classify_with_ocr, load_facing_image, read_packaging_text
+from app.ocr_reader import (
+    classify_with_ocr,
+    combined_facing_confidence,
+    load_facing_image,
+    read_packaging_text,
+    read_packaging_text_tiered,
+)
 from app.scan_context import (
     gpt_context_prompt,
     label_fits_scan_context,
@@ -786,8 +792,10 @@ def _finalize_classification_strict(
     classified: list[dict | None],
     ocr_texts: list[str],
     scan_context: dict | None,
+    ocr_results: list | None = None,
 ) -> None:
     """Reconcile OCR text only — no neighbor propagation or GPT recovery."""
+    ocr_results = ocr_results or []
     for index, row in enumerate(classified):
         if not row:
             continue
@@ -796,6 +804,17 @@ def _finalize_classification_strict(
             row = reconcile_label_with_text(row, pack_text)
             row = _reconcile_conflicts_only(row, pack_text, scan_context)
             row["pack_text"] = pack_text
+        if index < len(ocr_results) and ocr_results[index] is not None:
+            ocr_result = ocr_results[index]
+            row["ocr_confidence"] = ocr_result.confidence
+            row["ocr_variant"] = ocr_result.variant
+            row["ocr_score"] = ocr_result.score
+            yolo_conf = float(records[index].get("confidence") or 0.85)
+            row["facing_confidence"] = combined_facing_confidence(
+                yolo_conf,
+                ocr_result.confidence,
+                ocr_result.catalog_score,
+            )
         classified[index] = row
 
 
@@ -843,15 +862,18 @@ def classify_records_strict(
     images = [load_facing_image(record, source_image) for record in records]
     embeddings = embed_pil_images(images)
     classified: list[dict | None] = [None] * len(records)
-    stats = {"ocr": 0, "faiss": 0, "learned": 0, "propagate": 0, "gpt": 0, "none": 0, "gpt_calls": 0, "ocr_empty": 0}
+    stats = {"ocr": 0, "faiss": 0, "learned": 0, "propagate": 0, "gpt": 0, "none": 0, "gpt_calls": 0, "ocr_empty": 0, "ocr_low_confidence": 0}
     ocr_texts: list[str] = [""] * len(records)
+    ocr_results: list = [None] * len(records)
 
     for index in range(len(records)):
-        pack_text = read_packaging_text(images[index])
+        ocr_result = read_packaging_text_tiered(images[index], scan_context=scan_context)
+        ocr_results[index] = ocr_result
+        pack_text = ocr_result.text
         if len(pack_text.strip()) < 3:
-            pack_text = read_packaging_text(images[index], aggressive=True)
-            if len(pack_text.strip()) < 3:
-                stats["ocr_empty"] = int(stats.get("ocr_empty") or 0) + 1
+            stats["ocr_empty"] = int(stats.get("ocr_empty") or 0) + 1
+        elif ocr_result.confidence < 0.55:
+            stats["ocr_low_confidence"] = int(stats.get("ocr_low_confidence") or 0) + 1
         ocr_texts[index] = pack_text
 
         ocr_label = classify_with_ocr(
@@ -917,7 +939,7 @@ def classify_records_strict(
         scan_context,
         stats,
     )
-    _finalize_classification_strict(records, classified, ocr_texts, scan_context)
+    _finalize_classification_strict(records, classified, ocr_texts, scan_context, ocr_results=ocr_results)
     stats["unknown_count"] = stats["none"]
     output = [
         {k: v for k, v in row.items() if k != "_index"}
