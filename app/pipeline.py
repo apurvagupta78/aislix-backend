@@ -219,6 +219,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
                     planogram_candidates,
                     scan_id=scan_id,
                     scan_context=scan_context,
+                    source_image=image,
                 )
                 scan_context["planogram_shelf_rows"] = True
             elif should_use_planogram_slots(classified, planogram_candidates, scan_context):

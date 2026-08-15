@@ -52,6 +52,12 @@ def test_generic_lays_faiss_blocked_without_flavor_ocr():
 def test_bag_color_orange_red_green():
     record = {"x1": 0, "y1": 0, "x2": 80, "y2": 120}
 
+    blue_bgr = np.zeros((120, 80, 3), dtype=np.uint8)
+    blue_bgr[:, :, 0] = 180  # B channel in BGR
+    blue_bgr[:, :, 1] = 100
+    blue_bgr[:, :, 2] = 60
+    assert _bag_color_family(blue_bgr, record) == "blue"
+
     orange_bgr = np.zeros((120, 80, 3), dtype=np.uint8)
     orange_bgr[:, :, 2] = 200
     orange_bgr[:, :, 1] = 120

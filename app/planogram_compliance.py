@@ -93,6 +93,33 @@ def _inventory_key(item: dict) -> str:
     return build_match_key(brand, product, sku)
 
 
+def _normalize_product_tokens(product: str) -> str:
+    """Collapse planogram vs catalog naming (India's Magic Masala ↔ Indias Magic Masala Potato Chips)."""
+    p = _norm(product)
+    p = p.replace("india's", "indias")
+    for drop in ("potato chips", "potato chip", "  "):
+        p = p.replace(drop, " ")
+    return re.sub(r"\s+", " ", p).strip()
+
+
+def _product_match_key(item: dict) -> str:
+    brand = _brand_key(item)
+    product = _normalize_product_tokens(item.get("product_name") or item.get("name") or "")
+    return f"{brand}|{product}"
+
+
+def _aggregate_planogram_by_product(items: list[dict]) -> list[dict]:
+    """Sum expected_qty for repeated planogram rows of the same SKU (slot rows → product totals)."""
+    buckets: dict[str, dict] = {}
+    for row in items:
+        key = _product_match_key(row)
+        if key not in buckets:
+            buckets[key] = {**row, "expected_qty": 0, "planogram_slots": 0}
+        buckets[key]["expected_qty"] += int(row.get("expected_qty") or 1)
+        buckets[key]["planogram_slots"] = int(buckets[key].get("planogram_slots") or 0) + 1
+    return list(buckets.values())
+
+
 def _brand_key(item: dict) -> str:
     return _normalize_brand_key(item.get("brand") or "", item.get("product_name") or item.get("name") or "")
 
@@ -161,9 +188,28 @@ def _match_score(expected: dict, actual: dict) -> float:
         return 0.0
 
     act_product = actual.get("product_name") or actual.get("name") or ""
+    exp_product_norm = _normalize_product_tokens(expected.get("product_name") or "")
+    act_product_norm = _normalize_product_tokens(act_product)
+    if exp_product_norm and act_product_norm:
+        if exp_product_norm == act_product_norm:
+            return 0.95
+        if exp_product_norm in act_product_norm or act_product_norm in exp_product_norm:
+            return 0.88
     product_score = _token_overlap(expected.get("product_name") or "", act_product)
     if product_score >= 0.5:
         return 0.6 + 0.4 * product_score
+    # Lay's flavor aliases across planogram CSV vs catalog OCR names.
+    flavor_aliases = (
+        ("magic masala", "magic masala"),
+        ("tomato tango", "tomato tango"),
+        ("cream", "onion"),
+        ("cream & onion", "cream and onion"),
+    )
+    exp_blob = exp_product_norm
+    act_blob = act_product_norm
+    for a, b in flavor_aliases:
+        if a in exp_blob and b in act_blob:
+            return 0.85
 
     exp_sub = _norm(expected.get("sub_category") or "")
     act_sub = _norm(actual.get("sub_category") or actual.get("category") or "")
@@ -244,6 +290,7 @@ def compare_planogram(
     """Compare expected planogram rows vs detected inventory."""
     scan_context = scan_context or {}
     scoped_expected = filter_planogram_by_scope(planogram_items, scope_type, scope_values, scan_context)
+    scoped_expected = _aggregate_planogram_by_product(scoped_expected)
     full_store = full_store_items or planogram_items
     current_aisle = (
         scan_context.get("shelf_label")
@@ -401,7 +448,21 @@ def compare_planogram(
     }
 
     total_checks = len(scoped_expected) or 1
-    correct_weight = summary["correct_products"]
+    correct_weight = float(summary["correct_products"])
+    for ln in lines:
+        if ln["issue_type"] != ISSUE_QTY_MISMATCH:
+            continue
+        exp = {
+            "brand": ln.get("expected_brand") or "",
+            "product_name": ln.get("expected_product") or "",
+            "sub_category": scan_context.get("sub_category") or "",
+        }
+        act = {
+            "brand": ln.get("actual_brand") or "",
+            "product_name": ln.get("actual_product") or "",
+        }
+        if int(ln.get("actual_qty") or 0) > 0 and _brand_and_type_match(exp, act, scan_context):
+            correct_weight += 0.75
     compliance_percent = round(100.0 * correct_weight / total_checks, 2)
 
     corrective_actions = [

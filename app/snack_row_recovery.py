@@ -24,6 +24,12 @@ LAYS_FLAVOR_TOKENS = (
 )
 
 LAYS_ROW_PRODUCTS: dict[str, dict[str, str]] = {
+    "blue": {
+        "brand": "Lays",
+        "product_name": "Indias Magic Masala Potato Chips",
+        "sku": "lays_indias_magic_masala_potato_chips",
+        "category": "Snacks",
+    },
     "orange": {
         "brand": "Lays",
         "product_name": "Indias Magic Masala Potato Chips",
@@ -68,7 +74,7 @@ def _ocr_has_lays_flavor(ocr_text: str) -> bool:
 
 
 def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
-    """Classify bag color: orange (Magic Masala), red (Tomato Tango), green (Cream & Onion)."""
+    """Classify bag color: blue/orange (Magic Masala), red (Tomato Tango), green (Cream & Onion)."""
     region = np.asarray(load_facing_image(record, source_image))
     h, w = region.shape[:2]
     y1, y2 = int(h * 0.15), int(h * 0.85)
@@ -83,6 +89,9 @@ def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
     g = float(sample[:, :, 1].mean())
     b = float(sample[:, :, 2].mean())
 
+    # India's Magic Masala — often blue/teal bags on Indian racks.
+    if b > 80 and b >= r - 5 and b > g - 25:
+        return "blue"
     if r > 105 and g > 75 and b < 95 and (r + g) > (b + 120) and abs(r - g) < 85:
         return "orange"
     if r > 95 and r > g + 22 and r > b + 22:
@@ -134,7 +143,9 @@ def recover_snack_variants_by_row(
             continue
 
         dominant_color = max(color_votes, key=color_votes.get)
-        if color_votes[dominant_color] / len(cluster) < 0.55:
+        unknown_count = sum(1 for rec in cluster if _is_unknown_or_generic_lays(rec))
+        min_ratio = 0.45 if unknown_count >= len(cluster) // 2 else 0.55
+        if color_votes[dominant_color] / len(cluster) < min_ratio:
             continue
 
         product = LAYS_ROW_PRODUCTS.get(dominant_color)

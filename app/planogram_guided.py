@@ -805,6 +805,7 @@ def assign_planogram_shelf_rows(
     candidates: list[dict],
     scan_id: str | None = None,
     scan_context: dict | None = None,
+    source_image: np.ndarray | None = None,
 ) -> list[dict]:
     """Label every facing on a multi-row rack from planogram shelf rows or product order."""
     if not records or not candidates:
@@ -845,9 +846,13 @@ def assign_planogram_shelf_rows(
 
         row_ocrs: list[str] = []
         for rec in row:
-            path = rec.get("image_path")
-            if path:
-                img = Image.open(path).convert("RGB")
+            if rec.get("x1") is not None and source_image is not None:
+                img = load_facing_image(rec, source_image)
+            elif rec.get("image_path"):
+                img = Image.open(rec["image_path"]).convert("RGB")
+            else:
+                img = None
+            if img is not None:
                 text = read_packaging_text(img)
                 if len(text.strip()) < 3:
                     text = read_packaging_text(img, aggressive=True)

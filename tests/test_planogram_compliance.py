@@ -360,3 +360,26 @@ def test_chips_planogram_full_rack_inventory_compliance():
     assert result["summary"]["wrong_category"] == 0
     assert result["scan_status"] == "compliant"
 
+
+def test_lays_planogram_product_level_compliance_not_zero_on_three_skus():
+    """16 slot rows collapse to 3 products — compliance must not show 0% when all 3 SKUs found."""
+    expected = [
+        {"brand": "Lay's", "product_name": "India's Magic Masala", "expected_qty": 2, "sub_category": "Chips"},
+        {"brand": "Lay's", "product_name": "India's Magic Masala", "expected_qty": 2, "sub_category": "Chips"},
+        {"brand": "Lay's", "product_name": "Tomato Tango", "expected_qty": 2, "sub_category": "Chips"},
+        {"brand": "Lay's", "product_name": "American Style Cream & Onion", "expected_qty": 2, "sub_category": "Chips"},
+    ]
+    inventory = [
+        {"brand": "Lays", "product_name": "Indias Magic Masala Potato Chips", "quantity": 18},
+        {"brand": "Lays", "product_name": "Tomato Tango Potato Chips", "quantity": 6},
+        {"brand": "Lays", "product_name": "American Style Cream and Onion Potato Chips", "quantity": 12},
+    ]
+    result = compare_planogram(
+        expected,
+        inventory,
+        scan_context={"sub_category": "chips", "aislix_category": "Packaged Food & Snacks", "location": "A-1-L"},
+    )
+    assert result["summary"]["expected_products"] == 3
+    assert result["summary"]["missing_products"] == 0
+    assert result["compliance_percent"] >= 75.0
+
