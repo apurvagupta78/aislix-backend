@@ -21,6 +21,7 @@ from app.brand_dictionary import (
     match_from_text,
     match_product_for_brand,
     ocr_agrees_with_label,
+    personal_care_food_mismatch,
     recover_label_from_context,
     reconcile_label_with_text,
 )
@@ -32,6 +33,7 @@ from app.ocr_reader import (
     combined_facing_confidence,
     load_facing_image,
     read_packaging_text,
+    read_packaging_text_max_effort,
     read_packaging_text_tiered,
 )
 from app.scan_context import (
@@ -519,6 +521,8 @@ def _accept_faiss_match(
 
 
 def _accept_ocr_label(label: dict, scan_context: dict | None) -> bool:
+    if personal_care_food_mismatch(label, scan_context):
+        return False
     if not scan_context:
         return True
     if not category_allows_brand(
@@ -720,6 +724,107 @@ def _apply_gpt_fallback_to_unknowns(
         stats["none"] = max(0, int(stats.get("none") or 0) - 1)
 
     stats["gpt_calls"] = int(stats.get("gpt_calls") or 0) + gpt_used
+
+
+def _retry_ocr_on_unknowns(
+    records: list[dict],
+    classified: list[dict | None],
+    images: list[Image.Image],
+    ocr_texts: list[str],
+    scan_context: dict | None,
+    stats: dict,
+) -> None:
+    """Second OCR pass with heavy preprocessing for facings still Unknown."""
+    for index, row in enumerate(classified):
+        if not row or not _is_unknown_label(row):
+            continue
+        ocr_result = read_packaging_text_max_effort(images[index], scan_context=scan_context)
+        pack_text = ocr_result.text
+        if len(pack_text.strip()) < 3:
+            continue
+        ocr_texts[index] = pack_text
+        match = classify_with_ocr(images[index], raw_text=pack_text, scan_context=scan_context)
+        if not match or not _is_valid_label(match):
+            match = match_from_text(pack_text, scan_context=scan_context)
+        if not match or not _is_valid_label(match):
+            continue
+        if not _accept_ocr_label(match, scan_context):
+            continue
+        if sub_category_blocks_brand(
+            scan_context,
+            match.get("brand") or "",
+            pack_text,
+            product_name=match.get("product_name") or "",
+        ):
+            continue
+        merged = _merge_label(records[index], match)
+        merged["recognition_source"] = match.get("recognition_source") or "ocr_retry"
+        merged["ocr_confidence"] = ocr_result.confidence
+        classified[index] = merged
+        stats["ocr"] = int(stats.get("ocr") or 0) + 1
+        stats["none"] = max(0, int(stats.get("none") or 0) - 1)
+
+
+def _recover_unknowns_from_row_neighbors(
+    records: list[dict],
+    classified: list[dict | None],
+    embeddings: np.ndarray,
+    ocr_texts: list[str],
+    scan_context: dict | None,
+    stats: dict,
+) -> None:
+    """Assign Unknown facings from visually similar labeled neighbors on the same shelf row."""
+    from app.planogram_guided import cluster_records_by_shelf_row
+
+    indexed: list[dict] = []
+    for i, (rec, row) in enumerate(zip(records, classified)):
+        if not row:
+            continue
+        indexed.append({**rec, **row, "_idx": i})
+
+    for cluster in cluster_records_by_shelf_row(indexed):
+        labeled = [item for item in cluster if not _is_unknown_label(item)]
+        unknowns = [item for item in cluster if _is_unknown_label(item)]
+        if not labeled or not unknowns:
+            continue
+
+        for unk in unknowns:
+            u_idx = int(unk["_idx"])
+            pack_text = ocr_texts[u_idx] if u_idx < len(ocr_texts) else ""
+            best_sim = 0.0
+            best_ref: dict | None = None
+            for ref in labeled:
+                r_idx = int(ref["_idx"])
+                sim = _cosine_similarity(embeddings[u_idx], embeddings[r_idx])
+                if sim > best_sim:
+                    best_sim = sim
+                    best_ref = ref
+            if best_sim < 0.86 or not best_ref:
+                continue
+            if label_conflicts_with_pack_text(best_ref, pack_text):
+                continue
+            if sub_category_blocks_brand(
+                scan_context,
+                best_ref.get("brand") or "",
+                pack_text,
+                product_name=best_ref.get("product_name") or "",
+            ):
+                continue
+            if not label_fits_scan_context(best_ref, scan_context, pack_text):
+                continue
+            copy = {
+                k: v
+                for k, v in best_ref.items()
+                if k not in {"_idx", "x1", "y1", "x2", "y2", "image_path"}
+            }
+            copy["recognition_source"] = "row_consensus"
+            copy["confidence"] = round(
+                min(0.92, float(best_ref.get("confidence") or 0.8) * 0.95),
+                4,
+            )
+            classified[u_idx] = _merge_label(records[u_idx], copy)
+            stats["propagate"] = int(stats.get("propagate") or 0) + 1
+            stats["none"] = max(0, int(stats.get("none") or 0) - 1)
 
 
 def active_recognition_mode() -> str:
@@ -938,6 +1043,10 @@ def classify_records_strict(
         ocr_texts,
         scan_context,
         stats,
+    )
+    _retry_ocr_on_unknowns(records, classified, images, ocr_texts, scan_context, stats)
+    _recover_unknowns_from_row_neighbors(
+        records, classified, embeddings, ocr_texts, scan_context, stats
     )
     _finalize_classification_strict(records, classified, ocr_texts, scan_context, ocr_results=ocr_results)
     stats["unknown_count"] = stats["none"]

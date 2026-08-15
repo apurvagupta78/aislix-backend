@@ -60,7 +60,37 @@ TEXT_ALIASES: dict[str, str] = {
     "paper boat": "Paper",
     "too yumm": "Too",
     "cream bell": "Cream",
+    "masala munch": "Kurkure",
 }
+
+# Short OCR fragments → catalog product (checked when full hints miss).
+PARTIAL_FRAGMENT_RULES: list[tuple[str, str, str]] = [
+    (r"\brings\b", "Crax", "Rings"),
+    (r"\bcurls\b", "Crax", "Curls"),
+    (r"\bmasala\s+munch\b", "Kurkure", "Masala Munch"),
+    (r"\btedhe\s+medhe\b", "Bingo", "Tedhe Medhe"),
+    (r"\bmad\s+angles\b", "Bingo", "Mad Angles"),
+    (r"\bmagic\s+masala\b", "Lays", "Indias Magic Masala Potato Chips"),
+    (r"\btomato\s+tango\b", "Lays", "Tomato Tango Potato Chips"),
+    (r"\bcream\s*(?:&|and)\s*onion\b", "Lays", "American Style Cream and Onion Potato Chips"),
+    (r"\bclassic\s+salted\b", "Lays", "Classic Salted Potato Chips"),
+    (r"\banti[\s-]?dandruff\b", "Head", "Classic Clean Anti Dandruff Shampoo"),
+    (r"\bhair\s+fall\b", "Pantene", "Hairfall Control Shampoo"),
+    (r"\bsmooth\s*(?:&|and)\s*shine\b", "Tresemme", "Smooth Shine Shampoo"),
+    (r"\btotal\s+repair\b", "Loreal", "Total Repair 5 Shampoo"),
+]
+
+PERSONAL_CARE_FOOD_TOKENS = (
+    "hajmola",
+    "digestive",
+    "tablet",
+    "namkeen",
+    "biscuit",
+    "chocolate",
+    "potato chips",
+    "noodles",
+    "maggi",
+)
 
 # Single-token catalog brands that are usually variant words, not manufacturers.
 VARIANT_BRAND_BLOCKLIST = frozenset({
@@ -146,6 +176,10 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bbingo\b", "Bingo", ""),
     (r"\bkurkure\b.*\bmasala\s+munch\b", "Kurkure", "Masala Munch"),
     (r"\bkurkure\b", "Kurkure", ""),
+    (r"\brings\b", "Crax", "Rings"),
+    (r"\bcurls\b", "Crax", "Curls"),
+    (r"\btedhe\s+medhe\b", "Bingo", "Tedhe Medhe"),
+    (r"\bmad\s+angles\b", "Bingo", "Mad Angles"),
     (r"\blay(?:\'|s)?s\b.*\bmagic\s+masala\b|\bmagic\s+masala\b.*\blay(?:\'|s)?s\b", "Lays", "Indias Magic Masala Potato Chips"),
     (r"\blay(?:\'|s)?s\b.*\btomato\s+tango\b|\btomato\s+tango\b.*\blay(?:\'|s)?s\b", "Lays", "Tomato Tango Potato Chips"),
     (r"\blay(?:\'|s)?s\b.*\bcream\s*(?:&|and)\s*onion\b|\bcream\s*(?:&|and)\s*onion\b.*\blay(?:\'|s)?s\b", "Lays", "American Style Cream and Onion Potato Chips"),
@@ -578,11 +612,151 @@ def _catalog_entry(brand: str, product_name: str) -> dict | None:
     return None
 
 
+def _label_from_brand_product(
+    brand: str,
+    product_name: str,
+    text: str,
+    *,
+    confidence: float = 0.9,
+    scan_context: dict | None = None,
+) -> dict:
+    entry = _catalog_entry(brand, product_name)
+    if entry:
+        product_name = entry.get("product_name") or product_name
+        return {
+            "brand": display_brand_name(brand, product_name),
+            "product_name": product_name,
+            "variant": entry.get("variant") or "",
+            "sku": entry.get("sku") or "",
+            "category": entry.get("category") or infer_category(entry.get("sku") or ""),
+            "confidence": confidence,
+            "recognition_source": "ocr",
+            "visible_text": text[:240],
+        }
+    product = match_product_for_brand(brand, text, scan_context=scan_context)
+    if product:
+        product["visible_text"] = text[:240]
+        product["confidence"] = max(float(product.get("confidence") or 0), confidence)
+        product["recognition_source"] = "ocr"
+        return product
+    return {
+        "brand": display_brand_name(brand, product_name),
+        "product_name": product_name,
+        "variant": "",
+        "sku": "",
+        "category": "General",
+        "confidence": confidence,
+        "recognition_source": "ocr",
+        "visible_text": text[:240],
+    }
+
+
+def _lays_flavor_fragment_allowed(text_l: str, sub: str) -> bool:
+    """Allow Lay's flavor fragments on chip aisles, but not generic '… potato chips' phrases."""
+    if sub not in {"chips", "potato_chips"}:
+        return False
+    if re.search(r"\blay(?:'|s)?s\b", text_l):
+        return True
+    if "potato" in text_l and "chips" in text_l:
+        return False
+    return True
+
+
+def _flavor_token_bonus(normalized: str, product_l: str) -> float:
+    """Prefer SKUs whose flavor tokens appear in OCR when scores tie."""
+    bonus = 0.0
+    groups = (
+        (("magic", "masala"),),
+        (("tomato", "tango"),),
+        (("cream", "onion"),),
+        (("classic", "salted"),),
+    )
+    for tokens in groups:
+        if all(token in normalized for token in tokens) and all(token in product_l for token in tokens):
+            bonus += 0.25
+    return bonus
+
+
+def _match_partial_fragments(normalized: str, scan_context: dict | None = None) -> dict | None:
+    """Map short OCR fragments (rings, magic, tango) to catalog SKUs."""
+    if not normalized or len(normalized.strip()) < 3:
+        return None
+    text_l = normalized.lower()
+    sub = ((scan_context or {}).get("sub_category") or "").lower()
+
+    for pattern, brand, product_name in PARTIAL_FRAGMENT_RULES:
+        if not re.search(pattern, text_l, flags=re.IGNORECASE):
+            continue
+        if brand.lower() == "lays":
+            if not _lays_flavor_fragment_allowed(text_l, sub):
+                continue
+        return _label_from_brand_product(
+            brand, product_name, normalized, confidence=0.88, scan_context=scan_context
+        )
+
+    if re.search(r"\bmagic\b", text_l) and _lays_flavor_fragment_allowed(text_l, sub):
+        return _label_from_brand_product(
+            "Lays", "Indias Magic Masala Potato Chips", normalized, confidence=0.82, scan_context=scan_context
+        )
+    if re.search(r"\btango\b", text_l) and _lays_flavor_fragment_allowed(text_l, sub):
+        return _label_from_brand_product(
+            "Lays", "Tomato Tango Potato Chips", normalized, confidence=0.82, scan_context=scan_context
+        )
+    if (
+        re.search(r"\bcream\b", text_l)
+        and "onion" in text_l
+        and _lays_flavor_fragment_allowed(text_l, sub)
+    ):
+        return _label_from_brand_product(
+            "Lays",
+            "American Style Cream and Onion Potato Chips",
+            normalized,
+            confidence=0.82,
+            scan_context=scan_context,
+        )
+    return None
+
+
+def personal_care_food_mismatch(label: dict, scan_context: dict | None) -> bool:
+    """Block food/digestive SKUs on personal-care shelf scans."""
+    if not scan_context:
+        return False
+    from app.scan_context import _normalize_key
+
+    cat = _normalize_key(scan_context.get("aislix_category") or "")
+    if cat != "personal care":
+        return False
+    blob = " ".join(
+        [
+            label.get("brand") or "",
+            label.get("product_name") or "",
+            label.get("sku") or "",
+        ]
+    ).lower()
+    return any(token in blob for token in PERSONAL_CARE_FOOD_TOKENS)
+
+
+def expand_partial_ocr_text(text: str, scan_context: dict | None = None) -> str:
+    """Normalize common OCR truncations before catalog matching."""
+    if not text:
+        return text
+    t = text.lower()
+    sub = ((scan_context or {}).get("sub_category") or "").lower()
+    if re.search(r"\bmagic\b", t) and "masala" not in t and sub in {"chips", "potato_chips"}:
+        t = re.sub(r"\bmagic\b", "magic masala", t, count=1)
+    if re.search(r"\btango\b", t) and "tomato" not in t and sub in {"chips", "potato_chips"}:
+        t = re.sub(r"\btango\b", "tomato tango", t, count=1)
+    if re.search(r"\bmasala\b", t) and "munch" not in t and "kurkure" in t:
+        t = t.replace("masala", "masala munch")
+    return t
+
+
 def match_from_text(text: str, scan_context: dict | None = None) -> dict | None:
     """Best catalog match from OCR text: product hints → brand → SKU."""
     text = normalize_ocr_text(text)
     if not text or len(text.strip()) < 3:
         return None
+    text = expand_partial_ocr_text(text, scan_context)
     normalized = _normalize(text)
 
     for pattern, brand, product_name in PRODUCT_HINTS:
@@ -635,6 +809,9 @@ def match_from_text(text: str, scan_context: dict | None = None) -> dict | None:
 
     brand_match = match_brand_in_text(text)
     if not brand_match:
+        partial = _match_partial_fragments(normalized, scan_context)
+        if partial:
+            return partial
         return None
     brand, brand_conf = brand_match
     if _tea_brand_blocked_on_pack(text, brand):
@@ -831,7 +1008,8 @@ def match_product_for_brand(
             elif entry_vol and not (entry_vol & volume_tokens):
                 score -= 0.05
         score += _subcategory_product_adjustment(normalized, entry, scan_context)
-        if score >= best_score:
+        score += _flavor_token_bonus(normalized, product_l)
+        if score > best_score or (score == best_score and best and len(product_l) < len((best.get("product_name") or ""))):
             best_score = score
             best = entry
     if best and best_score >= 0.55:

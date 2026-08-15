@@ -105,3 +105,26 @@ def test_mixed_snack_row_does_not_force_tomato_tango():
 
     unknown = [r for r in updated if r.get("brand") == "Unknown"]
     assert len(unknown) == 1
+
+
+def test_partial_fragment_resolves_short_lays_ocr():
+    ctx = {"sub_category": "chips"}
+    match = match_from_text("magic masala", scan_context=ctx)
+    assert match is not None
+    assert "magic masala" in (match.get("product_name") or "").lower()
+
+    match = match_from_text("magic", scan_context=ctx)
+    assert match is not None
+    assert (match.get("brand") or "").lower().startswith("lay")
+
+    assert match_from_text("rings", scan_context=ctx) is not None
+    assert (match_from_text("rings", scan_context=ctx) or {}).get("brand") == "Crax"
+
+
+def test_personal_care_blocks_food_skus():
+    from app.brand_dictionary import personal_care_food_mismatch
+
+    ctx = {"aislix_category": "Personal Care", "sub_category": "shampoo"}
+    label = {"brand": "Dabur", "product_name": "Hajmola Imli Digestive Tablets"}
+    assert personal_care_food_mismatch(label, ctx)
+    assert not personal_care_food_mismatch({"brand": "Dove", "product_name": "Shampoo"}, ctx)

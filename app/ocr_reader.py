@@ -101,6 +101,20 @@ def center_logo_crop(image: Image.Image) -> Image.Image:
     return image.crop((left, top, right, bottom))
 
 
+def shelf_edge_crop(image: Image.Image) -> Image.Image:
+    """Bottom band where store shelf edge labels (SEL) often show brand + variant clearly."""
+    width, height = image.size
+    if width < 12 or height < 12:
+        return image
+    top = int(height * 0.78)
+    bottom = height
+    left = int(width * 0.05)
+    right = int(width * 0.95)
+    if bottom - top < 8:
+        return image
+    return image.crop((left, top, right, bottom))
+
+
 def _upscale_if_small(image: Image.Image) -> Image.Image:
     width, height = image.size
     longest = max(width, height)
@@ -541,8 +555,10 @@ def read_packaging_text_result(
     logo_band = logo_focus_crop(pack_crop)
     flavor_band = flavor_focus_crop(pack_crop)
     center_band = center_logo_crop(pack_crop)
+    edge_band = shelf_edge_crop(pack_crop)
     if OCR_FAST_MODE and not heavy:
         band_results = [
+            _read_band(edge_band, band_rec_only=True),
             _read_band(center_band, band_rec_only=True),
             _read_band(logo_band, band_rec_only=True),
             _read_band(flavor_band, band_rec_only=True),
@@ -595,6 +611,15 @@ def _ocr_needs_heavy_retry(result: OcrReadResult, scan_context: dict | None = No
     if match_from_text(enriched, scan_context=scan_context) is None:
         return True
     return False
+
+
+def read_packaging_text_max_effort(
+    image: Image.Image,
+    *,
+    scan_context: dict | None = None,
+) -> OcrReadResult:
+    """Last-resort OCR for unknown facings: heavy preprocess + all bands."""
+    return read_packaging_text_result(image, scan_context=scan_context, heavy=True)
 
 
 def read_packaging_text_tiered(
