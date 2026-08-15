@@ -988,6 +988,7 @@ def match_product_for_brand(
     best_score = 0.0
     for entry in unique_entries:
         product = (entry.get("product_name") or "").strip()
+        product_l = product.lower()
         variant = (entry.get("variant") or "").strip()
         sku = (entry.get("sku") or "").strip()
         haystack = " ".join(filter(None, [product, variant, sku.replace("_", " ")]))
