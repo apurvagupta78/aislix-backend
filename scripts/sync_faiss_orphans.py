@@ -7,6 +7,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Literal
 
 import faiss
 import numpy as np
@@ -206,10 +207,24 @@ def _seed_crops(source: dict, yolo_pool: dict[int, list[Image.Image]]) -> list[I
     raise RuntimeError(f"Unknown source type: {stype}")
 
 
-def main() -> None:
-    args = parse_args()
+def register_sku_hints(entries: list[dict]) -> None:
+    """Register optional donor/crop hints for newly added catalog SKUs."""
+    for entry in entries:
+        sku = (entry.get("sku") or "").lower()
+        if not sku:
+            continue
+        donor = (entry.get("donor_hint") or entry.get("faiss_donor_hint") or "").strip().lower()
+        if donor:
+            SKU_DONOR_HINTS[sku] = donor
+        crop = entry.get("faiss_crop_source") or entry.get("crop_source")
+        if crop:
+            SKU_CROP_SOURCES[sku] = crop
+
+
+def sync_orphan_embeddings(mode: Literal["copy", "embed"] = "copy") -> int:
+    """Append vectors for catalog rows past FAISS ntotal. Returns count appended."""
     if not INDEX_PATH.exists() or not CATALOG_PATH.exists():
-        raise SystemExit("FAISS index or catalog.json missing.")
+        raise RuntimeError("FAISS index or catalog.json missing.")
 
     raw = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     products = raw["products"] if isinstance(raw, dict) else raw
@@ -217,40 +232,14 @@ def main() -> None:
     index = faiss.read_index(str(INDEX_PATH))
     orphans = products[index.ntotal :]
     if not orphans:
-        print("FAISS index already aligned with catalog — nothing to append.")
-        return
+        print("FAISS index already aligned with catalog.")
+        return 0
 
-    print(f"Appending {len(orphans)} orphan embedding(s) [{args.mode}]...")
-    if args.mode == "copy":
+    print(f"Appending {len(orphans)} orphan embedding(s) [{mode}]...")
+    if mode == "copy":
         new_matrix = _copy_orphan_vectors(index, products, orphans)
     else:
-        yolo_pool = _load_yolo_pool(args.dataset) if args.dataset.exists() else {}
-
-        seed_cache: dict[str, list[Image.Image]] = {}
-        aug_cache: dict[str, list[Image.Image]] = {}
-        sku_use_count: dict[str, int] = {}
-
-        crops_to_embed: list[Image.Image] = []
-        for row in orphans:
-            sku = (row.get("sku") or "").lower()
-            source = SKU_CROP_SOURCES.get(sku)
-            if not source:
-                raise SystemExit(f"No crop source configured for orphan SKU: {sku}")
-
-            if sku not in seed_cache:
-                seed_cache[sku] = _seed_crops(source, yolo_pool)
-                expanded: list[Image.Image] = []
-                for seed in seed_cache[sku]:
-                    expanded.extend(_augment_variants(seed))
-                aug_cache[sku] = expanded or seed_cache[sku]
-
-            use_idx = sku_use_count.get(sku, 0)
-            pool = aug_cache[sku]
-            crops_to_embed.append(pool[use_idx % len(pool)])
-            sku_use_count[sku] = use_idx + 1
-            print(f"  {row.get('brand')} — {row.get('product_name')} ({sku})")
-
-        new_matrix = np.vstack(embed_pil_images(crops_to_embed)).astype(np.float32)
+        new_matrix = _embed_orphan_vectors(orphans)
 
     faiss.normalize_L2(new_matrix)
 
@@ -264,7 +253,72 @@ def main() -> None:
 
     print(f"FAISS ntotal: {index.ntotal} -> {merged_index.ntotal} | catalog rows: {len(products)}")
     if merged_index.ntotal != len(products):
-        print("WARNING: FAISS and catalog sizes still differ — check for unconfigured orphan SKUs.")
+        print("WARNING: FAISS and catalog sizes still differ.")
+    return len(orphans)
+
+
+def _embed_orphan_vectors(orphans: list[dict]) -> np.ndarray:
+    yolo_pool = _load_yolo_pool(DEFAULT_DATASET) if DEFAULT_DATASET.exists() else {}
+
+    seed_cache: dict[str, list[Image.Image]] = {}
+    aug_cache: dict[str, list[Image.Image]] = {}
+    sku_use_count: dict[str, int] = {}
+
+    embed_rows: list[tuple[int, Image.Image]] = []
+    copy_rows: list[tuple[int, dict]] = []
+
+    index = faiss.read_index(str(INDEX_PATH))
+    raw = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    products = raw["products"] if isinstance(raw, dict) else raw
+
+    for idx, row in enumerate(orphans):
+        sku = (row.get("sku") or "").lower()
+        source = SKU_CROP_SOURCES.get(sku)
+        if not source:
+            copy_rows.append((idx, row))
+            print(
+                f"  embed fallback copy: {row.get('brand')} — "
+                f"{row.get('product_name')} ({sku})"
+            )
+            continue
+
+        if sku not in seed_cache:
+            seed_cache[sku] = _seed_crops(source, yolo_pool)
+            expanded: list[Image.Image] = []
+            for seed in seed_cache[sku]:
+                expanded.extend(_augment_variants(seed))
+            aug_cache[sku] = expanded or seed_cache[sku]
+
+        use_idx = sku_use_count.get(sku, 0)
+        pool = aug_cache[sku]
+        embed_rows.append((idx, pool[use_idx % len(pool)]))
+        sku_use_count[sku] = use_idx + 1
+        print(f"  embed: {row.get('brand')} — {row.get('product_name')} ({sku})")
+
+    if not embed_rows and not copy_rows:
+        return np.zeros((0, 512), dtype=np.float32)
+
+    dim = index.d
+    out = np.zeros((len(orphans), dim), dtype=np.float32)
+
+    if embed_rows:
+        crops = [crop for _, crop in embed_rows]
+        embedded = np.vstack(embed_pil_images(crops)).astype(np.float32)
+        for (idx, _), vec in zip(embed_rows, embedded):
+            out[idx] = vec
+
+    for idx, row in copy_rows:
+        out[idx] = _copy_orphan_vectors(index, products, [row])[0]
+
+    return out
+
+
+def main() -> None:
+    args = parse_args()
+    try:
+        sync_orphan_embeddings(args.mode)
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 if __name__ == "__main__":

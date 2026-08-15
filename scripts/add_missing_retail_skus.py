@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-import json
+import sys
 from pathlib import Path
 
-CATALOG_PATH = Path(__file__).resolve().parents[1] / "data" / "catalog.json"
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from scripts.retail_sku import add_retail_skus  # noqa: E402
 
 NEW_SKUS = [
     {
@@ -15,6 +18,7 @@ NEW_SKUS = [
         "variant": "180 ml",
         "sku": "dabur_vatika_health_shine_shampoo_180_ml",
         "category": "Personal Care",
+        "donor_hint": "tresemme smooth shine",
     },
     {
         "class_id": 9116,
@@ -23,6 +27,7 @@ NEW_SKUS = [
         "variant": "150 ml",
         "sku": "axe_deodorant_body_spray_150_ml",
         "category": "Personal Care",
+        "donor_hint": "deodorant body spray",
     },
     {
         "class_id": 9117,
@@ -31,6 +36,7 @@ NEW_SKUS = [
         "variant": "150 ml",
         "sku": "fogg_deodorant_body_spray_150_ml",
         "category": "Personal Care",
+        "donor_hint": "deodorant body spray",
     },
     {
         "class_id": 9118,
@@ -39,6 +45,7 @@ NEW_SKUS = [
         "variant": "150 ml",
         "sku": "wild_stone_deodorant_body_spray_150_ml",
         "category": "Personal Care",
+        "donor_hint": "deodorant body spray",
     },
     {
         "class_id": 9119,
@@ -47,6 +54,7 @@ NEW_SKUS = [
         "variant": "150 ml",
         "sku": "park_avenue_deodorant_body_spray_150_ml",
         "category": "Personal Care",
+        "donor_hint": "deodorant body spray",
     },
     {
         "class_id": 9120,
@@ -55,6 +63,7 @@ NEW_SKUS = [
         "variant": "66 gms",
         "sku": "crax_rings_66_gms",
         "category": "Snacks",
+        "donor_hint": "mad angles",
     },
     {
         "class_id": 9121,
@@ -63,6 +72,7 @@ NEW_SKUS = [
         "variant": "66 gms",
         "sku": "crax_curls_66_gms",
         "category": "Snacks",
+        "donor_hint": "mad angles",
     },
     {
         "class_id": 9122,
@@ -71,6 +81,7 @@ NEW_SKUS = [
         "variant": "68 gms",
         "sku": "kurkure_masala_munch_68_gms",
         "category": "Snacks",
+        "donor_hint": "mad angles",
     },
     {
         "class_id": 9123,
@@ -79,6 +90,7 @@ NEW_SKUS = [
         "variant": "33 gms",
         "sku": "bingo_tedhe_medhe_33_gms",
         "category": "Snacks",
+        "donor_hint": "mad angles",
     },
     {
         "class_id": 9124,
@@ -87,27 +99,13 @@ NEW_SKUS = [
         "variant": "33 gms",
         "sku": "bingo_mad_angles_33_gms",
         "category": "Snacks",
+        "donor_hint": "mad angles",
     },
 ]
 
 
 def main() -> None:
-    data = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
-    products = data["products"] if isinstance(data, dict) else data
-    existing_skus = {(p.get("sku") or "").lower() for p in products}
-    added = 0
-    for entry in NEW_SKUS:
-        sku = entry["sku"]
-        if sku.lower() in existing_skus:
-            continue
-        products.append(entry)
-        existing_skus.add(sku.lower())
-        added += 1
-        print(f"  + {entry['brand']} — {entry['product_name']}")
-    if isinstance(data, dict):
-        data["products"] = products
-    CATALOG_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"Added {added} new SKU(s) to catalog.json.")
+    add_retail_skus(NEW_SKUS, faiss_mode="auto")
 
 
 if __name__ == "__main__":
