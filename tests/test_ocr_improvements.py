@@ -62,7 +62,7 @@ def test_bag_color_orange_red_green():
     orange_bgr[:, :, 2] = 200
     orange_bgr[:, :, 1] = 120
     orange_bgr[:, :, 0] = 40
-    assert _bag_color_family(orange_bgr, record) == "orange"
+    assert _bag_color_family(orange_bgr, record) == "red"
 
     red_bgr = np.zeros((120, 80, 3), dtype=np.uint8)
     red_bgr[:, :, 2] = 200
@@ -194,10 +194,10 @@ def test_snack_row_recovery_overrides_wrong_magic_masala_on_green_row():
 def test_snack_row_recovery_assigns_unknowns_by_row():
     ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
     source = np.zeros((600, 400, 3), dtype=np.uint8)
-    # top row orange (BGR)
-    source[50:150, 20:380, 2] = 200
-    source[50:150, 20:380, 1] = 120
-    source[50:150, 20:380, 0] = 40
+    # top row Magic Masala teal (BGR → RGB R=100,G=90,B=140)
+    source[50:150, 20:380, 0] = 140
+    source[50:150, 20:380, 1] = 90
+    source[50:150, 20:380, 2] = 100
     # bottom row green (BGR)
     source[350:450, 20:380, 2] = 40
     source[350:450, 20:380, 1] = 150

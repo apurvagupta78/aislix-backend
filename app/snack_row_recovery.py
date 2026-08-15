@@ -30,12 +30,6 @@ LAYS_ROW_PRODUCTS: dict[str, dict[str, str]] = {
         "sku": "lays_indias_magic_masala_potato_chips",
         "category": "Snacks",
     },
-    "orange": {
-        "brand": "Lays",
-        "product_name": "Indias Magic Masala Potato Chips",
-        "sku": "lays_indias_magic_masala_potato_chips",
-        "category": "Snacks",
-    },
     "red": {
         "brand": "Lays",
         "product_name": "Tomato Tango Potato Chips",
@@ -74,7 +68,7 @@ def _ocr_has_lays_flavor(ocr_text: str) -> bool:
 
 
 def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
-    """Classify bag color: blue/orange (Magic Masala), red (Tomato Tango), green (Cream & Onion)."""
+    """Classify bag color: blue (Magic Masala), red (Tomato Tango), green (Cream & Onion)."""
     region = np.asarray(load_facing_image(record, source_image))
     h, w = region.shape[:2]
     y1, y2 = int(h * 0.15), int(h * 0.85)
@@ -92,9 +86,10 @@ def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
     # Green Cream & Onion — allow blue photo cast (b can exceed g slightly).
     if g > 70 and g >= r - 5 and g >= b - 28 and (g - min(r, b)) >= 8:
         return "green"
+    # Warm orange/red Tomato Tango — must not map to Magic Masala (blue/teal packs).
+    if r > 95 and r > g + 10 and r > b + 10:
+        return "red"
     if r > 105 and g > 65 and r > b + 25:
-        return "orange"
-    if r > 95 and r > g + 15 and r > b + 12:
         return "red"
     # Cool blue-dominant packs (Tomato Tango) — before warm teal Magic Masala.
     if b > 85 and b >= r and (b - r) >= 8 and r < 95:
@@ -122,13 +117,16 @@ def _lays_color_for_product(row: dict) -> str | None:
 def _color_families_compatible(a: str, b: str) -> bool:
     if a == b:
         return True
-    return {a, b} <= {"blue", "orange"}
+    # Legacy alias: older votes may still emit "orange" for tomato rows.
+    if {a, b} <= {"red", "orange"}:
+        return True
+    return False
 
 
 def _should_skip_row_recovery(rec: dict, dominant_color: str) -> bool:
     """Skip only when OCR flavor already matches row bag color."""
     product = (rec.get("product_name") or "").lower()
-    if "magic masala" in product and dominant_color in {"red", "green"}:
+    if "magic masala" in product and dominant_color in {"red", "green", "orange"}:
         return False
     pack_text = (rec.get("pack_text") or "").strip()
     current_color = _lays_color_for_product(rec)
@@ -160,7 +158,11 @@ def _should_force_row_reconcile(rec: dict, dominant_color: str) -> bool:
         return True
     if not _color_families_compatible(current_color, dominant_color):
         return True
-    if "magic masala" in (rec.get("product_name") or "").lower() and dominant_color in {"red", "green"}:
+    if "magic masala" in (rec.get("product_name") or "").lower() and dominant_color in {
+        "red",
+        "green",
+        "orange",
+    }:
         return True
     return False
 
@@ -176,10 +178,12 @@ def _has_distinct_lays_flavor(row: dict) -> bool:
 def should_use_snack_row_recovery(
     classified: list[dict],
     scan_context: dict | None,
+    *,
+    override_only: bool = False,
 ) -> bool:
     if not SNACK_ROW_RECOVERY or not scan_context:
         return False
-    if scan_context.get("planogram_candidates"):
+    if scan_context.get("planogram_candidates") and not override_only:
         return False
     sub = (scan_context.get("sub_category") or "").lower()
     if sub not in {"chips", "potato_chips"}:
@@ -192,10 +196,12 @@ def recover_snack_variants_by_row(
     classified: list[dict],
     source_image: np.ndarray,
     scan_context: dict | None = None,
+    *,
+    override_only: bool = False,
 ) -> tuple[list[dict], dict[str, Any]]:
     """Label unknown/generic Lay's facings from row-level bag color consensus."""
     stats: dict[str, Any] = {"snack_row_recovery": 0, "snack_row_rows": 0}
-    if not should_use_snack_row_recovery(classified, scan_context):
+    if not should_use_snack_row_recovery(classified, scan_context, override_only=override_only):
         return classified, stats
 
     row_clusters = cluster_records_by_shelf_row(classified)
@@ -215,11 +221,16 @@ def recover_snack_variants_by_row(
         if not color_votes:
             continue
 
-        dominant_color = max(color_votes, key=color_votes.get)
+        normalized_votes: dict[str, int] = {}
+        for color, count in color_votes.items():
+            key = "red" if color == "orange" else color
+            normalized_votes[key] = normalized_votes.get(key, 0) + count
+
+        dominant_color = max(normalized_votes, key=normalized_votes.get)
         unknown_count = sum(1 for rec in cluster if _is_unknown_or_generic_lays(rec))
         min_ratio = 0.45 if unknown_count >= len(cluster) // 2 else 0.55
         force_ratio = 0.5
-        dominant_ratio = color_votes[dominant_color] / len(cluster)
+        dominant_ratio = normalized_votes[dominant_color] / len(cluster)
         if dominant_ratio < min_ratio:
             continue
 
@@ -232,6 +243,8 @@ def recover_snack_variants_by_row(
                 if float(rec.get("confidence") or 0) < 0.55:
                     continue
             force = dominant_ratio >= force_ratio and _should_force_row_reconcile(rec, dominant_color)
+            if override_only and not force:
+                continue
             if _should_skip_row_recovery(rec, dominant_color) and not force:
                 continue
 

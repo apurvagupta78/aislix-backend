@@ -242,6 +242,15 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
                 scan_context=scan_context,
                 scan_id=scan_id,
             )
+            from app.snack_row_recovery import recover_snack_variants_by_row
+
+            classified, row_override_stats = recover_snack_variants_by_row(
+                classified,
+                image,
+                scan_context,
+                override_only=True,
+            )
+            recognition_engine_stats.update(row_override_stats)
             recognition_engine_stats["gpt_recovery"] = gpt_recovery_stats.get("gpt_recovery", 0)
             recognition_engine_stats["gpt_calls"] = int(
                 recognition_engine_stats.get("gpt_calls") or 0
