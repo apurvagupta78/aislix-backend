@@ -353,10 +353,36 @@ def _ocr_brand_conflicts(text: str, candidate: dict) -> bool:
     return False
 
 
+def _is_ambiguous_lays_flavor_ocr(text: str) -> bool:
+    """Short OCR fragments (e.g. 'Cream', 'Crear') must not override row assignment."""
+    blob = re.sub(r"\s+", " ", (text or "").lower().strip())
+    if not blob or len(blob) > 18:
+        return False
+    if any(token in blob for token in ("magic", "masala", "tomato", "tango", "india")):
+        return False
+    if "onion" in blob and "cream" in blob:
+        return False
+    ambiguous = {
+        "cream",
+        "crear",
+        "crea",
+        "cre",
+        "c",
+        "cream &",
+        "cream & o",
+        "cream & on",
+        "eam & o",
+        "eam & on",
+    }
+    return blob in ambiguous or blob.startswith("cream")
+
+
 def _product_keyword_bonus(text: str, candidate: dict) -> float:
     sub = _norm(candidate.get("sub_category") or "")
     blob = _norm(text)
     if not blob:
+        return 0.0
+    if _is_ambiguous_lays_flavor_ocr(text):
         return 0.0
     keywords = _PLANOGRAM_PRODUCT_KEYWORDS.get(sub) or _PLANOGRAM_PRODUCT_KEYWORDS.get("ice cream", ())
     product = _norm(candidate.get("product_name") or "")
@@ -983,6 +1009,11 @@ def assign_planogram_shelf_rows(
                         continue
 
             per_match = best_candidate_from_text(ocr, shelf_candidates, min_score=PLANOGRAM_MATCH_MIN_SCORE * 0.8)
+            if per_match and _is_ambiguous_lays_flavor_ocr(ocr):
+                ocr_color = _planogram_candidate_bag_color(per_match[0])
+                row_color = _planogram_candidate_bag_color(row_candidate)
+                if ocr_color and row_color and ocr_color != row_color:
+                    per_match = None
             candidate = per_match[0] if per_match else row_candidate
             score = per_match[1] if per_match else text_score
             if bag_color != "unknown":

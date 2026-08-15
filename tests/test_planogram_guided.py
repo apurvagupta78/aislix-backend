@@ -368,3 +368,14 @@ def test_assign_planogram_shelf_rows_rejects_cream_ocr_on_blue_top_row():
     )
     assert cream == 12
 
+
+def test_ambiguous_cream_ocr_does_not_match_cream_candidate_on_magic_row():
+    from app.planogram_guided import _is_ambiguous_lays_flavor_ocr, score_text_against_candidate
+
+    cands = _lays_candidates()
+    magic = next(c for c in cands if "Magic" in c["product_name"])
+    cream = next(c for c in cands if "Cream" in c["product_name"])
+    assert _is_ambiguous_lays_flavor_ocr("Cream")
+    assert _is_ambiguous_lays_flavor_ocr("Crear")
+    assert score_text_against_candidate("Cream", cream) <= score_text_against_candidate("Magic Masala", magic)
+

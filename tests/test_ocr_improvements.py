@@ -310,3 +310,49 @@ def test_snack_row_override_demotes_top_partial_mislabel_to_unknown():
     assert updated[0]["brand"] == "Unknown"
     assert updated[0]["product_name"] == "Unidentified SKU"
 
+
+def test_snack_row_override_uses_row_color_when_edge_facing_unknown():
+    ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
+    source = np.zeros((600, 500, 3), dtype=np.uint8)
+    for y in (100, 110):
+        source[y : y + 90, 30:470, 0] = 140
+        source[y : y + 90, 30:470, 1] = 90
+        source[y : y + 90, 30:470, 2] = 100
+    # left edge: green shelf strip bleed makes per-facing color unreliable
+    source[100:190, 30:80, 1] = 160
+    source[100:190, 30:80, 2] = 50
+
+    classified = [
+        {
+            "x1": 30,
+            "y1": 100,
+            "x2": 80,
+            "y2": 190,
+            "brand": "Lays",
+            "product_name": "American Style Cream and Onion Potato Chips",
+            "confidence": 0.84,
+            "pack_text": "Cream",
+        },
+        {
+            "x1": 100,
+            "y1": 105,
+            "x2": 150,
+            "y2": 185,
+            "brand": "Lays",
+            "product_name": "Indias Magic Masala Potato Chips",
+            "confidence": 0.88,
+        },
+        {
+            "x1": 170,
+            "y1": 108,
+            "x2": 220,
+            "y2": 182,
+            "brand": "Lays",
+            "product_name": "Indias Magic Masala Potato Chips",
+            "confidence": 0.88,
+        },
+    ]
+    updated, stats = recover_snack_variants_by_row(classified, source, ctx, override_only=True)
+    assert stats["snack_row_recovery"] >= 1
+    assert updated[0]["product_name"] == "Indias Magic Masala Potato Chips"
+

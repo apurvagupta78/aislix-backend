@@ -71,8 +71,9 @@ def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
     """Classify bag color: blue (Magic Masala), red (Tomato Tango), green (Cream & Onion)."""
     region = np.asarray(load_facing_image(record, source_image))
     h, w = region.shape[:2]
-    y1, y2 = int(h * 0.15), int(h * 0.85)
-    x1, x2 = int(w * 0.15), int(w * 0.85)
+    # Avoid shelf lip (bottom), frame bleed (left/right), and logo band (top).
+    y1, y2 = int(h * 0.12), int(h * 0.72)
+    x1, x2 = int(w * 0.20), int(w * 0.80)
     if y2 <= y1 or x2 <= x1:
         return "unknown"
     sample = region[y1:y2, x1:x2]
@@ -111,6 +112,8 @@ def _lays_color_for_product(row: dict) -> str | None:
     if "tomato tango" in product or "tomato" in product:
         return "red"
     if ("cream" in product and "onion" in product) or "cream & onion" in product:
+        return "green"
+    if "cream" in product or "onion" in product:
         return "green"
     return None
 
@@ -166,6 +169,8 @@ def _should_skip_row_recovery(rec: dict, dominant_color: str) -> bool:
         if dominant_color == "green" and "tomato" in pack_lower:
             return False
         if dominant_color == "red" and ("cream" in pack_lower or "onion" in pack_lower):
+            return False
+        if dominant_color == "blue" and ("cream" in pack_lower or "onion" in pack_lower):
             return False
         return True
     if not _is_unknown_or_generic_lays(rec):
@@ -300,8 +305,30 @@ def recover_snack_variants_by_row(
             stats["snack_row_recovery"] += 1
 
     if override_only and source_image is not None:
+        row_dominant_color: dict[int, str] = {}
+        for cluster in row_clusters:
+            votes: dict[str, int] = {}
+            for rec in cluster:
+                color = _bag_color_family(source_image, rec)
+                if color != "unknown":
+                    votes[color] = votes.get(color, 0) + 1
+            if not votes:
+                continue
+            dominant = max(votes, key=votes.get)
+            for rec in cluster:
+                row_dominant_color[id(rec)] = dominant
+
         for rec in classified:
+            row_color = row_dominant_color.get(id(rec))
+            label_color = _lays_color_for_product(rec)
+            if row_color and label_color and _color_families_compatible(label_color, row_color):
+                continue
+
             bag_color = _bag_color_family(source_image, rec)
+            if row_color and label_color and not _color_families_compatible(label_color, row_color):
+                bag_color = row_color
+            elif bag_color == "unknown" and row_color:
+                bag_color = row_color
             if bag_color == "unknown":
                 continue
             if _is_top_partial_facing(rec, image_height) and not _is_unknown_or_generic_lays(rec):
