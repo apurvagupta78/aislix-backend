@@ -45,9 +45,12 @@ The backend loads custom rec weights when `OCR_PADDLE_REC_MODEL_DIR` is set.
 
 ## 4. Continuous learning loop
 
-1. Scan → low `ocr_confidence` facings flagged in metrics
-2. Human corrects SKU in Lovable / CVAT
-3. Append crop + label to benchmark manifest
-4. Re-export → re-train → redeploy
+See **`docs/ACCURACY_IMPROVEMENT.md`** for the full cross-category workflow (labeling queue, manifest import, eval gates).
 
-This closes the loop toward 95%+ on representative store photos.
+Short version:
+
+1. Scan → low `ocr_confidence` facings flagged in metrics
+2. Export queue: `dump_scan_facings.py` → `export_labeling_queue.py`
+3. Human corrects SKU + `ocr_label`
+4. Import: `import_corrections_to_manifest.py`
+5. Re-export → re-train → `eval_accuracy.py` gate → redeploy

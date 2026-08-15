@@ -1,0 +1,677 @@
+{
+  "summary": {
+    "total_subcategories": 74,
+    "ready": 0,
+    "partial": 1,
+    "missing": 73,
+    "total_labeled_facings": 3
+  },
+  "rows": [
+    {
+      "category": "Beverages",
+      "sub_category": "water",
+      "sub_category_label": "Water",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Beverages",
+      "sub_category": "soft_drinks",
+      "sub_category_label": "Soft drinks",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Beverages",
+      "sub_category": "juices",
+      "sub_category_label": "Juices",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Beverages",
+      "sub_category": "energy_drinks",
+      "sub_category_label": "Energy drinks",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Beverages",
+      "sub_category": "tea",
+      "sub_category_label": "Tea",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 1,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Beverages",
+      "sub_category": "coffee",
+      "sub_category_label": "Coffee",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Beverages",
+      "sub_category": "sports_drinks",
+      "sub_category_label": "Sports drinks",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Beverages",
+      "sub_category": "others",
+      "sub_category_label": "Others",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Fresh Food",
+      "sub_category": "fruits",
+      "sub_category_label": "Fruits",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Fresh Food",
+      "sub_category": "vegetables",
+      "sub_category_label": "Vegetables",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Fresh Food",
+      "sub_category": "fresh_meat",
+      "sub_category_label": "Fresh meat",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Fresh Food",
+      "sub_category": "fish",
+      "sub_category_label": "Fish",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Fresh Food",
+      "sub_category": "eggs",
+      "sub_category_label": "Eggs",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Fresh Food",
+      "sub_category": "others",
+      "sub_category_label": "Others",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Dairy & Chilled",
+      "sub_category": "milk",
+      "sub_category_label": "Milk",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Dairy & Chilled",
+      "sub_category": "curd",
+      "sub_category_label": "Curd",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Dairy & Chilled",
+      "sub_category": "paneer",
+      "sub_category_label": "Paneer",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Dairy & Chilled",
+      "sub_category": "cheese",
+      "sub_category_label": "Cheese",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Dairy & Chilled",
+      "sub_category": "butter",
+      "sub_category_label": "Butter",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Dairy & Chilled",
+      "sub_category": "yogurt",
+      "sub_category_label": "Yogurt",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Dairy & Chilled",
+      "sub_category": "others",
+      "sub_category_label": "Others",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Grocery & Staples",
+      "sub_category": "rice",
+      "sub_category_label": "Rice",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Grocery & Staples",
+      "sub_category": "atta",
+      "sub_category_label": "Atta",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Grocery & Staples",
+      "sub_category": "dal",
+      "sub_category_label": "Dal",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Grocery & Staples",
+      "sub_category": "pulses",
+      "sub_category_label": "Pulses",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Grocery & Staples",
+      "sub_category": "oil",
+      "sub_category_label": "Oil",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Grocery & Staples",
+      "sub_category": "sugar",
+      "sub_category_label": "Sugar",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Grocery & Staples",
+      "sub_category": "salt",
+      "sub_category_label": "Salt",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Grocery & Staples",
+      "sub_category": "spices",
+      "sub_category_label": "Spices",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Grocery & Staples",
+      "sub_category": "others",
+      "sub_category_label": "Others",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Packaged Food & Snacks",
+      "sub_category": "biscuits",
+      "sub_category_label": "Biscuits",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Packaged Food & Snacks",
+      "sub_category": "chips",
+      "sub_category_label": "Chips",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 1,
+      "labeled_facings": 3,
+      "status": "partial"
+    },
+    {
+      "category": "Packaged Food & Snacks",
+      "sub_category": "namkeen",
+      "sub_category_label": "Namkeen",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Packaged Food & Snacks",
+      "sub_category": "noodles",
+      "sub_category_label": "Noodles",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Packaged Food & Snacks",
+      "sub_category": "pasta",
+      "sub_category_label": "Pasta",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Packaged Food & Snacks",
+      "sub_category": "cereals",
+      "sub_category_label": "Cereals",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Packaged Food & Snacks",
+      "sub_category": "chocolates",
+      "sub_category_label": "Chocolates",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Packaged Food & Snacks",
+      "sub_category": "confectionery",
+      "sub_category_label": "Confectionery",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Packaged Food & Snacks",
+      "sub_category": "sauces",
+      "sub_category_label": "Sauces",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Packaged Food & Snacks",
+      "sub_category": "others",
+      "sub_category_label": "Others",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Frozen Foods & Ice Cream",
+      "sub_category": "ice_cream",
+      "sub_category_label": "Ice cream",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 1,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Frozen Foods & Ice Cream",
+      "sub_category": "frozen_vegetables",
+      "sub_category_label": "Frozen vegetables",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Frozen Foods & Ice Cream",
+      "sub_category": "frozen_snacks",
+      "sub_category_label": "Frozen snacks",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Frozen Foods & Ice Cream",
+      "sub_category": "frozen_meals",
+      "sub_category_label": "Frozen meals",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Frozen Foods & Ice Cream",
+      "sub_category": "others",
+      "sub_category_label": "Others",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Personal Care",
+      "sub_category": "shampoo",
+      "sub_category_label": "Shampoo",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 1,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Personal Care",
+      "sub_category": "soap",
+      "sub_category_label": "Soap",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Personal Care",
+      "sub_category": "toothpaste",
+      "sub_category_label": "Toothpaste",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Personal Care",
+      "sub_category": "deodorant",
+      "sub_category_label": "Deodorant",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Personal Care",
+      "sub_category": "skincare",
+      "sub_category_label": "Skincare",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Personal Care",
+      "sub_category": "cosmetics",
+      "sub_category_label": "Cosmetics",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Personal Care",
+      "sub_category": "shaving",
+      "sub_category_label": "Shaving",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Personal Care",
+      "sub_category": "others",
+      "sub_category_label": "Others",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Home Care",
+      "sub_category": "detergent",
+      "sub_category_label": "Detergent",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Home Care",
+      "sub_category": "dishwash",
+      "sub_category_label": "Dishwash",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Home Care",
+      "sub_category": "floor_cleaner",
+      "sub_category_label": "Floor cleaner",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Home Care",
+      "sub_category": "toilet_cleaner",
+      "sub_category_label": "Toilet cleaner",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Home Care",
+      "sub_category": "disinfectants",
+      "sub_category_label": "Disinfectants",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Home Care",
+      "sub_category": "air_fresheners",
+      "sub_category_label": "Air fresheners",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Home Care",
+      "sub_category": "insecticides",
+      "sub_category_label": "Insecticides",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Home Care",
+      "sub_category": "others",
+      "sub_category_label": "Others",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Health & Wellness",
+      "sub_category": "otc",
+      "sub_category_label": "OTC products",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Health & Wellness",
+      "sub_category": "vitamins",
+      "sub_category_label": "Vitamins",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Health & Wellness",
+      "sub_category": "supplements",
+      "sub_category_label": "Supplements",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Health & Wellness",
+      "sub_category": "first_aid",
+      "sub_category_label": "First aid",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Health & Wellness",
+      "sub_category": "health_foods",
+      "sub_category_label": "Health foods",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Health & Wellness",
+      "sub_category": "others",
+      "sub_category_label": "Others",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Baby & Pet Care",
+      "sub_category": "baby_food",
+      "sub_category_label": "Baby food",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Baby & Pet Care",
+      "sub_category": "diapers",
+      "sub_category_label": "Diapers",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Baby & Pet Care",
+      "sub_category": "wipes",
+      "sub_category_label": "Wipes",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Baby & Pet Care",
+      "sub_category": "pet_food",
+      "sub_category_label": "Pet food",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Baby & Pet Care",
+      "sub_category": "pet_hygiene",
+      "sub_category_label": "Pet hygiene",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Baby & Pet Care",
+      "sub_category": "others",
+      "sub_category_label": "Others",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    },
+    {
+      "category": "Others",
+      "sub_category": "others",
+      "sub_category_label": "Others",
+      "target_labeled_facings": 12,
+      "benchmark_cases": 0,
+      "labeled_facings": 0,
+      "status": "missing"
+    }
+  ]
+}

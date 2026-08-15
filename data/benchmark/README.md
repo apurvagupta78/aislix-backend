@@ -27,13 +27,18 @@ Boxes are pixel coordinates `[x1, y1, x2, y2]` on the oriented photo (same as up
 
 ```powershell
 cd C:\Users\Apaar\PycharmProjects\aislix-backend
+py scripts/eval_accuracy.py
+py scripts/eval_accuracy.py --full-scan
 py scripts/eval_benchmark.py
 py scripts/eval_benchmark.py --mode sahi
 py scripts/eval_benchmark.py --compare
 py scripts/eval_ocr_crops.py
+py scripts/report_category_coverage.py
 ```
 
 Reports are written to `data/benchmark/reports/`.
+
+See **`docs/ACCURACY_IMPROVEMENT.md`** for the full cross-category improvement loop.
 
 ## Metrics
 

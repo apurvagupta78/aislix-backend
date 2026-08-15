@@ -29,9 +29,9 @@
       "expected_facing_count": 37,
       "notes": "Lay's 3-flavor rack — copy scan photo here; facings are fractional placeholders until labeled.",
       "facings": [
-        {"id": "r2c1", "brand": "Lays", "product_name": "Indias Magic Masala Potato Chips", "box": [0.05, 0.12, 0.12, 0.22]},
-        {"id": "r5c1", "brand": "Lays", "product_name": "American Style Cream and Onion Potato Chips", "box": [0.05, 0.62, 0.12, 0.78]},
-        {"id": "r4c1", "brand": "Lays", "product_name": "Tomato Tango Potato Chips", "box": [0.05, 0.48, 0.12, 0.58]}
+        {"id": "r2c1", "brand": "Lays", "product_name": "Indias Magic Masala Potato Chips", "ocr_label": "Lay's India's Magic Masala", "box": [0.05, 0.12, 0.12, 0.22]},
+        {"id": "r5c1", "brand": "Lays", "product_name": "American Style Cream and Onion Potato Chips", "ocr_label": "Lay's American Style Cream & Onion", "box": [0.05, 0.62, 0.12, 0.78]},
+        {"id": "r4c1", "brand": "Lays", "product_name": "Tomato Tango Potato Chips", "ocr_label": "Lay's Tomato Tango", "box": [0.05, 0.48, 0.12, 0.58]}
       ]
     },
     {

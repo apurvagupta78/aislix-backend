@@ -337,6 +337,10 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         flush_learned()
         learned_updates = pop_learned_updates()
 
+        export_facings = metadata.get("export_facings") or os.getenv(
+            "SCAN_EXPORT_FACINGS", ""
+        ).lower() in {"1", "true", "yes"}
+
         annotated = generate_annotated_image(image, classified)
         original_jpeg = encode_shelf_image_bytes(image)
         annotated_jpeg = encode_annotated_image_bytes(annotated)
@@ -398,6 +402,27 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             "store_id": scan_context.get("store_id"),
             "shelf_label": scan_context.get("shelf_label") or metadata.get("shelf_label"),
             "category": scan_context.get("aislix_category") or metadata.get("category"),
+            "facings_debug": (
+                [
+                    {
+                        "x1": int(r["x1"]),
+                        "y1": int(r["y1"]),
+                        "x2": int(r["x2"]),
+                        "y2": int(r["y2"]),
+                        "brand": r.get("brand"),
+                        "product_name": r.get("product_name"),
+                        "sku": r.get("sku"),
+                        "confidence": r.get("confidence"),
+                        "recognition_source": r.get("recognition_source"),
+                        "pack_text": (r.get("pack_text") or "")[:240],
+                        "ocr_confidence": r.get("ocr_confidence"),
+                        "ocr_variant": r.get("ocr_variant"),
+                    }
+                    for r in classified
+                ]
+                if export_facings
+                else None
+            ),
             "scan_context": {
                 "aislix_category": scan_context.get("aislix_category"),
                 "aislix_category_id": scan_context.get("aislix_category_id"),
