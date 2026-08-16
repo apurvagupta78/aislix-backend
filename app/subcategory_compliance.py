@@ -16,7 +16,9 @@ from app.scan_context import (
     aisle_category_matches,
     effective_sub_category,
     foreign_aisle_conflict,
+    multi_sub_category_audit,
     resolve_subcategory_label,
+    selected_sub_category_ids,
     sku_allowed_in_context,
     sub_categories_match,
     _pc_brand_in_any_subcategory,
@@ -264,6 +266,20 @@ def _evaluate_compliance(
     brand = (item.get("brand") or "").strip()
     pack_text = (item.get("pack_text") or "").strip()
     selected = effective_sub_category(scan_context) or scan_context.get("sub_category") or ""
+    selected_all = selected_sub_category_ids(scan_context) or ([selected] if selected else [])
+
+    if multi_sub_category_audit(scan_context):
+        detected = infer_detected_subcategory(item, scan_context)
+        cat_name = scan_context.get("aislix_category")
+        if detected and any(
+            sub_categories_match(detected, sel, cat_name) for sel in selected_all
+        ):
+            return True, detected, _subcategory_label(scan_context, detected)
+        if _pc_brand_in_any_subcategory(brand.lower().strip()) or _pc_brand_in_context(brand, scan_context):
+            guard_sub = detected or selected
+            return True, guard_sub, _subcategory_label(scan_context, guard_sub)
+        if _snack_aisle_brand_guard(brand, scan_context):
+            return True, selected, selected_label
 
     if _snack_aisle_brand_guard(brand, scan_context):
         return True, selected, selected_label

@@ -39,6 +39,14 @@ PRODUCT_DISPLAY_ALIASES: dict[str, str] = {
     "wafers": "Wafers",
     "funwith": "Funwich",
     "funwich": "Funwich",
+    "tomato tango": "Tomato Tango Potato Chips",
+    "tomato tango potato chips": "Tomato Tango Potato Chips",
+    "indias magic masala": "Indias Magic Masala Potato Chips",
+    "india's magic masala": "Indias Magic Masala Potato Chips",
+    "indias magic masala potato chips": "Indias Magic Masala Potato Chips",
+    "american style cream and onion": "American Style Cream and Onion Potato Chips",
+    "american style cream & onion": "American Style Cream and Onion Potato Chips",
+    "american style cream and onion potato chips": "American Style Cream and Onion Potato Chips",
 }
 
 VARIANT_PLACEHOLDERS = frozenset({
@@ -137,6 +145,9 @@ def aggregate_inventory(classified: list[dict]) -> list[dict]:
         sku_key = sku.lower()
         if sku_key:
             key = (brand_key, sku_key)
+        elif any(token in product_key for token in ("shampoo", "conditioner", "deodorant", "body spray", "soap", "toothpaste")):
+            stem = " ".join(product_key.split()[:5])
+            key = (brand_key, stem)
         else:
             key = (brand_key, product_key, variant_key)
         bucket = buckets[key]

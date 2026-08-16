@@ -184,6 +184,9 @@ async def scan(request: Request):
             "assignment_id": body.get("assignment_id"),
             "assignment_scope_type": body.get("assignment_scope_type"),
             "assignment_scope_values": body.get("assignment_scope_values"),
+            "category_selections": body.get("category_selections"),
+            "sub_categories": body.get("sub_categories"),
+            "categories": body.get("categories"),
             "planogram_items": body.get("planogram_items"),
             "planogram_items_full": body.get("planogram_items_full"),
         }

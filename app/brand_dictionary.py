@@ -688,6 +688,19 @@ def _label_from_brand_product(
     }
 
 
+def _is_ambiguous_lays_tomato_fragment(text_l: str) -> bool:
+    """Standalone 'tomato' or 'tango' must not map to Tomato Tango without Lay's brand."""
+    blob = re.sub(r"\s+", " ", (text_l or "").lower().strip())
+    if not blob or len(blob) > 22:
+        return False
+    if re.search(r"\blay(?:'|s)?s\b", blob):
+        return False
+    if "tomato" in blob and "tango" in blob:
+        return False
+    ambiguous = {"tomato", "tango", "tomato tango", "spanish tomato", "spanish"}
+    return blob in ambiguous or blob.startswith("tomato") or blob.startswith("tango")
+
+
 def _is_ambiguous_lays_cream_fragment(text_l: str) -> bool:
     """Short OCR fragments like 'Cream' must not map to Cream & Onion without row consensus."""
     blob = re.sub(r"\s+", " ", (text_l or "").lower().strip())
@@ -752,10 +765,16 @@ def _match_partial_fragments(normalized: str, scan_context: dict | None = None) 
         return _label_from_brand_product(
             "Lays", "Indias Magic Masala Potato Chips", normalized, confidence=0.82, scan_context=scan_context
         )
-    if re.search(r"\btango\b", text_l) and _lays_flavor_fragment_allowed(text_l, sub):
-        return _label_from_brand_product(
-            "Lays", "Tomato Tango Potato Chips", normalized, confidence=0.82, scan_context=scan_context
-        )
+    if re.search(r"\btango\b", text_l) and not _is_ambiguous_lays_tomato_fragment(text_l):
+        if _lays_flavor_fragment_allowed(text_l, sub):
+            return _label_from_brand_product(
+                "Lays", "Tomato Tango Potato Chips", normalized, confidence=0.82, scan_context=scan_context
+            )
+    if re.search(r"\btomato\b", text_l) and not _is_ambiguous_lays_tomato_fragment(text_l):
+        if _lays_flavor_fragment_allowed(text_l, sub):
+            return _label_from_brand_product(
+                "Lays", "Tomato Tango Potato Chips", normalized, confidence=0.82, scan_context=scan_context
+            )
     if re.search(r"\bcream\b", text_l) and _is_ambiguous_lays_cream_fragment(text_l):
         return None
     if (
@@ -801,7 +820,7 @@ def expand_partial_ocr_text(text: str, scan_context: dict | None = None) -> str:
     sub = ((scan_context or {}).get("sub_category") or "").lower()
     if re.search(r"\bmagic\b", t) and "masala" not in t and sub in {"chips", "potato_chips"}:
         t = re.sub(r"\bmagic\b", "magic masala", t, count=1)
-    if re.search(r"\btango\b", t) and "tomato" not in t and sub in {"chips", "potato_chips"}:
+    if re.search(r"\btango\b", t) and "tomato" not in t and re.search(r"\blay(?:'|s)?s\b", t) and sub in {"chips", "potato_chips"}:
         t = re.sub(r"\btango\b", "tomato tango", t, count=1)
     if re.search(r"\bmasala\b", t) and "munch" not in t and "kurkure" in t:
         t = t.replace("masala", "masala munch")

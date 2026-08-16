@@ -287,7 +287,7 @@ def test_snack_row_override_fixes_cream_on_blue_bag():
     )
 
 
-def test_snack_row_override_demotes_top_partial_mislabel_to_unknown():
+def test_snack_row_override_fixes_top_partial_color_mismatch():
     ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
     source = np.zeros((800, 400, 3), dtype=np.uint8)
     source[20:80, 20:380, 0] = 140
@@ -307,8 +307,7 @@ def test_snack_row_override_demotes_top_partial_mislabel_to_unknown():
     ]
     updated, stats = recover_snack_variants_by_row(classified, source, ctx, override_only=True)
     assert stats["snack_row_recovery"] == 1
-    assert updated[0]["brand"] == "Unknown"
-    assert updated[0]["product_name"] == "Unidentified SKU"
+    assert updated[0]["product_name"] == "Indias Magic Masala Potato Chips"
 
 
 def test_snack_row_override_uses_row_color_when_edge_facing_unknown():

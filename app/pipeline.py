@@ -199,15 +199,23 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         )
         classified = normalize_classified_labels(classified)
         classified = filter_nested_facings(classified, layout=shelf_mode)
-        if not scan_context.get("planogram_candidates"):
-            from app.snack_row_recovery import recover_snack_variants_by_row
+        from app.snack_row_recovery import (
+            enforce_snack_color_and_brand_labels,
+            recover_snack_variants_by_row,
+        )
 
+        if not scan_context.get("planogram_candidates"):
             classified, row_stats = recover_snack_variants_by_row(
                 classified,
                 image,
                 scan_context,
             )
             recognition_engine_stats.update(row_stats)
+        classified, color_fixes = enforce_snack_color_and_brand_labels(
+            classified, image, scan_context
+        )
+        if color_fixes:
+            recognition_engine_stats["snack_color_fix"] = color_fixes
         if scan_context.get("planogram_mode") and scan_context.get("planogram_candidates"):
             from app.planogram_guided import (
                 assign_planogram_shelf_rows,
@@ -259,6 +267,11 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             recognition_engine_stats["gpt"] = int(
                 recognition_engine_stats.get("gpt") or 0
             ) + int(gpt_recovery_stats.get("gpt") or 0)
+            classified, color_fixes = enforce_snack_color_and_brand_labels(
+                classified, image, scan_context
+            )
+            if color_fixes:
+                recognition_engine_stats["snack_color_fix"] = color_fixes
         compliance = analyze_subcategory_compliance(classified, scan_context)
         classified = compliance["classified"]
         subcategory_mismatches = compliance["subcategory_mismatches"]

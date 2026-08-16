@@ -91,7 +91,7 @@ def test_mixed_snack_row_does_not_force_tomato_tango():
 
     kurkure = [r for r in updated if (r.get("brand") or "").lower() == "kurkure"]
     bingo = [r for r in updated if (r.get("brand") or "").lower() == "bingo"]
-    assert len(kurkure) == 2
+    assert len(kurkure) == 3
     assert all(r["product_name"] == "Masala Munch" for r in kurkure)
     assert len(bingo) == 2
     assert all(r["product_name"] == "Tedhe Medhe" for r in bingo)
@@ -104,7 +104,8 @@ def test_mixed_snack_row_does_not_force_tomato_tango():
     assert tomato == []
 
     unknown = [r for r in updated if r.get("brand") == "Unknown"]
-    assert len(unknown) == 1
+    assert len(unknown) == 0
+    assert stats["snack_row_recovery"] >= 1
 
 
 def test_partial_fragment_resolves_short_lays_ocr():
@@ -152,6 +153,15 @@ def test_lays_ocr_conflicts_with_bingo_label():
 
     label = {"brand": "Bingo", "product_name": "Mad Angles Chips Pizza Aah"}
     assert label_conflicts_with_pack_text(label, "Lays Classic Salted Potato Chips")
+
+
+def test_ambiguous_tango_fragment_not_mapped_without_lays():
+    ctx = {"sub_category": "chips"}
+    assert match_from_text("tango", scan_context=ctx) is None
+    assert match_from_text("tomato", scan_context=ctx) is None
+    match = match_from_text("lays tomato tango", scan_context=ctx)
+    assert match is not None
+    assert "tomato tango" in (match.get("product_name") or "").lower()
 
 
 def test_ambiguous_cream_fragment_not_mapped_to_cream_onion():

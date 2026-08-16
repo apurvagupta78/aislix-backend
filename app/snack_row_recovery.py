@@ -295,14 +295,17 @@ def _recover_mixed_snack_unknowns(
         if len(cluster) < 2:
             continue
         labeled: dict[str, dict] = {}
+        brand_counts: dict[str, int] = {}
         for rec in cluster:
             if _is_row_unknown(rec):
                 continue
             brand = _norm_brand(rec.get("brand") or "")
             if brand in MIXED_SNACK_BRANDS | {"lays"}:
                 labeled.setdefault(brand, rec)
+                brand_counts[brand] = brand_counts.get(brand, 0) + 1
         if not labeled:
             continue
+        dominant_brand = max(brand_counts, key=brand_counts.get) if brand_counts else ""
         for rec in cluster:
             if not _is_row_unknown(rec):
                 continue
@@ -316,6 +319,8 @@ def _recover_mixed_snack_unknowns(
                 elif brand in pack:
                     matched = ref
                     break
+            if not matched and brand_counts.get(dominant_brand, 0) >= 2:
+                matched = labeled.get(dominant_brand)
             if not matched:
                 continue
             rec.update(
@@ -329,6 +334,69 @@ def _recover_mixed_snack_unknowns(
                 }
             )
             stats["snack_row_recovery"] += 1
+
+
+def enforce_snack_color_and_brand_labels(
+    classified: list[dict],
+    source_image: np.ndarray | None,
+    scan_context: dict | None = None,
+) -> tuple[list[dict], int]:
+    """Fix Lay's/Bingo/Crax cross-labels using bag color and pack text."""
+    if source_image is None or not _snack_aisle_mixed_recovery_enabled(scan_context):
+        return classified, 0
+    fixed = 0
+    for rec in classified:
+        if _is_row_unknown(rec):
+            continue
+        brand = _norm_brand(rec.get("brand") or "")
+        bag_color = _bag_color_family(source_image, rec)
+        if bag_color == "unknown":
+            continue
+        pack = (rec.get("pack_text") or "").lower()
+        product = (rec.get("product_name") or "").lower()
+
+        if brand == "bingo" and bag_color in {"green", "blue", "red"}:
+            if "tedhe" in product or "mad angles" in product or "mad angle" in product:
+                lays_product = LAYS_ROW_PRODUCTS.get(bag_color)
+                if lays_product:
+                    rec.update(
+                        {
+                            **lays_product,
+                            "confidence": max(float(rec.get("confidence") or 0), 0.84),
+                            "recognition_source": "snack_color_brand_fix",
+                        }
+                    )
+                    fixed += 1
+                    continue
+
+        if brand == "lays" and _color_label_mismatch(rec, bag_color):
+            lays_product = LAYS_ROW_PRODUCTS.get(bag_color)
+            if lays_product and not _pack_text_indicates_other_snack(pack):
+                rec.update(
+                    {
+                        **lays_product,
+                        "confidence": max(float(rec.get("confidence") or 0), 0.84),
+                        "recognition_source": "snack_color_brand_fix",
+                    }
+                )
+                fixed += 1
+
+        if brand in MIXED_SNACK_BRANDS and bag_color in {"green", "blue", "red"}:
+            if re.search(r"lay(?:'|s)?s\b", pack):
+                lays_product = LAYS_ROW_PRODUCTS.get(bag_color)
+                if lays_product:
+                    rec.update(
+                        {
+                            **lays_product,
+                            "confidence": max(float(rec.get("confidence") or 0), 0.84),
+                            "recognition_source": "snack_color_brand_fix",
+                        }
+                    )
+                    fixed += 1
+
+    if fixed:
+        print(f"Snack color/brand enforcement: corrected {fixed} facing(s)")
+    return classified, fixed
 
 
 def _snack_aisle_mixed_recovery_enabled(scan_context: dict | None) -> bool:
@@ -416,9 +484,8 @@ def recover_snack_variants_by_row(
             continue
 
         for rec in cluster:
-            if _is_top_partial_facing(rec, image_height) and _is_unknown_or_generic_lays(rec):
-                if dominant_ratio < 0.65 and float(rec.get("confidence") or 0) < 0.55:
-                    continue
+            if _is_top_partial_facing(rec, image_height):
+                continue
             force = dominant_ratio >= force_ratio and _should_force_row_reconcile(rec, dominant_color)
             if override_only and not force and not _color_label_mismatch(rec, dominant_color):
                 continue
@@ -464,15 +531,23 @@ def recover_snack_variants_by_row(
                 bag_color = row_color
             if bag_color == "unknown":
                 continue
-            if _is_top_partial_facing(rec, image_height) and not _is_unknown_or_generic_lays(rec):
-                if _color_label_mismatch(rec, bag_color):
+            if _is_top_partial_facing(rec, image_height):
+                if _is_unknown_or_generic_lays(rec):
+                    continue
+                if not _color_label_mismatch(rec, bag_color):
+                    continue
+                if _is_non_lays_snack_brand(rec) or _pack_text_indicates_other_snack(rec.get("pack_text") or ""):
+                    continue
+                product = LAYS_ROW_PRODUCTS.get(bag_color)
+                if product and _facing_indicates_lays(rec):
                     rec.update(
                         {
-                            "brand": "Unknown",
-                            "product_name": "Unidentified SKU",
-                            "sku": "",
-                            "confidence": min(float(rec.get("confidence") or 0.35), 0.4),
-                            "recognition_source": "top_partial_demote",
+                            "brand": product["brand"],
+                            "product_name": product["product_name"],
+                            "sku": product["sku"],
+                            "category": product["category"],
+                            "confidence": max(float(rec.get("confidence") or 0), 0.84),
+                            "recognition_source": "snack_row_color_force",
                         }
                     )
                     stats["snack_row_recovery"] += 1

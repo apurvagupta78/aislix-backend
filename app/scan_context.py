@@ -814,6 +814,72 @@ def _split_combined_category(metadata: dict) -> dict:
     return meta
 
 
+def _parse_category_selections(metadata: dict) -> list[dict]:
+    """Normalize multi category·subcategory selections from POST /scan."""
+    raw = metadata.get("category_selections")
+    if isinstance(raw, list) and raw:
+        out: list[dict] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            sub_id = normalize_sub_category_id(
+                str(item.get("sub_category_id") or item.get("sub_category") or ""),
+                item.get("category_name") or item.get("category"),
+            )
+            if not sub_id:
+                continue
+            out.append(
+                {
+                    "category_id": str(item.get("category_id") or "").strip(),
+                    "category_name": str(item.get("category_name") or item.get("category") or "").strip(),
+                    "sub_category_id": sub_id,
+                    "sub_category_label": str(
+                        item.get("sub_category_label") or item.get("sub_category") or sub_id
+                    ).strip(),
+                    "sub_category_custom": (item.get("sub_category_custom") or "").strip() or None,
+                }
+            )
+        if out:
+            return out
+
+    scope = metadata.get("assignment_scope_values") or {}
+    if isinstance(scope, dict):
+        scope_raw = scope.get("category_selections")
+        if isinstance(scope_raw, list) and scope_raw:
+            return _parse_category_selections({"category_selections": scope_raw})
+
+    sub_categories = metadata.get("sub_categories")
+    category_name = metadata.get("category") or metadata.get("aislix_category") or ""
+    if isinstance(sub_categories, list) and sub_categories:
+        return [
+            {
+                "category_id": "",
+                "category_name": str(category_name).strip(),
+                "sub_category_id": normalize_sub_category_id(str(sub), category_name),
+                "sub_category_label": str(sub).replace("_", " ").title(),
+                "sub_category_custom": None,
+            }
+            for sub in sub_categories
+            if str(sub).strip()
+        ]
+    return []
+
+
+def selected_sub_category_ids(context: dict | None) -> list[str]:
+    """All sub-category ids selected for this scan (multi-rack audits)."""
+    if not context:
+        return []
+    explicit = context.get("selected_sub_categories") or []
+    if explicit:
+        return [str(s) for s in explicit if str(s).strip()]
+    sub = effective_sub_category(context)
+    return [sub] if sub and sub != "others" else []
+
+
+def multi_sub_category_audit(context: dict | None) -> bool:
+    return len(selected_sub_category_ids(context)) > 1
+
+
 def resolve_scan_context(metadata: dict | None) -> dict:
     """Normalize scan metadata from API / Lovable into a recognition context dict."""
     metadata = _split_combined_category(metadata or {})
@@ -833,6 +899,14 @@ def resolve_scan_context(metadata: dict | None) -> dict:
     catalog_cats = AISLIX_TO_CATALOG.get(_normalize_key(aislix_name), [])
     brand_hints = AISLE_BRAND_HINTS.get(_normalize_key(aislix_name), set())
     sub_category, sub_category_label, sub_category_custom = _resolve_sub_category(metadata, resolved)
+    category_selections = _parse_category_selections(metadata)
+    selected_subs = [
+        sel["sub_category_id"]
+        for sel in category_selections
+        if sel.get("sub_category_id")
+    ]
+    if not selected_subs and sub_category:
+        selected_subs = [sub_category]
 
     return {
         "store_id": (metadata.get("store_id") or "").strip() or None,
@@ -845,6 +919,9 @@ def resolve_scan_context(metadata: dict | None) -> dict:
         "sub_category": sub_category,
         "sub_category_label": sub_category_label,
         "sub_category_custom": sub_category_custom,
+        "category_selections": category_selections,
+        "selected_sub_categories": selected_subs,
+        "multi_sub_category_audit": len(selected_subs) > 1,
         "catalog_categories": catalog_cats,
         "brand_hints": brand_hints,
     }
@@ -933,6 +1010,13 @@ def sub_category_blocks_brand(
     sub_hints = (SUB_CATEGORY_BRAND_HINTS.get(aislix_key) or {}).get(sub)
     general_hints = context.get("brand_hints") or set()
     if sub_hints and sub != "others":
+        if multi_sub_category_audit(context):
+            allowed: set[str] = set()
+            for sel_sub in selected_sub_category_ids(context):
+                allowed.update((SUB_CATEGORY_BRAND_HINTS.get(aislix_key) or {}).get(sel_sub) or set())
+            allowed.update(general_hints)
+            if brand_l in allowed or _pc_brand_in_any_subcategory(brand_l):
+                return False
         if aislix_key == "beverages":
             if brand_l not in sub_hints and brand_l not in general_hints:
                 return True

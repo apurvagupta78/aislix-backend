@@ -7,8 +7,10 @@ from typing import Any
 
 from app.scan_context import (
     load_aislix_categories,
+    multi_sub_category_audit,
     normalize_sub_category_id,
     resolve_aislix_category,
+    selected_sub_category_ids,
     sub_categories_match,
 )
 from app.sku_category_map import map_class_to_aislix_category
@@ -117,6 +119,16 @@ def entry_matches_scope(
         return True
 
     category_name = scan_context.get("aislix_category")
+    if multi_sub_category_audit(scan_context):
+        for sel_sub in selected_sub_category_ids(scan_context):
+            if sub_categories_match(entry_sub, sel_sub, category_name):
+                return True
+        _, inferred_sub = _infer_from_brand(entry)
+        return any(
+            sub_categories_match(inferred_sub, sel_sub, category_name)
+            for sel_sub in selected_sub_category_ids(scan_context)
+        )
+
     if sub_categories_match(entry_sub, scan_sub, category_name):
         return True
 

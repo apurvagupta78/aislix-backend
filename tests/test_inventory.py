@@ -30,6 +30,17 @@ def test_normalize_classified_labels_canonical_display():
     assert rows[1]["product_name"] == "Potato Chips"
 
 
+def test_merges_tomato_tango_name_variants():
+    classified = [
+        {"brand": "Lays", "product_name": "Tomato Tango", "confidence": 0.84},
+        {"brand": "Lays", "product_name": "Tomato Tango Potato Chips", "confidence": 0.84},
+    ]
+    inventory = aggregate_inventory(classified)
+    assert len(inventory) == 1
+    assert inventory[0]["quantity"] == 2
+    assert "Tomato Tango" in inventory[0]["product_name"]
+
+
 def test_merges_same_sku_with_different_product_text():
     classified = [
         {
