@@ -354,23 +354,25 @@ def _ocr_brand_conflicts(text: str, candidate: dict) -> bool:
 
 
 def _is_ambiguous_lays_flavor_ocr(text: str) -> bool:
-    """Short OCR fragments (e.g. 'Cream', 'Crear', 'Tango') must not override row assignment."""
+    """Short OCR fragments (e.g. 'Cream', 'Tom', 'Tango') must not override row/color assignment."""
     blob = re.sub(r"\s+", " ", (text or "").lower().strip())
-    if not blob or len(blob) > 18:
-        return False
+    if not blob:
+        return True
     if re.search(r"\blay(?:'|s)?s\b", blob):
         return False
     standalone = {
         "cream", "crear", "crea", "cre", "c", "cream &", "cream & o", "cream & on",
-        "eam & o", "eam & on", "tango", "tomato", "magic", "masala",
+        "eam & o", "eam & on", "tango", "tomato", "tom", "tomat", "magic", "masala",
     }
     if blob in standalone or blob.startswith("cream") or blob.startswith("tomato") or blob.startswith("tango"):
         return True
     if "onion" in blob and "cream" in blob:
         return False
-    if "tomato" in blob and "tango" in blob:
+    if re.search(r"\blay(?:'|s)?s\b", blob):
         return False
-    if any(token in blob for token in ("magic", "masala", "tomato", "tango", "india")):
+    if "tomato" in blob or "tango" in blob:
+        return True
+    if "magic" in blob and "masala" in blob:
         return False
     ambiguous = {
         "cream",

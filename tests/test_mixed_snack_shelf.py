@@ -159,9 +159,24 @@ def test_ambiguous_tango_fragment_not_mapped_without_lays():
     ctx = {"sub_category": "chips"}
     assert match_from_text("tango", scan_context=ctx) is None
     assert match_from_text("tomato", scan_context=ctx) is None
+    assert match_from_text("tomato tango potato chips", scan_context=ctx) is None
     match = match_from_text("lays tomato tango", scan_context=ctx)
     assert match is not None
     assert "tomato tango" in (match.get("product_name") or "").lower()
+
+
+def test_nivea_men_shampoo_not_lotion_on_shampoo_scan():
+    from app.brand_dictionary import match_product_for_brand
+
+    ctx = {"aislix_category": "Personal Care", "sub_category": "shampoo"}
+    match = match_from_text("nivea men strong power shampoo", scan_context=ctx)
+    assert match is not None
+    assert "shampoo" in (match.get("product_name") or "").lower()
+    assert "lotion" not in (match.get("product_name") or "").lower()
+
+    bare = match_product_for_brand("Nivea", "nivea", scan_context=ctx)
+    assert bare is not None
+    assert "lotion" not in (bare.get("product_name") or "").lower()
 
 
 def test_ambiguous_cream_fragment_not_mapped_to_cream_onion():

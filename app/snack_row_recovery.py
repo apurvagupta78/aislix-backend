@@ -137,20 +137,15 @@ def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
     if g > 75 and g >= r - 18 and g >= b - 35:
         if (g - min(r, b)) >= 5 or (g > r and g > b - 10):
             return "green"
-    # Warm orange/red Tomato Tango — not greenish packs.
-    if r > 95 and r > g + 15 and r > b + 10 and g < r - 5:
+    # Warm orange/red Tomato Tango — low blue channel (not blue Magic Masala packs).
+    if r > 95 and r > g + 12 and r > b + 22 and g < r - 5:
         return "red"
-    if r > 105 and g > 65 and r > b + 25 and g < r - 5:
+    if r > 120 and r > b + 18 and g < r - 5:
         return "red"
-    # Cool blue-dominant Tomato — skip when green channel is strong (Cream & Onion under blue light).
-    if b > 85 and b >= r and (b - r) >= 8 and r < 95 and g < r + 5:
-        return "red"
-    # Dark blue Tomato Tango — blue-dominant, low warmth (not Magic Masala orange-blue).
-    if b > 95 and b > r + 18 and b > g + 12 and r < 85:
-        return "red"
-    # India's Magic Masala — blue-teal with warm orange undertone (not pure cool blue).
-    if b > 85 and r > 65 and g > 45 and b >= r - 12 and b < r + 45:
-        return "blue"
+    # India's Magic Masala — blue/teal packs (dominant blue; warm or cool lighting).
+    if b > 75 and b >= g - 15:
+        if b >= r - 20 or (b > r and b > 70):
+            return "blue"
     return "unknown"
 
 

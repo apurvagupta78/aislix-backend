@@ -156,6 +156,12 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bdabur\b", "Dabur", ""),
     (r"\bcolgate\b", "Colgate", ""),
     (r"\bcloseup\b", "Closeup", ""),
+    (r"\bnivea\s+men\b.*\bshampoo\b|\bshampoo\b.*\bnivea\s+men\b", "Nivea", "Men Strong Power Shampoo"),
+    (r"\bnivea\s+men\b|\bstrong\s+power\b", "Nivea", "Men Strong Power Shampoo"),
+    (r"\bmedimix\b", "Medimix", "Ayurvedic Soap"),
+    (r"\bgillette\b", "Gillette", ""),
+    (r"\bponds\b|\bpond'?s\b", "Ponds", ""),
+    (r"\bvaseline\b", "Vaseline", ""),
     (r"\bnivea\b", "Nivea", ""),
     (r"\baxe\b", "Axe", "Deodorant Body Spray"),
     (r"\bfogg\b", "Fogg", "Deodorant Body Spray"),
@@ -689,16 +695,16 @@ def _label_from_brand_product(
 
 
 def _is_ambiguous_lays_tomato_fragment(text_l: str) -> bool:
-    """Standalone 'tomato' or 'tango' must not map to Tomato Tango without Lay's brand."""
+    """Tomato/tango tokens must not map to Tomato Tango without Lay's brand on pack text."""
     blob = re.sub(r"\s+", " ", (text_l or "").lower().strip())
-    if not blob or len(blob) > 22:
-        return False
+    if not blob:
+        return True
     if re.search(r"\blay(?:'|s)?s\b", blob):
         return False
-    if "tomato" in blob and "tango" in blob:
-        return False
-    ambiguous = {"tomato", "tango", "tomato tango", "spanish tomato", "spanish"}
-    return blob in ambiguous or blob.startswith("tomato") or blob.startswith("tango")
+    if "tomato" in blob or "tango" in blob:
+        return True
+    ambiguous = {"spanish tomato", "spanish", "tom", "tomat", "tomato ta", "tomato to"}
+    return blob in ambiguous
 
 
 def _is_ambiguous_lays_cream_fragment(text_l: str) -> bool:
@@ -717,14 +723,18 @@ def _is_ambiguous_lays_cream_fragment(text_l: str) -> bool:
 
 
 def _lays_flavor_fragment_allowed(text_l: str, sub: str) -> bool:
-    """Allow Lay's flavor fragments on chip aisles, but not generic '… potato chips' phrases."""
+    """Allow Lay's flavor fragments on chip aisles when brand or masala tokens are present."""
     if sub not in {"chips", "potato_chips"}:
         return False
     if re.search(r"\blay(?:'|s)?s\b", text_l):
         return True
     if "potato" in text_l and "chips" in text_l:
         return False
-    return True
+    if re.search(r"\bmagic\b", text_l) or re.search(r"\bmasala\b", text_l):
+        return True
+    if "cream" in text_l and "onion" in text_l:
+        return True
+    return False
 
 
 def _flavor_token_bonus(normalized: str, product_l: str) -> float:
@@ -957,6 +967,13 @@ def _hair_product_type_adjustment(normalized: str, entry: dict) -> float:
             return 0.18
         if is_conditioner:
             return -0.28
+        if "lotion" in product_l or "roll on" in product_l or "deodorant" in product_l:
+            return -0.45
+    if re.search(r"\bnivea\s+men\b|\bstrong\s+power\b|\bsea\s+mineral", normalized):
+        if is_shampoo:
+            return 0.35
+        if "lotion" in product_l:
+            return -0.5
     if "conditioner" in normalized or "color protect" in normalized:
         if is_conditioner:
             return 0.18
@@ -1091,6 +1108,73 @@ def _subcategory_product_adjustment(
     return score
 
 
+def _entries_for_scan_subcategory(
+    entries: list[dict],
+    scan_context: dict | None,
+    normalized: str,
+) -> list[dict]:
+    """Filter brand catalog rows to the scan sub-category; avoid lotion on shampoo shelves."""
+    if not scan_context or not entries:
+        return entries
+    from app.scan_context import NARROW_PC_SUBCATEGORIES, effective_sub_category
+
+    sub = effective_sub_category(scan_context)
+    if sub not in NARROW_PC_SUBCATEGORIES:
+        return entries
+
+    def _blob(entry: dict) -> str:
+        return " ".join(
+            filter(
+                None,
+                [
+                    entry.get("product_name") or "",
+                    entry.get("sku") or "",
+                    entry.get("variant") or "",
+                ],
+            )
+        ).lower()
+
+    if sub == "shampoo":
+        shampoo_rows = [e for e in entries if "shampoo" in _blob(e)]
+        if shampoo_rows:
+            return shampoo_rows
+        if re.search(r"\bnivea\b|\bstrong\s+power\b|\bmen\b", normalized):
+            return []
+        non_lotion = [e for e in entries if "lotion" not in _blob(e) and "roll on" not in _blob(e)]
+        return non_lotion or entries
+    if sub == "deodorant":
+        deo_rows = [e for e in entries if "deodorant" in _blob(e) or "body spray" in _blob(e)]
+        return deo_rows or entries
+    if sub == "soap":
+        soap_rows = [e for e in entries if "soap" in _blob(e)]
+        return soap_rows or entries
+    return entries
+
+
+def _synthetic_brand_product(
+    brand: str,
+    normalized: str,
+    scan_context: dict | None,
+) -> dict | None:
+    """Catalog gaps: return a typed label when OCR + aisle clearly indicate product kind."""
+    if not scan_context:
+        return None
+    from app.scan_context import effective_sub_category
+
+    sub = effective_sub_category(scan_context)
+    brand_l = brand.strip().lower()
+    if sub == "shampoo" and brand_l == "nivea":
+        if re.search(r"\bmen\b|\bstrong\s+power\b|\bshampoo\b", normalized) or len(normalized) < 24:
+            return _label_from_brand_product(
+                "Nivea",
+                "Men Strong Power Shampoo",
+                normalized,
+                confidence=0.86,
+                scan_context=scan_context,
+            )
+    return None
+
+
 def match_product_for_brand(
     brand: str,
     text: str,
@@ -1152,7 +1236,13 @@ def match_product_for_brand(
             "confidence": round(min(0.98, best_score), 4),
             "recognition_source": "ocr",
         }
-    fallback = entries[0]
+    fallback_pool = _entries_for_scan_subcategory(unique_entries, scan_context, normalized)
+    if not fallback_pool:
+        synthetic = _synthetic_brand_product(brand, normalized, scan_context)
+        if synthetic:
+            return synthetic
+        return None
+    fallback = fallback_pool[0]
     product_name = fallback.get("product_name") or brand
     return {
         "brand": display_brand_name(brand, product_name),

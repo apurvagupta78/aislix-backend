@@ -216,6 +216,11 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         )
         if color_fixes:
             recognition_engine_stats["snack_color_fix"] = color_fixes
+        from app.pc_row_recovery import recover_pc_unknowns_by_row
+
+        classified, pc_stats = recover_pc_unknowns_by_row(classified, scan_context)
+        if pc_stats.get("pc_row_recovery"):
+            recognition_engine_stats.update(pc_stats)
         if scan_context.get("planogram_mode") and scan_context.get("planogram_candidates"):
             from app.planogram_guided import (
                 assign_planogram_shelf_rows,

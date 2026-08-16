@@ -51279,6 +51279,15 @@
       "variant": "33 gms",
       "sku": "bingo_mad_angles_33_gms",
       "category": "Snacks"
+    },
+    {
+      "class_id": 9125,
+      "brand": "Nivea",
+      "product_name": "Men Strong Power Shampoo",
+      "variant": "",
+      "sku": "nivea_men_strong_power_shampoo",
+      "category": "Personal Care",
+      "donor_hint": "natural glow"
     }
   ]
 }

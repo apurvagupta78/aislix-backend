@@ -76,23 +76,23 @@ def test_bag_color_orange_red_green():
     green_bgr[:, :, 2] = 40
     assert _bag_color_family(green_bgr, record) == "green"
 
-    tomato_bgr = np.zeros((120, 80, 3), dtype=np.uint8)
-    tomato_bgr[:, :, 0] = 160  # cool dark blue Tomato Tango pack
-    tomato_bgr[:, :, 1] = 50
-    tomato_bgr[:, :, 2] = 55
-    assert _bag_color_family(tomato_bgr, record) == "red"
-
     blue_cast_green = np.zeros((120, 80, 3), dtype=np.uint8)
     blue_cast_green[:, :, 0] = 120  # B high — blue photo cast
     blue_cast_green[:, :, 1] = 105
     blue_cast_green[:, :, 2] = 85
     assert _bag_color_family(blue_cast_green, record) == "green"
 
+    tomato_bgr = np.zeros((120, 80, 3), dtype=np.uint8)
+    tomato_bgr[:, :, 0] = 160  # cool blue Magic Masala pack under blue cast
+    tomato_bgr[:, :, 1] = 50
+    tomato_bgr[:, :, 2] = 55
+    assert _bag_color_family(tomato_bgr, record) == "blue"
+
     cool_blue_tomato = np.zeros((120, 80, 3), dtype=np.uint8)
     cool_blue_tomato[:, :, 0] = 90
     cool_blue_tomato[:, :, 1] = 75
     cool_blue_tomato[:, :, 2] = 110
-    assert _bag_color_family(cool_blue_tomato, record) == "red"
+    assert _bag_color_family(cool_blue_tomato, record) == "blue"
 
     warm_lit_green = np.zeros((120, 80, 3), dtype=np.uint8)
     warm_lit_green[:, :, 0] = 80
@@ -128,14 +128,10 @@ def test_snack_row_recovery_overrides_tomato_on_green_row():
     assert all(row["product_name"] == "American Style Cream and Onion Potato Chips" for row in green_row)
 
 
-def test_snack_row_recovery_overrides_magic_masala_on_blue_tomato_row():
+def test_snack_row_recovery_fixes_tomato_mislabel_on_blue_row():
     ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
     source = np.zeros((600, 400, 3), dtype=np.uint8)
-    # orange Magic Masala row (BGR)
-    source[50:150, 20:380, 2] = 200
-    source[50:150, 20:380, 1] = 120
-    source[50:150, 20:380, 0] = 40
-    # cool blue Tomato row (BGR: B=110, G=75, R=90 → RGB R=90,G=75,B=110)
+    # Magic Masala blue row (BGR)
     source[350:450, 20:380, 0] = 110
     source[350:450, 20:380, 1] = 75
     source[350:450, 20:380, 2] = 90
@@ -143,21 +139,13 @@ def test_snack_row_recovery_overrides_magic_masala_on_blue_tomato_row():
     classified = [
         {
             "x1": 20,
-            "y1": 50,
-            "x2": 80,
-            "y2": 150,
-            "brand": "Lays",
-            "product_name": "Indias Magic Masala Potato Chips",
-            "confidence": 0.88,
-        },
-        {
-            "x1": 20,
             "y1": 350,
             "x2": 80,
             "y2": 450,
             "brand": "Lays",
-            "product_name": "Indias Magic Masala Potato Chips",
+            "product_name": "Tomato Tango Potato Chips",
             "confidence": 0.88,
+            "pack_text": "Tom",
         },
         {
             "x1": 100,
@@ -165,15 +153,14 @@ def test_snack_row_recovery_overrides_magic_masala_on_blue_tomato_row():
             "x2": 160,
             "y2": 445,
             "brand": "Lays",
-            "product_name": "Indias Magic Masala Potato Chips",
-            "confidence": 0.88,
+            "product_name": "Tomato Tango Potato Chips",
+            "confidence": 0.86,
+            "pack_text": "Tomato",
         },
     ]
-    updated, stats = recover_snack_variants_by_row(classified, source, ctx)
+    updated, stats = recover_snack_variants_by_row(classified, source, ctx, override_only=True)
     assert stats["snack_row_recovery"] >= 2
-    tomato_row = [r for r in updated if r["y1"] > 300]
-    assert len(tomato_row) == 2
-    assert all(row["product_name"] == "Tomato Tango Potato Chips" for row in tomato_row)
+    assert all(row["product_name"] == "Indias Magic Masala Potato Chips" for row in updated)
 
 
 def test_snack_row_recovery_overrides_wrong_magic_masala_on_green_row():
