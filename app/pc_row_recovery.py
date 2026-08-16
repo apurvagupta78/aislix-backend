@@ -74,6 +74,30 @@ def _pc_aisle_enabled(scan_context: dict | None) -> bool:
     return bool(scan_context.get("multi_sub_category_audit"))
 
 
+def _row_type_consensus(cluster: list[dict]) -> str | None:
+    """Dominant PC product type on a shelf row (pack OCR weighted over labels)."""
+    votes: dict[str, int] = {}
+    for rec in cluster:
+        pack = (rec.get("pack_text") or "").strip()
+        pack_type = infer_pc_product_type(pack) if len(pack) >= 3 else None
+        if pack_type:
+            votes[pack_type] = votes.get(pack_type, 0) + 2
+            continue
+        if _is_unknown(rec):
+            continue
+        label_type = infer_pc_product_type(
+            f"{rec.get('brand') or ''} {rec.get('product_name') or ''}"
+        )
+        if label_type:
+            votes[label_type] = votes.get(label_type, 0) + 1
+    if not votes:
+        return None
+    majority = max(votes, key=votes.get)
+    if votes[majority] / sum(votes.values()) < 0.6:
+        return None
+    return majority
+
+
 def _pack_supports_neighbor(pack_text: str, ref: dict) -> bool:
     """Only copy neighbor label when pack OCR mentions the brand and product kind agrees."""
     pack = (pack_text or "").lower()
@@ -86,7 +110,6 @@ def _pack_supports_neighbor(pack_text: str, ref: dict) -> bool:
 
     brand_in_pack = ref_brand in re.sub(r"[^a-z0-9]", "", pack)
     if not brand_in_pack and ref_brand not in pack:
-        # Allow spaced brand tokens (head & shoulders, l'oreal)
         brand_tokens = (ref.get("brand") or "").lower().split()
         if not any(len(t) >= 4 and t in pack for t in brand_tokens):
             return False
@@ -102,6 +125,18 @@ def _pack_supports_neighbor(pack_text: str, ref: dict) -> bool:
         return False
 
     return True
+
+
+def _pack_or_row_supports_neighbor(pack_text: str, ref: dict, row_type: str | None) -> bool:
+    """Copy neighbor when pack agrees, or row type is unimodal and neighbor matches row type."""
+    if _pack_supports_neighbor(pack_text, ref):
+        return True
+    if len((pack_text or "").strip()) >= 3:
+        return False
+    if not row_type:
+        return False
+    ref_type = infer_pc_product_type(f"{ref.get('brand') or ''} {ref.get('product_name') or ''}")
+    return ref_type == row_type
 
 
 def recover_pc_unknowns_by_row(
@@ -133,21 +168,21 @@ def recover_pc_unknowns_by_row(
         if not labeled:
             continue
 
-        row_pack_type = infer_pc_product_type(" ".join(rec.get("pack_text") or "" for rec in cluster))
+        row_type = _row_type_consensus(cluster)
 
         for rec in cluster:
             if not _is_unknown(rec):
                 continue
             pack = rec.get("pack_text") or ""
-            pack_type = infer_pc_product_type(pack) or row_pack_type
+            pack_type = infer_pc_product_type(pack) or row_type
             matched: dict | None = None
             if pack_type and pack_type in labeled_by_type:
                 ref = labeled_by_type[pack_type]
-                if _pack_supports_neighbor(pack, ref):
+                if _pack_or_row_supports_neighbor(pack, ref, row_type):
                     matched = ref
             if not matched:
                 for brand, ref in labeled.items():
-                    if _pack_supports_neighbor(pack, ref):
+                    if _pack_or_row_supports_neighbor(pack, ref, row_type):
                         matched = ref
                         break
             if not matched:

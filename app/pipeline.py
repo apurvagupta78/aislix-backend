@@ -222,12 +222,12 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
 
         from app.pc_pack_text_guard import enforce_pc_pack_text_labels, reconcile_pc_rows_by_type
 
-        classified, pc_type_stats = reconcile_pc_rows_by_type(classified, scan_context)
-        if pc_type_stats.get("pc_row_type_fix") or pc_type_stats.get("pc_row_type_reject"):
-            recognition_engine_stats.update(pc_type_stats)
         classified, pc_guard_stats = enforce_pc_pack_text_labels(classified, scan_context)
         if pc_guard_stats.get("pc_pack_text_fix") or pc_guard_stats.get("pc_pack_text_reject"):
             recognition_engine_stats.update(pc_guard_stats)
+        classified, pc_type_stats = reconcile_pc_rows_by_type(classified, scan_context)
+        if pc_type_stats.get("pc_row_type_fix") or pc_type_stats.get("pc_row_type_reject"):
+            recognition_engine_stats.update(pc_type_stats)
         classified, pc_stats = recover_pc_unknowns_by_row(classified, scan_context)
         if pc_stats.get("pc_row_recovery"):
             recognition_engine_stats.update(pc_stats)
@@ -236,6 +236,12 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             for key in ("pc_pack_text_fix", "pc_pack_text_reject"):
                 recognition_engine_stats[key] = int(recognition_engine_stats.get(key) or 0) + int(
                     pc_guard_stats2.get(key) or 0
+                )
+        classified, pc_type_stats2 = reconcile_pc_rows_by_type(classified, scan_context)
+        if pc_type_stats2.get("pc_row_type_fix") or pc_type_stats2.get("pc_row_type_reject"):
+            for key in ("pc_row_type_fix", "pc_row_type_reject"):
+                recognition_engine_stats[key] = int(recognition_engine_stats.get(key) or 0) + int(
+                    pc_type_stats2.get(key) or 0
                 )
         if scan_context.get("planogram_mode") and scan_context.get("planogram_candidates"):
             from app.planogram_guided import (

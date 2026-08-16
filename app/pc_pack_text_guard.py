@@ -155,6 +155,44 @@ _INCOMPATIBLE_ROW_TYPES: dict[str, frozenset[str]] = {
     "skincare": frozenset({"shampoo", "deodorant", "soap"}),
 }
 
+_SHAMPOO_ONLY_BRANDS = frozenset(
+    {
+        "tresemme",
+        "pantene",
+        "sunsilk",
+        "head",
+        "headshoulders",
+        "clinic",
+        "clinicplus",
+        "vatika",
+        "indulekha",
+        "meera",
+    }
+)
+
+_DEODORANT_ONLY_BRANDS = frozenset(
+    {"axe", "fogg", "wildstone", "parkavenue", "oldspice", "denver", "yardley"}
+)
+
+_SOAP_HEAVY_BRANDS = frozenset(
+    {"lux", "lifebuoy", "medimix", "santoor", "hamam", "dettol", "pears", "cintol"}
+)
+
+
+def _norm_brand_key(brand: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (brand or "").lower())
+
+
+def _brand_conflicts_with_type(brand: str, target_type: str) -> bool:
+    key = _norm_brand_key(brand)
+    if target_type in {"deodorant", "soap", "skincare"} and key in _SHAMPOO_ONLY_BRANDS:
+        return True
+    if target_type == "shampoo" and key in _DEODORANT_ONLY_BRANDS:
+        return True
+    if target_type == "shampoo" and key in _SOAP_HEAVY_BRANDS:
+        return True
+    return False
+
 _PROPAGATION_SOURCES = frozenset(
     {
         "propagate",
@@ -234,6 +272,14 @@ def _typed_fallback_label(
     if not target_type:
         return corrected
 
+    brand_key = _norm_brand_key(str(brand))
+    if _brand_conflicts_with_type(str(brand), target_type):
+        if brand_key in _SHAMPOO_ONLY_BRANDS:
+            shampoo_match = match_from_text(f"{brand} shampoo {pack_text}", scan_context=scan_context)
+            if shampoo_match and _label_type(shampoo_match) == "shampoo":
+                return shampoo_match
+        return corrected
+
     product_name = _PC_SYNTHETIC_NAMES.get(target_type, target_type.title())
     return {
         "brand": brand,
@@ -254,6 +300,12 @@ def _row_majority_types(classified: list[dict]) -> dict[int, str | None]:
         votes: dict[str, int] = {}
         labeled = 0
         for rec in cluster:
+            pack = (rec.get("pack_text") or "").strip()
+            pack_type = infer_pc_product_type(pack) if len(pack) >= 3 else None
+            if pack_type:
+                votes[pack_type] = votes.get(pack_type, 0) + 2
+                labeled += 1
+                continue
             if _is_unknown_label(rec):
                 continue
             ptype = _label_type(rec)
@@ -264,7 +316,8 @@ def _row_majority_types(classified: list[dict]) -> dict[int, str | None]:
         if not votes or labeled < 2:
             continue
         majority = max(votes, key=votes.get)
-        if votes[majority] / labeled < 0.55:
+        total_weight = sum(votes.values())
+        if votes[majority] / total_weight < 0.55:
             continue
         for rec in cluster:
             row_types[id(rec)] = majority
@@ -301,6 +354,16 @@ def reconcile_pc_rows_by_type(
         pack = (rec.get("pack_text") or "").strip()
         fallback = _typed_fallback_label(rec, pack, scan_context, row_type=row_type)
         if fallback and _label_type(fallback) == row_type:
+            if _brand_conflicts_with_type(str(fallback.get("brand") or ""), row_type):
+                from app.brand_dictionary import match_from_text
+
+                corrected = match_from_text(f"{rec.get('brand') or ''} {pack}", scan_context=scan_context)
+                if corrected and _label_type(corrected) == row_type:
+                    fallback = corrected
+                else:
+                    _demote_unknown(rec)
+                    stats["pc_row_type_reject"] += 1
+                    continue
             rec.update(
                 {
                     **fallback,

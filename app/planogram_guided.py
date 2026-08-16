@@ -1092,6 +1092,15 @@ def assign_planogram_shelf_rows(
             score = per_match[1] if per_match else text_score
             if bag_color != "unknown" and _row_allows_lays_color_recovery(row):
                 candidate = _pick_color_compatible_candidate(shelf_candidates, bag_color, candidate) or candidate
+            elif row_bag_color == "green" and (
+                "tomato" in (rec.get("product_name") or "").lower()
+                or _is_weak_tomato_pack_text(ocr)
+            ):
+                candidate = (
+                    _pick_color_compatible_candidate(shelf_candidates, "green", row_candidate)
+                    or row_candidate
+                )
+                bag_color = "green"
             conf = max(0.74, score, float(rec.get("confidence") or 0) * 0.5)
             if ocr.strip() and re.search(r"lay'?s\b", ocr, flags=re.IGNORECASE):
                 conf = max(conf, 0.84)

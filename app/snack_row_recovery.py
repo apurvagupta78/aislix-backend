@@ -268,13 +268,22 @@ def finalize_lays_rack_labels(
 
         row_color = row_colors.get(id(rec))
         bag_color = _effective_bag_color(rec, source_image, row_color)
+        product = (rec.get("product_name") or "").lower()
+        pack = (rec.get("pack_text") or "").lower()
+        label_color = _lays_color_for_product(rec)
+
+        # Unimodal green row beats one misread red facing or weak tomato OCR.
+        if row_color == "green" and (
+            label_color == "red"
+            or "tomato" in product
+            or _is_weak_tomato_pack_text(pack)
+        ):
+            bag_color = "green"
         effective_color = bag_color if bag_color != "unknown" else (row_color or "unknown")
         if effective_color == "unknown":
             continue
 
-        product = (rec.get("product_name") or "").lower()
-        pack = (rec.get("pack_text") or "").lower()
-        label_color = _lays_color_for_product(rec)
+        label_color = label_color or _lays_color_for_product(rec)
 
         needs_fix = False
         if label_color and not _color_families_compatible(label_color, effective_color):
@@ -498,10 +507,15 @@ def enforce_snack_color_and_brand_labels(
         brand = _norm_brand(rec.get("brand") or "")
         row_color = row_colors.get(id(rec))
         bag_color = _effective_bag_color(rec, source_image, row_color)
+        product = (rec.get("product_name") or "").lower()
+        pack = (rec.get("pack_text") or "").lower()
+        label_color = _lays_color_for_product(rec)
+        if row_color == "green" and (
+            label_color == "red" or "tomato" in product or _is_weak_tomato_pack_text(pack)
+        ):
+            bag_color = "green"
         if bag_color == "unknown":
             continue
-        pack = (rec.get("pack_text") or "").lower()
-        product = (rec.get("product_name") or "").lower()
 
         if brand == "bingo" and bag_color in {"green", "blue", "red"}:
             if "tedhe" in product or "mad angles" in product or "mad angle" in product:

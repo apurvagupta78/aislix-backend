@@ -462,3 +462,35 @@ def test_top_partial_excluded_from_inventory():
     inventory = aggregate_inventory(updated)
     assert sum(row["quantity"] for row in inventory) == 1
 
+
+def test_green_row_beats_tomato_mislabel_on_cream_row():
+    ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
+    source = np.zeros((800, 600, 3), dtype=np.uint8)
+    source[400:500, 50:550, 1] = 160
+    source[400:500, 50:550, 0] = 90
+    source[400:500, 50:550, 2] = 60
+    classified = [
+        {
+            "x1": 50,
+            "y1": 400,
+            "x2": 120,
+            "y2": 500,
+            "brand": "Lays",
+            "product_name": "American Style Cream and Onion Potato Chips",
+            "confidence": 0.88,
+        },
+        {
+            "x1": 130,
+            "y1": 405,
+            "x2": 200,
+            "y2": 495,
+            "brand": "Lays",
+            "product_name": "Tomato Tango Potato Chips",
+            "pack_text": "Tomato",
+            "confidence": 0.86,
+        },
+    ]
+    updated, fixed = finalize_lays_rack_labels(classified, source, ctx)
+    assert fixed >= 1
+    assert not any("tomato" in (r.get("product_name") or "").lower() for r in updated)
+

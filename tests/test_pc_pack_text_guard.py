@@ -206,6 +206,20 @@ def test_typed_fallback_for_lux_soap_pack():
     assert "soap" in label["product_name"].lower()
 
 
+def test_tresemme_never_becomes_deodorant_fallback():
+    from app.pc_pack_text_guard import _typed_fallback_label
+
+    label = _typed_fallback_label(
+        {"brand": "Tresemme", "product_name": "Smooth Shine Shampoo"},
+        "tresemme smooth shine",
+        _pc_ctx(),
+        row_type="deodorant",
+    )
+    assert label is not None
+    assert "deodorant" not in (label.get("product_name") or "").lower()
+    assert "shampoo" in (label.get("product_name") or "").lower()
+
+
 def test_guard_disabled_on_single_bin_shampoo_scan():
     classified = [
         {
