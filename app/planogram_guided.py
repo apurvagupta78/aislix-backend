@@ -1037,10 +1037,36 @@ def assign_planogram_shelf_rows(
             )
 
         for rec, ocr in zip(row, row_ocrs):
+            from app.snack_row_recovery import _is_weak_tomato_pack_text
+
             bag_color = _bag_color_family(source_image, rec) if source_image is not None else "unknown"
+            row_bag_color = (
+                max(row_color_votes, key=row_color_votes.get)
+                if row_color_votes and _row_allows_lays_color_recovery(row)
+                else None
+            )
+            if bag_color == "unknown" and row_bag_color:
+                votes_total = sum(row_color_votes.values())
+                if votes_total and row_color_votes.get(row_bag_color, 0) / len(row) >= 0.5:
+                    bag_color = row_bag_color
             if _is_top_partial_facing(rec, image_height):
+                if _is_unidentified_facing(rec) and bag_color != "unknown":
+                    label = label_from_candidate(
+                        row_candidate if _candidate_matches_bag_color(row_candidate, bag_color) else
+                        (_pick_color_compatible_candidate(shelf_candidates, bag_color, row_candidate) or row_candidate),
+                        0.82,
+                        "planogram_top_partial_color",
+                        ocr,
+                        scan_context=scan_context,
+                    )
+                    output.append(_merge_record(rec, label))
+                    assigned += 1
+                    continue
                 if _is_unidentified_facing(rec):
                     output.append(rec)
+                    continue
+                if bag_color != "unknown" and _color_label_mismatch(rec, bag_color):
+                    pass
                 else:
                     output.append(
                         {
@@ -1052,10 +1078,15 @@ def assign_planogram_shelf_rows(
                             "recognition_source": "top_partial_demote",
                         }
                     )
-                continue
+                    continue
 
             if not _is_unknown_record(rec):
                 if bag_color != "unknown" and _color_label_mismatch(rec, bag_color):
+                    pass
+                elif bag_color == "green" and (
+                    "tomato" in (rec.get("product_name") or "").lower()
+                    or _is_weak_tomato_pack_text(ocr)
+                ):
                     pass
                 else:
                     existing = best_candidate_from_label(

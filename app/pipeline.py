@@ -201,6 +201,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         classified = filter_nested_facings(classified, layout=shelf_mode)
         from app.snack_row_recovery import (
             enforce_snack_color_and_brand_labels,
+            finalize_lays_rack_labels,
             recover_snack_variants_by_row,
         )
 
@@ -277,6 +278,9 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             )
             if color_fixes:
                 recognition_engine_stats["snack_color_fix"] = color_fixes
+        classified, lays_finalize = finalize_lays_rack_labels(classified, image, scan_context)
+        if lays_finalize:
+            recognition_engine_stats["lays_rack_finalize"] = lays_finalize
         compliance = analyze_subcategory_compliance(classified, scan_context)
         classified = compliance["classified"]
         subcategory_mismatches = compliance["subcategory_mismatches"]

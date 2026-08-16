@@ -133,10 +133,12 @@ def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
     g = float(sample[:, :, 1].mean())
     b = float(sample[:, :, 2].mean())
 
-    # Green Cream & Onion — allow warm lighting and blue freezer cast.
-    if g > 75 and g >= r - 18 and g >= b - 35:
-        if (g - min(r, b)) >= 5 or (g > r and g > b - 10):
+    # Green Cream & Onion — warm/yellow-green under store lighting.
+    if g > 68 and g >= r - 24 and g >= b - 42:
+        if (g - min(r, b)) >= 3 or (g > r and g > b - 15):
             return "green"
+    if g > 62 and r > 58 and g >= b - 28 and g >= r - 12 and (g - b) >= -5:
+        return "green"
     # Warm orange/red Tomato Tango — low blue channel (not blue Magic Masala packs).
     if r > 95 and r > g + 12 and r > b + 22 and g < r - 5:
         return "red"
@@ -147,6 +149,137 @@ def _bag_color_family(source_image: np.ndarray, record: dict) -> str:
         if b >= r - 20 or (b > r and b > 70):
             return "blue"
     return "unknown"
+
+
+def _row_color_consensus(
+    cluster: list[dict],
+    source_image: np.ndarray,
+    *,
+    min_ratio: float = 0.55,
+) -> str | None:
+    """Dominant bag color for a shelf row when votes are consistent."""
+    votes: dict[str, int] = {}
+    for rec in cluster:
+        color = _bag_color_family(source_image, rec)
+        if color != "unknown":
+            votes[color] = votes.get(color, 0) + 1
+    if not votes:
+        return None
+    dominant = max(votes, key=votes.get)
+    if votes[dominant] / len(cluster) < min_ratio:
+        return None
+    return dominant
+
+
+def _effective_bag_color(
+    rec: dict,
+    source_image: np.ndarray,
+    row_color: str | None = None,
+) -> str:
+    """Per-facing color, falling back to unimodal row consensus when pixels are ambiguous."""
+    facing_color = _bag_color_family(source_image, rec)
+    if facing_color != "unknown":
+        return facing_color
+    return row_color or "unknown"
+
+
+def _is_weak_tomato_pack_text(text: str) -> bool:
+    """Partial OCR like 'Tom' / 'Tomato' must not override green/blue bag color."""
+    blob = re.sub(r"\s+", " ", (text or "").lower().strip())
+    if not blob or re.search(r"\blay(?:'|s)?s\b", blob):
+        return False
+    if "tomato tango" in blob:
+        return False
+    return bool(re.search(r"\btom(?:ato)?\b|\btango\b|\btom\b", blob))
+
+
+def _apply_lays_product(rec: dict, color: str, source: str, *, confidence_floor: float = 0.84) -> bool:
+    product = LAYS_ROW_PRODUCTS.get(color)
+    if not product:
+        return False
+    rec.update(
+        {
+            **product,
+            "confidence": max(float(rec.get("confidence") or 0), confidence_floor),
+            "recognition_source": source,
+        }
+    )
+    return True
+
+
+def finalize_lays_rack_labels(
+    classified: list[dict],
+    source_image: np.ndarray | None,
+    scan_context: dict | None = None,
+) -> tuple[list[dict], int]:
+    """
+    Final Lay's rack reconciliation: row color + bag pixels beat weak tomato OCR fragments.
+    Fixes green→Tomato Tango mislabels and top-row unknown Magic Masala facings.
+    """
+    if source_image is None or not _snack_aisle_mixed_recovery_enabled(scan_context):
+        return classified, 0
+
+    sub = ((scan_context or {}).get("sub_category") or "").lower()
+    if sub not in {"chips", "potato_chips"}:
+        return classified, 0
+
+    fixed = 0
+    image_height = int(source_image.shape[0])
+    row_clusters = cluster_records_by_shelf_row(classified)
+    row_colors: dict[int, str | None] = {}
+    for cluster in row_clusters:
+        for rec in cluster:
+            row_colors[id(rec)] = _row_color_consensus(cluster, source_image, min_ratio=0.5)
+
+    # Top partial row: inherit color from the nearest full row below (same rack band).
+    sorted_rows = sorted(row_clusters, key=lambda row: float(row[0]["y1"]) if row else 0.0)
+    for idx, cluster in enumerate(sorted_rows):
+        if not cluster or not _is_top_partial_facing(cluster[0], image_height):
+            continue
+        below_color: str | None = None
+        for lower in sorted_rows[idx + 1 :]:
+            if not lower:
+                continue
+            below_color = _row_color_consensus(lower, source_image, min_ratio=0.45)
+            if below_color:
+                break
+        if below_color:
+            for rec in cluster:
+                row_colors[id(rec)] = below_color
+
+    for rec in classified:
+        if _is_non_lays_snack_brand(rec) or _pack_text_indicates_other_snack(rec.get("pack_text") or ""):
+            continue
+        if not _facing_indicates_lays(rec) and not _is_unknown_or_generic_lays(rec):
+            continue
+
+        row_color = row_colors.get(id(rec))
+        bag_color = _effective_bag_color(rec, source_image, row_color)
+        if bag_color == "unknown":
+            continue
+
+        product = (rec.get("product_name") or "").lower()
+        pack = (rec.get("pack_text") or "").lower()
+        label_color = _lays_color_for_product(rec)
+
+        needs_fix = False
+        if label_color and not _color_families_compatible(label_color, bag_color):
+            needs_fix = True
+        elif _is_unknown_or_generic_lays(rec) and row_color:
+            needs_fix = True
+        elif bag_color == "green" and ("tomato" in product or _is_weak_tomato_pack_text(pack)):
+            needs_fix = True
+        elif bag_color == "blue" and ("tomato" in product or "cream" in product):
+            needs_fix = True
+        elif bag_color == "red" and ("magic masala" in product or ("cream" in product and "onion" in product)):
+            needs_fix = True
+
+        if needs_fix and _apply_lays_product(rec, bag_color, "snack_row_finalize"):
+            fixed += 1
+
+    if fixed:
+        print(f"Lay's rack finalize: corrected {fixed} facing(s)")
+    return classified, fixed
 
 
 def _lays_color_for_product(row: dict) -> str | None:
@@ -375,6 +508,12 @@ def enforce_snack_color_and_brand_labels(
                     }
                 )
                 fixed += 1
+                continue
+
+        if brand == "lays" and bag_color == "green" and ("tomato" in product or _is_weak_tomato_pack_text(pack)):
+            if _apply_lays_product(rec, "green", "snack_color_brand_fix"):
+                fixed += 1
+                continue
 
         if brand in MIXED_SNACK_BRANDS and bag_color in {"green", "blue", "red"}:
             if re.search(r"lay(?:'|s)?s\b", pack):

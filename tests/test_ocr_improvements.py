@@ -10,6 +10,7 @@ from app.recognizer import _is_generic_lays_faiss_match
 from app.scan_context import resolve_scan_context
 from app.snack_row_recovery import (
     _bag_color_family,
+    finalize_lays_rack_labels,
     recover_snack_variants_by_row,
     should_use_snack_row_recovery,
 )
@@ -341,4 +342,92 @@ def test_snack_row_override_uses_row_color_when_edge_facing_unknown():
     updated, stats = recover_snack_variants_by_row(classified, source, ctx, override_only=True)
     assert stats["snack_row_recovery"] >= 1
     assert updated[0]["product_name"] == "Indias Magic Masala Potato Chips"
+
+
+def test_finalize_fixes_green_tomato_mislabel():
+    ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
+    source = np.zeros((800, 400, 3), dtype=np.uint8)
+    source[500:580, 20:380, 1] = 130
+    source[500:580, 20:380, 2] = 100
+    source[500:580, 20:380, 0] = 85
+
+    classified = [
+        {
+            "x1": 20,
+            "y1": 500,
+            "x2": 80,
+            "y2": 580,
+            "brand": "Lays",
+            "product_name": "Tomato Tango Potato Chips",
+            "confidence": 0.88,
+            "pack_text": "Tomato",
+        },
+        {
+            "x1": 100,
+            "y1": 505,
+            "x2": 160,
+            "y2": 575,
+            "brand": "Lays",
+            "product_name": "Tomato Tango Potato Chips",
+            "confidence": 0.86,
+            "pack_text": "Tom",
+        },
+    ]
+    updated, fixed = finalize_lays_rack_labels(classified, source, ctx)
+    assert fixed >= 2
+    assert all(
+        row["product_name"] == "American Style Cream and Onion Potato Chips" for row in updated
+    )
+
+
+def test_finalize_recovers_top_partial_unknown_from_row_below():
+    ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
+    source = np.zeros((900, 400, 3), dtype=np.uint8)
+    # full blue row below top partial band
+    source[120:200, 20:380, 0] = 140
+    source[120:200, 20:380, 1] = 90
+    source[120:200, 20:380, 2] = 100
+
+    classified = [
+        {
+            "x1": 20,
+            "y1": 20,
+            "x2": 80,
+            "y2": 80,
+            "brand": "Unknown",
+            "product_name": "Unidentified SKU",
+            "confidence": 0.35,
+        },
+        {
+            "x1": 100,
+            "y1": 25,
+            "x2": 160,
+            "y2": 75,
+            "brand": "Unknown",
+            "product_name": "Unidentified SKU",
+            "confidence": 0.35,
+        },
+        {
+            "x1": 20,
+            "y1": 120,
+            "x2": 80,
+            "y2": 200,
+            "brand": "Lays",
+            "product_name": "Indias Magic Masala Potato Chips",
+            "confidence": 0.88,
+        },
+        {
+            "x1": 100,
+            "y1": 125,
+            "x2": 160,
+            "y2": 195,
+            "brand": "Lays",
+            "product_name": "Indias Magic Masala Potato Chips",
+            "confidence": 0.88,
+        },
+    ]
+    updated, fixed = finalize_lays_rack_labels(classified, source, ctx)
+    assert fixed >= 2
+    top = [r for r in updated if r["y1"] < 100]
+    assert all("magic masala" in r["product_name"].lower() for r in top)
 
