@@ -135,6 +135,8 @@ def aggregate_inventory(classified: list[dict]) -> list[dict]:
     buckets: dict[tuple, dict] = defaultdict(lambda: {"quantity": 0, "confidences": []})
 
     for item in classified:
+        if item.get("exclude_from_inventory"):
+            continue
         brand = (item.get("brand") or "Unknown").strip()
         product = (item.get("product_name") or "Unknown").strip()
         variant = (item.get("variant") or "").strip()

@@ -39,6 +39,14 @@ PC_ROW_BRANDS = frozenset(
         "mamaearth",
         "simple",
         "wildstone",
+        "lux",
+        "lifebuoy",
+        "santoor",
+        "dettol",
+        "rexona",
+        "cintol",
+        "himalaya",
+        "clean",
     }
 )
 
@@ -109,25 +117,39 @@ def recover_pc_unknowns_by_row(
         if len(cluster) < 2:
             continue
         labeled: dict[str, dict] = {}
+        labeled_by_type: dict[str, dict] = {}
         for rec in cluster:
             if _is_unknown(rec):
                 continue
             brand = _norm_brand(rec.get("brand") or "")
             if brand in PC_ROW_BRANDS:
                 labeled.setdefault(brand, rec)
+                ptype = infer_pc_product_type(
+                    f"{rec.get('brand') or ''} {rec.get('product_name') or ''}"
+                )
+                if ptype:
+                    labeled_by_type.setdefault(ptype, rec)
 
         if not labeled:
             continue
+
+        row_pack_type = infer_pc_product_type(" ".join(rec.get("pack_text") or "" for rec in cluster))
 
         for rec in cluster:
             if not _is_unknown(rec):
                 continue
             pack = rec.get("pack_text") or ""
+            pack_type = infer_pc_product_type(pack) or row_pack_type
             matched: dict | None = None
-            for brand, ref in labeled.items():
+            if pack_type and pack_type in labeled_by_type:
+                ref = labeled_by_type[pack_type]
                 if _pack_supports_neighbor(pack, ref):
                     matched = ref
-                    break
+            if not matched:
+                for brand, ref in labeled.items():
+                    if _pack_supports_neighbor(pack, ref):
+                        matched = ref
+                        break
             if not matched:
                 continue
             rec.update(

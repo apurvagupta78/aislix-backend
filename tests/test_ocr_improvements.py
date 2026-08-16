@@ -380,10 +380,9 @@ def test_finalize_fixes_green_tomato_mislabel():
     )
 
 
-def test_finalize_recovers_top_partial_unknown_from_row_below():
+def test_finalize_does_not_promote_top_partial_unknowns():
     ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
     source = np.zeros((900, 400, 3), dtype=np.uint8)
-    # full blue row below top partial band
     source[120:200, 20:380, 0] = 140
     source[120:200, 20:380, 1] = 90
     source[120:200, 20:380, 2] = 100
@@ -427,7 +426,39 @@ def test_finalize_recovers_top_partial_unknown_from_row_below():
         },
     ]
     updated, fixed = finalize_lays_rack_labels(classified, source, ctx)
-    assert fixed >= 2
+    assert fixed == 0
     top = [r for r in updated if r["y1"] < 100]
-    assert all("magic masala" in r["product_name"].lower() for r in top)
+    assert all(r["brand"] == "Unknown" for r in top)
+
+
+def test_top_partial_excluded_from_inventory():
+    from app.inventory import aggregate_inventory
+    from app.snack_row_recovery import mark_top_partial_exclusions
+
+    ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
+    source = np.zeros((900, 400, 3), dtype=np.uint8)
+    classified = [
+        {
+            "x1": 20,
+            "y1": 20,
+            "x2": 80,
+            "y2": 80,
+            "brand": "Lays",
+            "product_name": "Indias Magic Masala Potato Chips",
+            "confidence": 0.88,
+        },
+        {
+            "x1": 20,
+            "y1": 120,
+            "x2": 80,
+            "y2": 200,
+            "brand": "Lays",
+            "product_name": "Indias Magic Masala Potato Chips",
+            "confidence": 0.88,
+        },
+    ]
+    updated, excluded = mark_top_partial_exclusions(classified, source, ctx)
+    assert excluded == 1
+    inventory = aggregate_inventory(updated)
+    assert sum(row["quantity"] for row in inventory) == 1
 

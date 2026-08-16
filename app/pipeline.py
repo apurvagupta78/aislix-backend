@@ -202,6 +202,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         from app.snack_row_recovery import (
             enforce_snack_color_and_brand_labels,
             finalize_lays_rack_labels,
+            mark_top_partial_exclusions,
             recover_snack_variants_by_row,
         )
 
@@ -219,14 +220,23 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
             recognition_engine_stats["snack_color_fix"] = color_fixes
         from app.pc_row_recovery import recover_pc_unknowns_by_row
 
-        classified, pc_stats = recover_pc_unknowns_by_row(classified, scan_context)
-        if pc_stats.get("pc_row_recovery"):
-            recognition_engine_stats.update(pc_stats)
-        from app.pc_pack_text_guard import enforce_pc_pack_text_labels
+        from app.pc_pack_text_guard import enforce_pc_pack_text_labels, reconcile_pc_rows_by_type
 
+        classified, pc_type_stats = reconcile_pc_rows_by_type(classified, scan_context)
+        if pc_type_stats.get("pc_row_type_fix") or pc_type_stats.get("pc_row_type_reject"):
+            recognition_engine_stats.update(pc_type_stats)
         classified, pc_guard_stats = enforce_pc_pack_text_labels(classified, scan_context)
         if pc_guard_stats.get("pc_pack_text_fix") or pc_guard_stats.get("pc_pack_text_reject"):
             recognition_engine_stats.update(pc_guard_stats)
+        classified, pc_stats = recover_pc_unknowns_by_row(classified, scan_context)
+        if pc_stats.get("pc_row_recovery"):
+            recognition_engine_stats.update(pc_stats)
+        classified, pc_guard_stats2 = enforce_pc_pack_text_labels(classified, scan_context)
+        if pc_guard_stats2.get("pc_pack_text_fix") or pc_guard_stats2.get("pc_pack_text_reject"):
+            for key in ("pc_pack_text_fix", "pc_pack_text_reject"):
+                recognition_engine_stats[key] = int(recognition_engine_stats.get(key) or 0) + int(
+                    pc_guard_stats2.get(key) or 0
+                )
         if scan_context.get("planogram_mode") and scan_context.get("planogram_candidates"):
             from app.planogram_guided import (
                 assign_planogram_shelf_rows,
@@ -286,6 +296,9 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         classified, lays_finalize = finalize_lays_rack_labels(classified, image, scan_context)
         if lays_finalize:
             recognition_engine_stats["lays_rack_finalize"] = lays_finalize
+        classified, top_partial_excluded = mark_top_partial_exclusions(classified, image, scan_context)
+        if top_partial_excluded:
+            recognition_engine_stats["top_partial_excluded"] = top_partial_excluded
         compliance = analyze_subcategory_compliance(classified, scan_context)
         classified = compliance["classified"]
         subcategory_mismatches = compliance["subcategory_mismatches"]

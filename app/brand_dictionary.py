@@ -147,6 +147,12 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\bclinic\s+plus\b", "Clinic", "Plus Strong And Long Health Shampoo"),
     (r"\bl[\s']?oreal\b", "Loreal", ""),
     (r"\btotal\s+repair\s*5?\b", "Loreal", "Paris Total Repair 5 Shampoo"),
+    (r"\bdove\b.*(?:beauty bar|bathing bar|cream bar|pure.?gentle|germ.?shield)", "Dove", "Beauty Bar Soap"),
+    (r"\blux\b.*(?:soap|soft touch|dream|fresh splash)", "Lux", "Soft Touch Soap"),
+    (r"\blifebuoy\b.*(?:soap|total|10|germ)", "Lifebuoy", "Total 10 Soap"),
+    (r"\bpears\b.*(?:soap|pure|gently|natural)", "Pears", "Pure and Gentle Soap Bar"),
+    (r"\bdettol\b.*(?:soap|skincare|original|cool)", "Dettol", "Original Soap"),
+    (r"\bdove\b.*(?:deodorant|body spray|antiperspirant|go fresh)", "Dove", "Go Fresh Deodorant Body Spray"),
     (r"\bdove\b", "Dove", ""),
     (r"\bintense\s+repair\b", "Dove", "Intense Repair Shampoo"),
     (r"\bclassic\s+clean\b", "Head", "Classic Clean Shampoo"),
@@ -196,8 +202,7 @@ PRODUCT_HINTS: list[tuple[str, str, str]] = [
     (r"\blay(?:\'|s)?s\b.*\bpotato\s+chips\b", "Lays", "Potato Chips"),
     (r"\blay(?:\'|s)?s\b.*\bclassic\b", "Lays", "Classic Salted Potato Chips"),
     (r"\blay(?:\'|s)?s\b.*\bmasala\b", "Lays", "Indias Magic Masala Potato Chips"),
-    (r"\blay(?:\'|s)?s\b.*\btomato\b", "Lays", "Tomato Tango Potato Chips"),
-    (r"\blay(?:\'|s)?s\b.*\btango\b", "Lays", "Tomato Tango Potato Chips"),
+    (r"\blay(?:\'|s)?s\b.*\btomato\s+tango\b", "Lays", "Tomato Tango Potato Chips"),
     (r"\blay(?:\'|s)?s\b.*\bcream\b", "Lays", "American Style Cream and Onion Potato Chips"),
     (r"\blay(?:\'|s)?s\b.*\bonion\b", "Lays", "American Style Cream and Onion Potato Chips"),
     (r"\blay(?:\'|s)?s\b", "Lays", ""),
@@ -1160,6 +1165,7 @@ def _synthetic_brand_product(
     if not scan_context:
         return None
     from app.scan_context import effective_sub_category
+    from app.pc_pack_text_guard import infer_pc_product_type
 
     sub = effective_sub_category(scan_context)
     brand_l = brand.strip().lower()
@@ -1170,6 +1176,25 @@ def _synthetic_brand_product(
                 "Men Strong Power Shampoo",
                 normalized,
                 confidence=0.86,
+                scan_context=scan_context,
+            )
+
+    pack_type = infer_pc_product_type(normalized)
+    if scan_context.get("multi_sub_category_audit") and pack_type:
+        typed_names = {
+            "soap": "Beauty Bar Soap",
+            "deodorant": "Deodorant Body Spray",
+            "skincare": "Body Lotion",
+            "toothpaste": "Toothpaste",
+            "shaving": "Shaving Gel",
+        }
+        product_name = typed_names.get(pack_type)
+        if product_name:
+            return _label_from_brand_product(
+                brand,
+                product_name,
+                normalized,
+                confidence=0.84,
                 scan_context=scan_context,
             )
     return None
@@ -1194,6 +1219,35 @@ def match_product_for_brand(
             continue
         seen_skus.add(sku)
         unique_entries.append(entry)
+
+    if scan_context and scan_context.get("multi_sub_category_audit"):
+        from app.pc_pack_text_guard import infer_pc_product_type
+
+        pack_type = infer_pc_product_type(text)
+        if pack_type:
+            typed = [
+                entry
+                for entry in unique_entries
+                if infer_pc_product_type(
+                    " ".join(
+                        filter(
+                            None,
+                            [
+                                entry.get("brand") or "",
+                                entry.get("product_name") or "",
+                                entry.get("sku") or "",
+                            ],
+                        )
+                    )
+                )
+                == pack_type
+            ]
+            if typed:
+                unique_entries = typed
+            elif pack_type in {"soap", "deodorant", "skincare", "toothpaste", "shaving"}:
+                synthetic = _synthetic_brand_product(brand, normalized, scan_context)
+                if synthetic:
+                    return synthetic
 
     best: dict | None = None
     best_score = 0.0

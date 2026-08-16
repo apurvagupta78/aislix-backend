@@ -207,6 +207,33 @@ def _apply_lays_product(rec: dict, color: str, source: str, *, confidence_floor:
     return True
 
 
+def mark_top_partial_exclusions(
+    classified: list[dict],
+    source_image: np.ndarray | None,
+    scan_context: dict | None = None,
+) -> tuple[list[dict], int]:
+    """Top-of-rack partial facings are outside the planogram band — exclude from inventory counts."""
+    if source_image is None or not _snack_aisle_mixed_recovery_enabled(scan_context):
+        return classified, 0
+    sub = ((scan_context or {}).get("sub_category") or "").lower()
+    if sub not in {"chips", "potato_chips"}:
+        return classified, 0
+
+    image_height = int(source_image.shape[0])
+    excluded = 0
+    for rec in classified:
+        if not _is_top_partial_facing(rec, image_height):
+            continue
+        if rec.get("exclude_from_inventory"):
+            continue
+        rec["exclude_from_inventory"] = True
+        rec["recognition_source"] = (rec.get("recognition_source") or "detect") + "+top_partial_exclude"
+        excluded += 1
+    if excluded:
+        print(f"Lay's top-partial exclusion: {excluded} facing(s) omitted from inventory")
+    return classified, excluded
+
+
 def finalize_lays_rack_labels(
     classified: list[dict],
     source_image: np.ndarray | None,
@@ -214,7 +241,7 @@ def finalize_lays_rack_labels(
 ) -> tuple[list[dict], int]:
     """
     Final Lay's rack reconciliation: row color + bag pixels beat weak tomato OCR fragments.
-    Fixes green→Tomato Tango mislabels and top-row unknown Magic Masala facings.
+    Fixes green→Tomato Tango mislabels; never promotes top-partial facings into SKU counts.
     """
     if source_image is None or not _snack_aisle_mixed_recovery_enabled(scan_context):
         return classified, 0
@@ -229,25 +256,11 @@ def finalize_lays_rack_labels(
     row_colors: dict[int, str | None] = {}
     for cluster in row_clusters:
         for rec in cluster:
-            row_colors[id(rec)] = _row_color_consensus(cluster, source_image, min_ratio=0.5)
-
-    # Top partial row: inherit color from the nearest full row below (same rack band).
-    sorted_rows = sorted(row_clusters, key=lambda row: float(row[0]["y1"]) if row else 0.0)
-    for idx, cluster in enumerate(sorted_rows):
-        if not cluster or not _is_top_partial_facing(cluster[0], image_height):
-            continue
-        below_color: str | None = None
-        for lower in sorted_rows[idx + 1 :]:
-            if not lower:
-                continue
-            below_color = _row_color_consensus(lower, source_image, min_ratio=0.45)
-            if below_color:
-                break
-        if below_color:
-            for rec in cluster:
-                row_colors[id(rec)] = below_color
+            row_colors[id(rec)] = _row_color_consensus(cluster, source_image, min_ratio=0.45)
 
     for rec in classified:
+        if _is_top_partial_facing(rec, image_height) or rec.get("exclude_from_inventory"):
+            continue
         if _is_non_lays_snack_brand(rec) or _pack_text_indicates_other_snack(rec.get("pack_text") or ""):
             continue
         if not _facing_indicates_lays(rec) and not _is_unknown_or_generic_lays(rec):
@@ -255,7 +268,8 @@ def finalize_lays_rack_labels(
 
         row_color = row_colors.get(id(rec))
         bag_color = _effective_bag_color(rec, source_image, row_color)
-        if bag_color == "unknown":
+        effective_color = bag_color if bag_color != "unknown" else (row_color or "unknown")
+        if effective_color == "unknown":
             continue
 
         product = (rec.get("product_name") or "").lower()
@@ -263,18 +277,16 @@ def finalize_lays_rack_labels(
         label_color = _lays_color_for_product(rec)
 
         needs_fix = False
-        if label_color and not _color_families_compatible(label_color, bag_color):
+        if label_color and not _color_families_compatible(label_color, effective_color):
             needs_fix = True
-        elif _is_unknown_or_generic_lays(rec) and row_color:
+        elif effective_color == "green" and ("tomato" in product or _is_weak_tomato_pack_text(pack)):
             needs_fix = True
-        elif bag_color == "green" and ("tomato" in product or _is_weak_tomato_pack_text(pack)):
+        elif effective_color == "blue" and ("tomato" in product or "cream" in product):
             needs_fix = True
-        elif bag_color == "blue" and ("tomato" in product or "cream" in product):
-            needs_fix = True
-        elif bag_color == "red" and ("magic masala" in product or ("cream" in product and "onion" in product)):
+        elif effective_color == "red" and ("magic masala" in product or ("cream" in product and "onion" in product)):
             needs_fix = True
 
-        if needs_fix and _apply_lays_product(rec, bag_color, "snack_row_finalize"):
+        if needs_fix and _apply_lays_product(rec, effective_color, "snack_row_finalize"):
             fixed += 1
 
     if fixed:
@@ -473,11 +485,19 @@ def enforce_snack_color_and_brand_labels(
     if source_image is None or not _snack_aisle_mixed_recovery_enabled(scan_context):
         return classified, 0
     fixed = 0
+    row_clusters = cluster_records_by_shelf_row(classified)
+    row_colors: dict[int, str | None] = {}
+    for cluster in row_clusters:
+        consensus = _row_color_consensus(cluster, source_image, min_ratio=0.45)
+        for rec in cluster:
+            row_colors[id(rec)] = consensus
+
     for rec in classified:
-        if _is_row_unknown(rec):
+        if _is_row_unknown(rec) or rec.get("exclude_from_inventory"):
             continue
         brand = _norm_brand(rec.get("brand") or "")
-        bag_color = _bag_color_family(source_image, rec)
+        row_color = row_colors.get(id(rec))
+        bag_color = _effective_bag_color(rec, source_image, row_color)
         if bag_color == "unknown":
             continue
         pack = (rec.get("pack_text") or "").lower()

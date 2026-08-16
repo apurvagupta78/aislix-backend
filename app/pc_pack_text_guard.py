@@ -35,6 +35,9 @@ _PC_TYPE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "fogg",
             "axe",
             "old spice",
+            "go fresh",
+            "dark temptation",
+            "body mist",
         ),
     ),
     (
@@ -45,7 +48,10 @@ _PC_TYPE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "bath bar",
             "beauty bar",
             "pure and gentle",
+            "pure gentle",
+            "cream bar",
             "germ shield",
+            "germshield",
             "medimix",
             "ayurvedic soap",
             "lifebuoy",
@@ -53,6 +59,11 @@ _PC_TYPE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "pears",
             "santoor",
             "hamam",
+            "dettol",
+            "125g",
+            "125 g",
+            "75g",
+            "bathing soap",
         ),
     ),
     (
@@ -114,6 +125,36 @@ _WEAK_SHAMPOO_FRAGMENTS = frozenset(
     }
 )
 
+_SHAMPOO_STRONG_MARKERS = frozenset(
+    {
+        "shampoo",
+        "conditioner",
+        "head & shoulders",
+        "head and shoulders",
+        "clinic plus",
+        "tresemme",
+        "sunsilk",
+        "pantene",
+        "vatika",
+    }
+)
+
+_PC_SYNTHETIC_NAMES: dict[str, str] = {
+    "soap": "Beauty Bar Soap",
+    "deodorant": "Deodorant Body Spray",
+    "skincare": "Body Lotion",
+    "toothpaste": "Toothpaste",
+    "shaving": "Shaving Gel",
+    "shampoo": "Shampoo",
+}
+
+_INCOMPATIBLE_ROW_TYPES: dict[str, frozenset[str]] = {
+    "shampoo": frozenset({"soap", "deodorant", "skincare", "toothpaste", "shaving"}),
+    "soap": frozenset({"shampoo", "deodorant"}),
+    "deodorant": frozenset({"shampoo", "soap", "skincare"}),
+    "skincare": frozenset({"shampoo", "deodorant", "soap"}),
+}
+
 _PROPAGATION_SOURCES = frozenset(
     {
         "propagate",
@@ -149,7 +190,149 @@ def infer_pc_product_type(text: str) -> str | None:
         if score > best_score:
             best_score = score
             best_type = ptype
-    return best_type if best_score > 0 else None
+    if best_type != "shampoo" or best_score <= 0:
+        return best_type if best_score > 0 else None
+    if any(marker in blob for marker in _SHAMPOO_STRONG_MARKERS):
+        return "shampoo"
+    if re.search(r"\b(?:shampoo|conditioner|\d+\s*ml)\b", blob):
+        return "shampoo"
+    if "anti dandruff" in blob or "anti-dandruff" in blob or "hair fall" in blob or "hairfall" in blob:
+        return None
+    return "shampoo" if re.search(r"\bshampoo\b|\bconditioner\b", blob) else None
+
+
+def _label_type(label: dict) -> str | None:
+    return infer_pc_product_type(_label_blob(label))
+
+
+def _typed_fallback_label(
+    rec: dict,
+    pack_text: str,
+    scan_context: dict | None,
+    *,
+    row_type: str | None = None,
+) -> dict | None:
+    """Build a brand+type label when catalog lookup fails but OCR still names the brand."""
+    from app.brand_dictionary import match_brand_in_text, match_from_text
+
+    pack = _norm(pack_text)
+    pack_type = infer_pc_product_type(pack) or row_type
+    corrected = match_from_text(pack, scan_context=scan_context)
+    if corrected and not _is_unknown_label(corrected):
+        corrected_type = _label_type(corrected)
+        if not pack_type or not corrected_type or corrected_type == pack_type:
+            return corrected
+        if pack_type in _INCOMPATIBLE_ROW_TYPES.get(corrected_type, frozenset()):
+            corrected = None
+
+    brand_match = match_brand_in_text(pack_text)
+    brand = (corrected or {}).get("brand") or (brand_match[0] if brand_match else rec.get("brand"))
+    if not brand or str(brand).strip().lower() in {"", "unknown"}:
+        return None
+
+    target_type = pack_type or row_type
+    if not target_type:
+        return corrected
+
+    product_name = _PC_SYNTHETIC_NAMES.get(target_type, target_type.title())
+    return {
+        "brand": brand,
+        "product_name": product_name,
+        "sku": "",
+        "category": "Personal Care",
+        "confidence": 0.82,
+        "recognition_source": "pc_typed_fallback",
+    }
+
+
+def _row_majority_types(classified: list[dict]) -> dict[int, str | None]:
+    """Map record id → dominant product type for its shelf row."""
+    from app.planogram_guided import cluster_records_by_shelf_row
+
+    row_types: dict[int, str | None] = {}
+    for cluster in cluster_records_by_shelf_row(classified):
+        votes: dict[str, int] = {}
+        labeled = 0
+        for rec in cluster:
+            if _is_unknown_label(rec):
+                continue
+            ptype = _label_type(rec)
+            if not ptype:
+                continue
+            votes[ptype] = votes.get(ptype, 0) + 1
+            labeled += 1
+        if not votes or labeled < 2:
+            continue
+        majority = max(votes, key=votes.get)
+        if votes[majority] / labeled < 0.55:
+            continue
+        for rec in cluster:
+            row_types[id(rec)] = majority
+    return row_types
+
+
+def reconcile_pc_rows_by_type(
+    classified: list[dict],
+    scan_context: dict | None = None,
+) -> tuple[list[dict], dict[str, Any]]:
+    """Veto cross-row shampoo leakage using shelf-row product-type majority."""
+    stats: dict[str, Any] = {"pc_row_type_fix": 0, "pc_row_type_reject": 0}
+    if not _pc_guard_enabled(scan_context):
+        return classified, stats
+
+    shelf_mode = (scan_context or {}).get("shelf_mode") or ""
+    if shelf_mode in {"single_row", "single_bin"}:
+        return classified, stats
+
+    row_types = _row_majority_types(classified)
+    if not row_types:
+        return classified, stats
+
+    for rec in classified:
+        if _is_unknown_label(rec):
+            continue
+        row_type = row_types.get(id(rec))
+        label_type = _label_type(rec)
+        if not row_type or not label_type:
+            continue
+        if label_type not in _INCOMPATIBLE_ROW_TYPES.get(row_type, frozenset()):
+            continue
+
+        pack = (rec.get("pack_text") or "").strip()
+        fallback = _typed_fallback_label(rec, pack, scan_context, row_type=row_type)
+        if fallback and _label_type(fallback) == row_type:
+            rec.update(
+                {
+                    **fallback,
+                    "confidence": max(float(rec.get("confidence") or 0), float(fallback.get("confidence") or 0.82)),
+                    "recognition_source": (rec.get("recognition_source") or "faiss") + "+pc_row_type",
+                }
+            )
+            stats["pc_row_type_fix"] += 1
+            continue
+
+        if infer_pc_product_type(pack) == row_type:
+            fallback = _typed_fallback_label(rec, pack, scan_context, row_type=row_type)
+            if fallback:
+                rec.update(
+                    {
+                        **fallback,
+                        "confidence": max(float(rec.get("confidence") or 0), 0.8),
+                        "recognition_source": (rec.get("recognition_source") or "faiss") + "+pc_row_type",
+                    }
+                )
+                stats["pc_row_type_fix"] += 1
+                continue
+
+        _demote_unknown(rec)
+        stats["pc_row_type_reject"] += 1
+
+    if stats["pc_row_type_fix"] or stats["pc_row_type_reject"]:
+        print(
+            f"PC row-type reconcile: fixed {stats['pc_row_type_fix']}, "
+            f"rejected {stats['pc_row_type_reject']} facing(s)"
+        )
+    return classified, stats
 
 
 def _label_blob(label: dict) -> str:
@@ -240,6 +423,8 @@ def enforce_pc_pack_text_labels(
 
     from app.brand_dictionary import label_conflicts_with_pack_text, match_from_text
 
+    row_types = _row_majority_types(classified)
+
     for rec in classified:
         if _is_unknown_label(rec):
             continue
@@ -253,8 +438,20 @@ def enforce_pc_pack_text_labels(
             "single_row",
             "single_bin",
         }:
-            _demote_unknown(rec)
-            stats["pc_pack_text_reject"] += 1
+            row_type = row_types.get(id(rec))
+            fallback = _typed_fallback_label(rec, pack, scan_context, row_type=row_type)
+            if fallback:
+                rec.update(
+                    {
+                        **fallback,
+                        "confidence": max(float(rec.get("confidence") or 0), 0.78),
+                        "recognition_source": (source or "propagate") + "+pc_typed",
+                    }
+                )
+                stats["pc_pack_text_fix"] += 1
+            else:
+                _demote_unknown(rec)
+                stats["pc_pack_text_reject"] += 1
             continue
 
         if len(pack) < 3:
@@ -274,6 +471,18 @@ def enforce_pc_pack_text_labels(
                     **corrected,
                     "confidence": max(float(rec.get("confidence") or 0), float(corrected.get("confidence") or 0.85)),
                     "recognition_source": (source or "ocr") + "+pc_pack_fix",
+                }
+            )
+            stats["pc_pack_text_fix"] += 1
+            continue
+
+        fallback = _typed_fallback_label(rec, pack, scan_context)
+        if fallback and not pc_pack_text_conflicts_label(fallback, pack):
+            rec.update(
+                {
+                    **fallback,
+                    "confidence": max(float(rec.get("confidence") or 0), float(fallback.get("confidence") or 0.8)),
+                    "recognition_source": (source or "ocr") + "+pc_typed",
                 }
             )
             stats["pc_pack_text_fix"] += 1

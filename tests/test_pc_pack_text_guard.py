@@ -7,6 +7,7 @@ from app.pc_pack_text_guard import (
     infer_pc_product_type,
     pc_pack_text_conflicts_label,
     pc_propagation_allowed,
+    reconcile_pc_rows_by_type,
 )
 from app.pc_row_recovery import recover_pc_unknowns_by_row
 
@@ -149,6 +150,60 @@ def test_row_recovery_copies_when_pack_supports_neighbor():
     out, stats = recover_pc_unknowns_by_row(classified, _pc_ctx())
     assert stats["pc_row_recovery"] == 1
     assert "soap" in (out[1].get("product_name") or "").lower() or out[1]["brand"] == "Dove"
+
+
+def test_row_type_reconcile_removes_shampoo_on_soap_row():
+    classified = [
+        {
+            "brand": "Dove",
+            "product_name": "Beauty Bar Soap",
+            "pack_text": "dove beauty bar soap",
+            "y1": 400,
+            "y2": 450,
+            "x1": 0,
+            "x2": 40,
+        },
+        {
+            "brand": "Dove",
+            "product_name": "Beauty Bar Soap",
+            "pack_text": "dove pure gentle soap",
+            "y1": 402,
+            "y2": 452,
+            "x1": 50,
+            "x2": 90,
+        },
+        {
+            "brand": "Dove",
+            "product_name": "Anti Dandruff Shampoo",
+            "pack_text": "dove gentle",
+            "y1": 405,
+            "y2": 455,
+            "x1": 100,
+            "x2": 140,
+        },
+    ]
+    out, stats = reconcile_pc_rows_by_type(classified, _pc_ctx())
+    assert stats["pc_row_type_fix"] >= 1
+    shampoo_on_soap = [
+        r
+        for r in out
+        if "shampoo" in (r.get("product_name") or "").lower() and r["y1"] > 390
+    ]
+    assert not shampoo_on_soap
+
+
+def test_typed_fallback_for_lux_soap_pack():
+    from app.pc_pack_text_guard import _typed_fallback_label
+
+    label = _typed_fallback_label(
+        {"brand": "Unknown"},
+        "Lux Soft Touch Soap 125g",
+        _pc_ctx(),
+        row_type="soap",
+    )
+    assert label is not None
+    assert label["brand"] == "Lux"
+    assert "soap" in label["product_name"].lower()
 
 
 def test_guard_disabled_on_single_bin_shampoo_scan():
