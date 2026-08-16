@@ -441,6 +441,22 @@ def _propagate_shelf_labels(
                 continue
 
         if best_label:
+            from app.pc_pack_text_guard import _pc_guard_enabled, pc_propagation_allowed
+
+            shelf_mode = (scan_context or {}).get("shelf_mode") or ""
+            if _pc_guard_enabled(scan_context) and shelf_mode not in {"single_row", "single_bin"}:
+                if not _ocr_text_usable(pack_text):
+                    still_unknown.append(index)
+                    continue
+                if not pc_propagation_allowed(best_label, pack_text, scan_context):
+                    if _try_ocr_override(
+                        records, classified, embeddings, index, pack_text, scan_context, known
+                    ):
+                        propagated += 1
+                        continue
+                    still_unknown.append(index)
+                    continue
+
             if use_ocr and not pack_text.strip() and best_sim < PROPAGATE_THRESHOLD_NO_OCR:
                 still_unknown.append(index)
                 continue

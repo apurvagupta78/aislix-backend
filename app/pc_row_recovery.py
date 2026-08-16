@@ -1,4 +1,4 @@
-"""Recover unknown personal-care facings from labeled neighbors on the same shelf row."""
+"""Recover unknown personal-care facings only when pack OCR supports the neighbor label."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from app.planogram_guided import cluster_records_by_shelf_row
+from app.pc_pack_text_guard import infer_pc_product_type, pc_pack_text_conflicts_label
 
 PC_ROW_BRANDS = frozenset(
     {
@@ -65,11 +66,41 @@ def _pc_aisle_enabled(scan_context: dict | None) -> bool:
     return bool(scan_context.get("multi_sub_category_audit"))
 
 
+def _pack_supports_neighbor(pack_text: str, ref: dict) -> bool:
+    """Only copy neighbor label when pack OCR mentions the brand and product kind agrees."""
+    pack = (pack_text or "").lower()
+    if len(pack.strip()) < 3:
+        return False
+
+    ref_brand = _norm_brand(ref.get("brand") or "")
+    if not ref_brand:
+        return False
+
+    brand_in_pack = ref_brand in re.sub(r"[^a-z0-9]", "", pack)
+    if not brand_in_pack and ref_brand not in pack:
+        # Allow spaced brand tokens (head & shoulders, l'oreal)
+        brand_tokens = (ref.get("brand") or "").lower().split()
+        if not any(len(t) >= 4 and t in pack for t in brand_tokens):
+            return False
+
+    if pc_pack_text_conflicts_label(ref, pack_text):
+        return False
+
+    pack_type = infer_pc_product_type(pack_text)
+    ref_type = infer_pc_product_type(
+        f"{ref.get('brand') or ''} {ref.get('product_name') or ''}"
+    )
+    if pack_type and ref_type and pack_type != ref_type:
+        return False
+
+    return True
+
+
 def recover_pc_unknowns_by_row(
     classified: list[dict],
     scan_context: dict | None = None,
 ) -> tuple[list[dict], dict[str, Any]]:
-    """Assign unknown facings from same-row labeled neighbors on PC / multi-sub shelves."""
+    """Assign unknown facings only when pack OCR supports a same-row neighbor label."""
     stats: dict[str, Any] = {"pc_row_recovery": 0}
     if not _pc_aisle_enabled(scan_context):
         return classified, stats
@@ -78,28 +109,25 @@ def recover_pc_unknowns_by_row(
         if len(cluster) < 2:
             continue
         labeled: dict[str, dict] = {}
-        brand_counts: dict[str, int] = {}
         for rec in cluster:
             if _is_unknown(rec):
                 continue
             brand = _norm_brand(rec.get("brand") or "")
             if brand in PC_ROW_BRANDS:
                 labeled.setdefault(brand, rec)
-                brand_counts[brand] = brand_counts.get(brand, 0) + 1
+
         if not labeled:
             continue
-        dominant_brand = max(brand_counts, key=brand_counts.get) if brand_counts else ""
+
         for rec in cluster:
             if not _is_unknown(rec):
                 continue
-            pack = (rec.get("pack_text") or "").lower()
+            pack = rec.get("pack_text") or ""
             matched: dict | None = None
             for brand, ref in labeled.items():
-                if brand in pack or (ref.get("brand") or "").lower() in pack:
+                if _pack_supports_neighbor(pack, ref):
                     matched = ref
                     break
-            if not matched and brand_counts.get(dominant_brand, 0) >= 2:
-                matched = labeled.get(dominant_brand)
             if not matched:
                 continue
             rec.update(
@@ -115,5 +143,5 @@ def recover_pc_unknowns_by_row(
             stats["pc_row_recovery"] += 1
 
     if stats["pc_row_recovery"]:
-        print(f"PC row recovery: {stats['pc_row_recovery']} facings from same-row neighbors")
+        print(f"PC row recovery: {stats['pc_row_recovery']} facings from pack-supported neighbors")
     return classified, stats

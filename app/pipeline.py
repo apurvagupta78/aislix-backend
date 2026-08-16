@@ -222,6 +222,11 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
         classified, pc_stats = recover_pc_unknowns_by_row(classified, scan_context)
         if pc_stats.get("pc_row_recovery"):
             recognition_engine_stats.update(pc_stats)
+        from app.pc_pack_text_guard import enforce_pc_pack_text_labels
+
+        classified, pc_guard_stats = enforce_pc_pack_text_labels(classified, scan_context)
+        if pc_guard_stats.get("pc_pack_text_fix") or pc_guard_stats.get("pc_pack_text_reject"):
+            recognition_engine_stats.update(pc_guard_stats)
         if scan_context.get("planogram_mode") and scan_context.get("planogram_candidates"):
             from app.planogram_guided import (
                 assign_planogram_shelf_rows,
