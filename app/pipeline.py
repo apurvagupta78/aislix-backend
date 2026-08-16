@@ -27,7 +27,7 @@ from app.detector import (
 from app.sahi_detector import detection_mode_enabled, run_detection
 from app.facing_filter import cluster_boxes_x_slots, filter_nested_facings, merge_boxes_by_column
 from app.shelf_layout import ShelfMode, detect_shelf_mode
-from app.inventory import aggregate_inventory, inventory_to_api_products, normalize_classified_labels
+from app.inventory import aggregate_inventory, inventory_counted_rows, inventory_to_api_products, normalize_classified_labels
 from app.metrics import (
     brand_share,
     build_alerts,
@@ -320,7 +320,7 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
 
             planogram_compliance = compare_planogram(
                 planogram_items=planogram_items,
-                inventory=inventory,
+                inventory=inventory_counted_rows(inventory),
                 scan_context=scan_context,
                 scope_type=metadata.get("assignment_scope_type"),
                 scope_values=metadata.get("assignment_scope_values") or {},
@@ -373,8 +373,8 @@ def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata:
                 "planogram_qty_compliance_percent"
             )
             metrics["planogram_summary"] = planogram_compliance.get("summary")
-        shares = brand_share(inventory)
-        categories = category_breakdown(inventory)
+        shares = brand_share(inventory_counted_rows(inventory))
+        categories = category_breakdown(inventory_counted_rows(inventory))
         alerts = build_alerts(metrics, compliance_alerts=compliance_alerts)
         recommendations = build_recommendations(metrics, inventory, compliance_alerts=compliance_alerts)
         summary_text = executive_summary(metrics, compliance_alerts=compliance_alerts)

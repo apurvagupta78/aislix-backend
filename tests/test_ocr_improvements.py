@@ -432,7 +432,7 @@ def test_finalize_does_not_promote_top_partial_unknowns():
 
 
 def test_top_partial_excluded_from_inventory():
-    from app.inventory import aggregate_inventory
+    from app.inventory import aggregate_inventory, inventory_counted_rows
     from app.snack_row_recovery import mark_top_partial_exclusions
 
     ctx = resolve_scan_context({"category": "Packaged Food & Snacks · Chips"})
@@ -443,9 +443,9 @@ def test_top_partial_excluded_from_inventory():
             "y1": 20,
             "x2": 80,
             "y2": 80,
-            "brand": "Lays",
-            "product_name": "Indias Magic Masala Potato Chips",
-            "confidence": 0.88,
+            "brand": "Unknown",
+            "product_name": "Unidentified SKU",
+            "confidence": 0.35,
         },
         {
             "x1": 20,
@@ -460,7 +460,12 @@ def test_top_partial_excluded_from_inventory():
     updated, excluded = mark_top_partial_exclusions(classified, source, ctx)
     assert excluded == 1
     inventory = aggregate_inventory(updated)
-    assert sum(row["quantity"] for row in inventory) == 1
+    assert sum(row["quantity"] for row in inventory_counted_rows(inventory)) == 1
+    unknown_rows = [r for r in inventory if r["brand"] == "Unknown"]
+    assert len(unknown_rows) == 1
+    assert unknown_rows[0]["quantity"] == 1
+    assert unknown_rows[0]["counted_in_totals"] is False
+    assert unknown_rows[0]["compliance_status"] == "needs_review"
 
 
 def test_green_row_beats_tomato_mislabel_on_cream_row():

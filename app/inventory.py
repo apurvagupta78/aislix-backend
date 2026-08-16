@@ -131,12 +131,24 @@ def normalize_classified_labels(classified: list[dict]) -> list[dict]:
     return normalized
 
 
+def _is_unidentified_product(brand: str, product: str) -> bool:
+    brand_l = (brand or "").strip().lower()
+    product_l = (product or "").strip().lower()
+    if brand_l in {"", "unknown", "n/a"}:
+        return True
+    return product_l in {"", "unknown", "unidentified sku", "n/a"}
+
+
+def inventory_counted_rows(inventory: list[dict]) -> list[dict]:
+    """Rows that contribute to planogram qty and shelf KPI totals."""
+    return [row for row in inventory if row.get("counted_in_totals", True)]
+
+
 def aggregate_inventory(classified: list[dict]) -> list[dict]:
     buckets: dict[tuple, dict] = defaultdict(lambda: {"quantity": 0, "confidences": []})
 
     for item in classified:
-        if item.get("exclude_from_inventory"):
-            continue
+        excluded = bool(item.get("exclude_from_inventory"))
         brand = (item.get("brand") or "Unknown").strip()
         product = (item.get("product_name") or "Unknown").strip()
         variant = (item.get("variant") or "").strip()
@@ -146,18 +158,21 @@ def aggregate_inventory(classified: list[dict]) -> list[dict]:
         variant_key = _normalize_variant_key(variant)
         sku_key = sku.lower()
         if sku_key:
-            key = (brand_key, sku_key)
+            key = (brand_key, sku_key, excluded)
         elif any(token in product_key for token in ("shampoo", "conditioner", "deodorant", "body spray", "soap", "toothpaste")):
             stem = " ".join(product_key.split()[:5])
-            key = (brand_key, stem)
+            key = (brand_key, stem, excluded)
         else:
-            key = (brand_key, product_key, variant_key)
+            key = (brand_key, product_key, variant_key, excluded)
         bucket = buckets[key]
         bucket["brand"] = _display_brand_name(brand, brand_key)
         bucket["product_name"] = _display_product_name(product)
         bucket["variant"] = _display_variant(variant, bucket.get("variant") or "")
         bucket["category"] = item.get("category") or "General"
         bucket["sku"] = item.get("sku") or ""
+        bucket["counted_in_totals"] = not excluded
+        if excluded:
+            bucket["exclusion_reason"] = item.get("exclusion_reason") or "excluded_facing"
         bucket["quantity"] += 1
         bucket["confidences"].append(float(item.get("confidence") or 0.0))
         if "x1" in item:
@@ -174,23 +189,42 @@ def aggregate_inventory(classified: list[dict]) -> list[dict]:
     for bucket in buckets.values():
         avg_conf = sum(bucket["confidences"]) / max(len(bucket["confidences"]), 1)
         qty = bucket["quantity"]
-        inventory.append(
-            {
-                "brand": bucket["brand"],
-                "product_name": bucket["product_name"],
-                "variant": bucket["variant"],
-                "category": bucket["category"],
-                "sku": bucket["sku"],
-                "quantity": qty,
-                "facings": qty,
-                "confidence": round(avg_conf, 4),
-                "stock_status": (
-                    "low_stock" if qty <= LOW_STOCK_THRESHOLD else "in_stock"
-                ),
-            }
-        )
+        counted = bucket.get("counted_in_totals", True)
+        unidentified = _is_unidentified_product(bucket["brand"], bucket["product_name"])
+        row = {
+            "brand": bucket["brand"],
+            "product_name": bucket["product_name"],
+            "variant": bucket["variant"],
+            "category": bucket["category"],
+            "sku": bucket["sku"],
+            "quantity": qty,
+            "facings": qty,
+            "confidence": round(avg_conf, 4),
+            "counted_in_totals": counted,
+            "stock_status": (
+                "low_stock" if counted and qty <= LOW_STOCK_THRESHOLD else "in_stock"
+            ),
+        }
+        if not counted:
+            row["exclusion_reason"] = bucket.get("exclusion_reason") or "excluded_facing"
+            row["compliance_status"] = "needs_review"
+            row["compliance_alert"] = "Needs review"
+            row["compliance_interpretation"] = (
+                "Partial facing outside the planogram shelf band — shown for review, "
+                "not counted in planogram qty."
+            )
+        elif unidentified:
+            row["compliance_status"] = "needs_review"
+            row["compliance_alert"] = "Needs review"
+            row["compliance_interpretation"] = "Unidentified SKU — verify or correct."
+        inventory.append(row)
 
-    inventory.sort(key=lambda row: row["quantity"], reverse=True)
+    inventory.sort(
+        key=lambda row: (
+            0 if row.get("counted_in_totals", True) else 1,
+            -row["quantity"],
+        )
+    )
     return inventory
 
 
@@ -215,6 +249,9 @@ def inventory_to_api_products(inventory: list[dict]) -> list[dict]:
                 "compliance_interpretation": row.get("compliance_interpretation") or "",
                 "detected_sub_category_label": row.get("detected_sub_category_label") or "",
                 "expected_sub_category_label": row.get("expected_sub_category_label") or "",
+                "counted_in_totals": row.get("counted_in_totals", True),
+                "exclusion_reason": row.get("exclusion_reason") or "",
+                "needs_review": row.get("compliance_status") == "needs_review",
             }
         )
     return products

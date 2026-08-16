@@ -227,6 +227,7 @@ def mark_top_partial_exclusions(
         if rec.get("exclude_from_inventory"):
             continue
         rec["exclude_from_inventory"] = True
+        rec["exclusion_reason"] = "top_partial_facing"
         rec["recognition_source"] = (rec.get("recognition_source") or "detect") + "+top_partial_exclude"
         excluded += 1
     if excluded:

@@ -1059,6 +1059,7 @@ def assign_planogram_shelf_rows(
                         "confidence": min(float(rec.get("confidence") or 0.35), 0.4),
                         "recognition_source": "top_partial_demote",
                         "exclude_from_inventory": True,
+                        "exclusion_reason": "top_partial_facing",
                     }
                 )
                 continue

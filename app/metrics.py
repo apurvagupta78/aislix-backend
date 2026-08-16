@@ -54,10 +54,11 @@ def compute_metrics(
     misplaced_facings: int = 0,
 ) -> dict:
     total_facings = len(classified)
-    unique_skus = len(inventory)
-    brands = {row["brand"] for row in inventory if row.get("brand")}
-    low_stock = sum(1 for row in inventory if row["quantity"] <= LOW_STOCK_THRESHOLD)
-    confidences = [float(row.get("confidence") or 0.0) for row in inventory]
+    counted_inventory = [row for row in inventory if row.get("counted_in_totals", True)]
+    unique_skus = len(counted_inventory)
+    brands = {row["brand"] for row in counted_inventory if row.get("brand")}
+    low_stock = sum(1 for row in counted_inventory if row["quantity"] <= LOW_STOCK_THRESHOLD)
+    confidences = [float(row.get("confidence") or 0.0) for row in counted_inventory]
     avg_conf = sum(confidences) / max(len(confidences), 1)
     utilization = shelf_utilization(classified, image_shape)
     osa = round(((total_facings - 0) / max(total_facings, 1)) * 100, 2)
@@ -67,9 +68,16 @@ def compute_metrics(
         health = round(max(0.0, health - penalty), 2)
 
     mismatch_skus = sum(1 for row in inventory if row.get("compliance_status") == "category_mismatch")
+    needs_review = sum(
+        1
+        for row in classified
+        if row.get("exclude_from_inventory")
+        or (row.get("brand") or "").strip().lower() in {"", "unknown"}
+        or (row.get("product_name") or "").strip().lower() in {"", "unknown", "unidentified sku"}
+    )
 
     return {
-        "total_products": sum(row["quantity"] for row in inventory),
+        "total_products": sum(row["quantity"] for row in counted_inventory),
         "total_facings": total_facings,
         "unique_skus": unique_skus,
         "unique_brands": len(brands),
@@ -77,6 +85,10 @@ def compute_metrics(
         "out_of_stock_products": 0,
         "misplaced_products": misplaced_facings,
         "subcategory_mismatch_skus": mismatch_skus,
+        "needs_review_facings": needs_review,
+        "excluded_from_count_facings": sum(
+            1 for row in classified if row.get("exclude_from_inventory")
+        ),
         "average_confidence": round(avg_conf, 4),
         "osa_percent": osa,
         "share_of_shelf_percent": utilization,
