@@ -130,17 +130,72 @@ NO planogram/compliance columns. Use status_label from API.
 After scan completes: optional soft scroll to #lead (lead form is right below).
 
 ══════════════════════════════════════════════════════════════
-LEAD CAPTURE — id="lead" (IMMEDIATELY below #demo)
+LEAD CAPTURE — id="lead" (IMMEDIATELY below #demo) — FIX SUBMIT ERROR
 ══════════════════════════════════════════════════════════════
 
-Wide form max-w-5xl, white card, generous padding.
+Title: "Get Your Free Shelf Intelligence Access"
+Sub: "Enter your work email to start scanning. No credit card required."
 
-Left: "Save your shelf audit & unlock 3 free scans" + bullet benefits
-Right (wide 2-column grid):
-  Full name | Work email *
-  Company (full width)
-  [Continue →] → POST /landing/lead
-  Success → [Create Free Account →] signupUrl() → /signup?landing_session_id=...&utm_...
+Form grid (2x2):
+  Work email * | Full name
+  Company      | Role
+
+Submit button (brand primary, full width):
+  "Get more free scans"
+
+On submit — call captureLandingLead():
+
+export async function captureLandingLead(payload: {
+  landing_session_id?: string;
+  email: string;
+  name?: string;
+  company?: string;
+  role?: string;
+}) {
+  const sid = payload.landing_session_id || sessionStorage.getItem("aislix_landing_session_id") || undefined;
+  const p = new URLSearchParams(window.location.search);
+  const body: Record<string, string | undefined> = { ...payload, landing_session_id: sid };
+  for (const k of ["utm_source","utm_medium","utm_campaign","utm_content","utm_term"]) {
+    const v = p.get(k);
+    if (v) body[k] = v;
+  }
+  const res = await fetch(`${API}/landing/lead`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || "Could not save your details.");
+  if (data.landing_session_id) sessionStorage.setItem("aislix_landing_session_id", data.landing_session_id);
+  return data;
+}
+
+SUCCESS STATE (replace form — do NOT show error if data.ok === true):
+
+  ✉️ icon
+  H3: "Check your email"
+  Body: "We sent onboarding instructions to {email}. Open the email and click the link to create your free Aislix workspace and unlock 3 shelf scans."
+  Small: "Didn't receive it? Check spam or wait a minute."
+
+  Optional fallback link: "Continue to signup →" signupUrl()
+
+ERROR STATE only when res.ok === false OR thrown exception.
+
+❌ Do NOT show "Could not save your details" when API returns ok: true
+❌ landing_session_id is OPTIONAL — backend creates session if missing
+
+Pre-fill /signup from email link: /signup?email=...&landing_session_id=...
+
+══════════════════════════════════════════════════════════════
+RAILWAY ENV (backend — already deployed after push)
+══════════════════════════════════════════════════════════════
+
+Set on Railway:
+  RESEND_API_KEY=...          (same key as Lovable edge functions)
+  LANDING_FROM_EMAIL=Aislix <onboarding@aislix.com>  (or verified Resend sender)
+  APP_ORIGIN=https://aislix.com
+
+Run Supabase SQL: supabase/migrations/20260829180000_landing_lead_onboarding_email.sql
 
 ══════════════════════════════════════════════════════════════
 OTHER SECTIONS (keep from v4 — use brand colors only)

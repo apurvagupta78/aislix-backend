@@ -508,31 +508,55 @@ async def landing_scan(request: Request):
 
 @app.post("/landing/lead")
 async def landing_lead(request: Request):
-    """Capture email/details after demo scan, before signup."""
-    from app.landing_leads import capture_lead, get_session_public
+    """Capture email/details after demo scan and send onboarding email."""
+    from app.landing_email import send_landing_onboarding_email
+    from app.landing_leads import capture_lead, ensure_session, mark_onboarding_email_sent, parse_utm
 
     body = await request.json()
-    session_token = (body.get("landing_session_id") or body.get("session_token") or "").strip()
+    session_token = (body.get("landing_session_id") or body.get("session_token") or "").strip() or None
     email = (body.get("email") or "").strip()
-    if not session_token:
-        raise HTTPException(status_code=400, detail="landing_session_id is required.")
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="Valid email is required.")
 
-    existing = get_session_public(session_token)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Landing session not found.")
+    utm = {
+        "utm_source": body.get("utm_source"),
+        "utm_medium": body.get("utm_medium"),
+        "utm_campaign": body.get("utm_campaign"),
+        "utm_content": body.get("utm_content"),
+        "utm_term": body.get("utm_term"),
+    }
+    ip_hash = hash_ip(_client_ip(request))
+    token = ensure_session(session_token, ip_hash=ip_hash, utm=utm)
 
     row = capture_lead(
-        session_token,
+        token,
         email=email,
         name=body.get("name"),
         company=body.get("company"),
         phone=body.get("phone"),
+        role=body.get("role"),
+        ip_hash=ip_hash,
+        utm=utm,
     )
-    if not row:
-        return {"ok": True, "landing_session_id": session_token, "persisted": False}
-    return {"ok": True, "landing_session_id": session_token, "persisted": True}
+
+    email_sent, email_error = send_landing_onboarding_email(
+        email=email,
+        name=(body.get("name") or "").strip() or None,
+        landing_session_id=token,
+    )
+    if email_sent:
+        mark_onboarding_email_sent(token)
+
+    return {
+        "ok": True,
+        "landing_session_id": token,
+        "persisted": bool(row),
+        "email_sent": email_sent,
+        "message": "Check your email to continue your Aislix onboarding."
+        if email_sent
+        else "Details saved. You can create your free account below.",
+        "email_error": email_error if not email_sent else None,
+    }
 
 
 @app.post("/landing/convert")

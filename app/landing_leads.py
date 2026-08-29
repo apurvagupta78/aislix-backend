@@ -263,6 +263,50 @@ def upload_scan_image(session_token: str, scan_id: str, data: bytes) -> str | No
     return None
 
 
+def _upsert_session(row: dict[str, Any]) -> dict[str, Any] | None:
+    base = _supabase_base()
+    if not base:
+        return None
+    url = f"{base}/rest/v1/landing_demo_sessions"
+    headers = _headers()
+    headers["Prefer"] = "resolution=merge-duplicates,return=representation"
+    row = {**row, "updated_at": datetime.now(timezone.utc).isoformat()}
+    try:
+        response = requests.post(url, headers=headers, json=row, timeout=20)
+        response.raise_for_status()
+        rows = response.json()
+        return rows[0] if isinstance(rows, list) and rows else None
+    except Exception as exc:
+        print(f"landing session upsert skipped: {exc}")
+        return None
+
+
+def ensure_session(
+    session_token: str | None,
+    *,
+    ip_hash: str | None = None,
+    utm: dict[str, str | None] | None = None,
+) -> str:
+    """Return existing or newly created session token."""
+    token = (session_token or "").strip() or new_session_token()
+    if _fetch_session(token):
+        return token
+    utm = utm or {}
+    _insert_session(
+        {
+            "session_token": token,
+            "ip_hash": ip_hash,
+            "utm_source": utm.get("utm_source"),
+            "utm_medium": utm.get("utm_medium"),
+            "utm_campaign": utm.get("utm_campaign"),
+            "utm_content": utm.get("utm_content"),
+            "utm_term": utm.get("utm_term"),
+            "scan_status": "pending",
+        }
+    )
+    return token
+
+
 def create_pending_session(
     *,
     session_token: str | None = None,
@@ -331,16 +375,37 @@ def capture_lead(
     name: str | None = None,
     company: str | None = None,
     phone: str | None = None,
+    role: str | None = None,
+    ip_hash: str | None = None,
+    utm: dict[str, str | None] | None = None,
 ) -> dict[str, Any] | None:
-    return _patch_session(
+    now = datetime.now(timezone.utc).isoformat()
+    row = {
+        "session_token": session_token,
+        "lead_email": email.strip().lower(),
+        "lead_name": (name or "").strip() or None,
+        "lead_company": (company or "").strip() or None,
+        "lead_phone": (phone or "").strip() or None,
+        "lead_role": (role or "").strip() or None,
+        "lead_captured_at": now,
+        "scan_status": "pending",
+    }
+    if ip_hash:
+        row["ip_hash"] = ip_hash
+    utm = utm or {}
+    for key in ("utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"):
+        if utm.get(key):
+            row[key] = utm[key]
+    patched = _patch_session(session_token, {k: v for k, v in row.items() if k != "session_token"})
+    if patched:
+        return patched
+    return _upsert_session(row)
+
+
+def mark_onboarding_email_sent(session_token: str) -> None:
+    _patch_session(
         session_token,
-        {
-            "lead_email": email.strip().lower(),
-            "lead_name": (name or "").strip() or None,
-            "lead_company": (company or "").strip() or None,
-            "lead_phone": (phone or "").strip() or None,
-            "lead_captured_at": datetime.now(timezone.utc).isoformat(),
-        },
+        {"onboarding_email_sent_at": datetime.now(timezone.utc).isoformat()},
     )
 
 
