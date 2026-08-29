@@ -1,0 +1,85 @@
+{
+  "demo_label": "Sample analysis — Lay's chip rack (A-1-L). Not a live scan.",
+  "scan_id": "sample-lays-a1l",
+  "category": "Packaged Food & Snacks · Chips",
+  "location": "A-1-L",
+  "metrics": {
+    "total_products": 31,
+    "total_facings": 37,
+    "unique_skus": 3,
+    "unique_brands": 1,
+    "low_stock_products": 0,
+    "out_of_stock_products": 0,
+    "misplaced_products": 0,
+    "average_confidence": 0.796,
+    "shelf_health_score": 86,
+    "processing_time_ms": 141600,
+    "needs_review_facings": 6,
+    "excluded_from_count_facings": 6
+  },
+  "planogram_compliance": {
+    "compliance_percent": 100,
+    "planogram_sku_match_percent": 100,
+    "planogram_qty_compliance_percent": 100,
+    "summary": {
+      "expected": 3,
+      "found": 3,
+      "missing": 0,
+      "qty_issues": 0
+    }
+  },
+  "inventory": [
+    {
+      "brand": "Lays",
+      "product_name": "Indias Magic Masala Potato Chips",
+      "quantity": 13,
+      "facings": 13,
+      "confidence": 0.74,
+      "stock_status": "in_stock",
+      "counted_in_totals": true,
+      "compliance_status": "ok"
+    },
+    {
+      "brand": "Lays",
+      "product_name": "American Style Cream and Onion Potato Chips",
+      "quantity": 12,
+      "facings": 12,
+      "confidence": 0.84,
+      "stock_status": "in_stock",
+      "counted_in_totals": true,
+      "compliance_status": "ok"
+    },
+    {
+      "brand": "Lays",
+      "product_name": "Tomato Tango Potato Chips",
+      "quantity": 6,
+      "facings": 6,
+      "confidence": 0.88,
+      "stock_status": "in_stock",
+      "counted_in_totals": true,
+      "compliance_status": "ok"
+    },
+    {
+      "brand": "Unknown",
+      "product_name": "Unidentified SKU",
+      "quantity": 6,
+      "facings": 6,
+      "confidence": 0.35,
+      "stock_status": "in_stock",
+      "counted_in_totals": false,
+      "compliance_status": "needs_review",
+      "exclusion_reason": "top_partial_facing",
+      "compliance_interpretation": "Partial facing outside the planogram shelf band — shown for review, not counted in planogram qty."
+    }
+  ],
+  "capabilities_shown": [
+    "product_detection",
+    "sku_identification",
+    "brand_recognition",
+    "product_count",
+    "planogram_compliance",
+    "shelf_health",
+    "needs_review_facings"
+  ],
+  "sample_image_hint": "Use a real Lay's rack photo from marketing assets or /public/landing/samples/lays-a1l.jpg"
+}

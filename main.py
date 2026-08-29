@@ -353,3 +353,197 @@ async def planogram_csv_template():
         ],
         "optional_columns": ["variant", "sku", "shelf_position"],
     }
+
+
+def _client_ip(request: Request) -> str | None:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return None
+
+
+@app.get("/landing/samples")
+def landing_samples():
+    from app.landing_leads import SAMPLE_DEFAULTS, SAMPLE_IMAGES
+
+    samples = []
+    for sample_id, path in SAMPLE_IMAGES.items():
+        if not path.exists():
+            continue
+        defaults = SAMPLE_DEFAULTS.get(sample_id, {})
+        samples.append(
+            {
+                "sample_id": sample_id,
+                "label": defaults.get("label") or sample_id,
+                "category": defaults.get("category"),
+                "location": defaults.get("location"),
+            }
+        )
+    return {"samples": samples}
+
+
+@app.get("/landing/session/{session_token}")
+def landing_get_session(session_token: str):
+    from app.landing_leads import get_session_public
+
+    session = get_session_public(session_token)
+    if not session:
+        raise HTTPException(status_code=404, detail="Landing session not found.")
+    return session
+
+
+@app.post("/landing/scan")
+async def landing_scan(request: Request):
+    """Anonymous shelf scan for /retail-intelligence — no signup required."""
+    from app.landing_leads import (
+        ENABLED,
+        MAX_BYTES,
+        check_rate_limit,
+        create_pending_session,
+        hash_ip,
+        landing_metadata,
+        landing_scan_response,
+        parse_utm,
+        resolve_sample_image,
+        save_scan_failure,
+        save_scan_success,
+        upload_scan_image,
+    )
+    from app.pipeline import run_scan_from_bytes
+
+    if not ENABLED:
+        raise HTTPException(status_code=503, detail="Landing scans are temporarily disabled.")
+
+    ip_hash = hash_ip(_client_ip(request))
+    allowed, used, limit = check_rate_limit(ip_hash)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily demo scan limit reached ({limit} per day). Sign up for full access.",
+        )
+
+    content_type = request.headers.get("content-type", "")
+    if "multipart/form-data" not in content_type:
+        raise HTTPException(status_code=400, detail="Expected multipart/form-data.")
+
+    form = await request.form()
+    utm = parse_utm(form)
+    session_token = (form.get("landing_session_id") or form.get("session_token") or "").strip() or None
+    sample_id = (form.get("sample_id") or "").strip() or None
+    category = (form.get("category") or "").strip() or None
+    location = (form.get("location") or "").strip() or None
+    shelf_label = (form.get("shelf_label") or "").strip() or None
+    referrer = request.headers.get("referer") or request.headers.get("referrer")
+    user_agent = request.headers.get("user-agent")
+
+    image_bytes: bytes | None = None
+    if sample_id:
+        try:
+            image_bytes, sample_defaults = resolve_sample_image(sample_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        category = category or sample_defaults.get("category")
+        location = location or sample_defaults.get("location")
+        shelf_label = shelf_label or sample_defaults.get("shelf_label")
+    else:
+        upload = form.get("file")
+        if upload is None:
+            raise HTTPException(
+                status_code=400,
+                detail='Provide "file" (image upload) or "sample_id" (e.g. lays-a1l).',
+            )
+        image_bytes = await upload.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Empty file upload.")
+        if len(image_bytes) > MAX_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Image too large (max {MAX_BYTES // (1024 * 1024)} MB).",
+            )
+
+    token = create_pending_session(
+        session_token=session_token,
+        ip_hash=ip_hash,
+        utm=utm,
+        referrer=referrer,
+        user_agent=user_agent,
+        sample_id=sample_id,
+    )
+    metadata = landing_metadata(category, location, shelf_label)
+
+    try:
+        result = run_scan_from_bytes(image_bytes, metadata=metadata)
+    except Exception as exc:
+        save_scan_failure(token, str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    scan_id = result.get("scan_id") or "landing"
+    storage_path = upload_scan_image(token, scan_id, image_bytes)
+    save_scan_success(
+        token,
+        scan_id=scan_id,
+        sample_id=sample_id,
+        image_storage_path=storage_path,
+        category=category,
+        full_result=result,
+    )
+
+    response = landing_scan_response(result, token)
+    response["scans_used_today"] = used
+    response["scans_daily_limit"] = limit
+    return response
+
+
+@app.post("/landing/lead")
+async def landing_lead(request: Request):
+    """Capture email/details after demo scan, before signup."""
+    from app.landing_leads import capture_lead, get_session_public
+
+    body = await request.json()
+    session_token = (body.get("landing_session_id") or body.get("session_token") or "").strip()
+    email = (body.get("email") or "").strip()
+    if not session_token:
+        raise HTTPException(status_code=400, detail="landing_session_id is required.")
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Valid email is required.")
+
+    existing = get_session_public(session_token)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Landing session not found.")
+
+    row = capture_lead(
+        session_token,
+        email=email,
+        name=body.get("name"),
+        company=body.get("company"),
+        phone=body.get("phone"),
+    )
+    if not row:
+        return {"ok": True, "landing_session_id": session_token, "persisted": False}
+    return {"ok": True, "landing_session_id": session_token, "persisted": True}
+
+
+@app.post("/landing/convert")
+async def landing_convert(request: Request):
+    """Link a landing demo session to a user after signup."""
+    from app.landing_leads import get_session_public, mark_converted
+
+    body = await request.json()
+    session_token = (body.get("landing_session_id") or body.get("session_token") or "").strip()
+    user_id = (body.get("user_id") or "").strip()
+    if not session_token or not user_id:
+        raise HTTPException(status_code=400, detail="landing_session_id and user_id are required.")
+
+    existing = get_session_public(session_token)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Landing session not found.")
+
+    row = mark_converted(session_token, user_id)
+    return {
+        "ok": True,
+        "landing_session_id": session_token,
+        "converted_user_id": user_id,
+        "persisted": bool(row),
+    }
