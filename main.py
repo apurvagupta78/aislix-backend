@@ -510,7 +510,7 @@ async def landing_scan(request: Request):
 async def landing_lead(request: Request):
     """Capture email/details after demo scan and send onboarding email."""
     from app.landing_email import send_landing_onboarding_email
-    from app.landing_leads import capture_lead, ensure_session, mark_onboarding_email_sent, parse_utm
+    from app.landing_leads import capture_lead, ensure_session, hash_ip, mark_onboarding_email_sent
 
     body = await request.json()
     session_token = (body.get("landing_session_id") or body.get("session_token") or "").strip() or None
