@@ -8,6 +8,7 @@ from app.landing_leads import (
     landing_scan_response,
     new_session_token,
     parse_utm,
+    sanitize_landing_inventory,
     slim_scan_result,
 )
 
@@ -65,16 +66,30 @@ def test_landing_scan_response_shape():
     full = {
         "scan_id": "abc123",
         "metrics": {"total_products": 31, "shelf_health_score": 86},
-        "inventory": [{"brand": "Lays", "quantity": 13}],
+        "inventory": [
+            {"brand": "Lays", "quantity": 13, "compliance_status": "ok"},
+            {"brand": "Unknown", "quantity": 6, "compliance_status": "needs_review", "counted_in_totals": False},
+        ],
         "executive_summary": "Shelf looks good.",
         "annotated_image_base64": "img",
+        "csv_base64": "Y3N2",
         "facings_debug": [{"x1": 1, "y1": 2, "x2": 3, "y2": 4}],
+        "planogram_compliance": {"compliance_percent": 100},
     }
     out = landing_scan_response(full, "session-token-1")
     assert out["landing_session_id"] == "session-token-1"
-    assert out["scan_id"] == "abc123"
-    assert out["status"] == "completed"
-    assert out["metrics"]["total_products"] == 31
-    assert len(out["inventory"]) == 1
-    assert out["annotated_image_base64"] == "img"
-    assert out["facings_debug"][0]["x1"] == 1
+    assert out["scan_mode"] == "audit_only"
+    assert out["has_planogram"] is False
+    assert "planogram_compliance" not in out
+    assert out["csv_base64"] == "Y3N2"
+    assert out["inventory"][0]["status_label"] == "Detected"
+    assert out["inventory"][1]["status_label"] == "Needs review"
+    assert "compliance_status" not in out["inventory"][0]
+
+
+def test_sanitize_landing_inventory():
+    rows = sanitize_landing_inventory(
+        [{"brand": "Lays", "compliance_status": "ok"}, {"brand": "X", "compliance_status": "needs_review"}]
+    )
+    assert rows[0]["status_label"] == "Detected"
+    assert rows[1]["status_label"] == "Needs review"

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
-import json
 import os
 import uuid
 from datetime import datetime, timezone
@@ -130,13 +130,32 @@ def slim_scan_result(full: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def sanitize_landing_inventory(inventory: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Landing scans have no planogram — hide planogram-only compliance labels."""
+    rows: list[dict[str, Any]] = []
+    for item in inventory:
+        row = dict(item)
+        status = (row.get("compliance_status") or "").lower()
+        if status == "needs_review" or row.get("counted_in_totals") is False:
+            row["status_label"] = "Needs review"
+        else:
+            row["status_label"] = "Detected"
+        row.pop("compliance_status", None)
+        row.pop("compliance_interpretation", None)
+        rows.append(row)
+    return rows
+
+
 def landing_scan_response(full: dict[str, Any], session_token: str) -> dict[str, Any]:
+    inventory = sanitize_landing_inventory(full.get("inventory") or [])
     return {
         "landing_session_id": session_token,
         "scan_id": full.get("scan_id"),
         "status": "completed",
+        "scan_mode": "audit_only",
+        "has_planogram": False,
         "metrics": full.get("metrics") or full.get("summary"),
-        "inventory": full.get("inventory") or [],
+        "inventory": inventory,
         "products": full.get("products") or [],
         "executive_summary": full.get("executive_summary") or full.get("summary_text"),
         "annotated_image_base64": full.get("annotated_image_base64"),
@@ -147,9 +166,9 @@ def landing_scan_response(full: dict[str, Any], session_token: str) -> dict[str,
         "original_image_mime": full.get("original_image_mime", "image/jpeg"),
         "facings_debug": full.get("facings_debug"),
         "scan_context": full.get("scan_context"),
-        "planogram_compliance": full.get("planogram_compliance"),
         "category": full.get("category"),
         "shelf_label": full.get("shelf_label"),
+        "csv_base64": full.get("csv_base64"),
     }
 
 
@@ -349,6 +368,31 @@ def parse_utm(form: dict[str, Any]) -> dict[str, str | None]:
         else:
             out[key] = str(val).strip()
     return out
+
+
+def sample_preview_base64(sample_id: str) -> tuple[str, str] | None:
+    try:
+        data, _ = resolve_sample_image(sample_id)
+    except ValueError:
+        return None
+    return base64.b64encode(data).decode("utf-8"), "image/jpeg"
+
+
+def list_samples() -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for sample_id, path in SAMPLE_IMAGES.items():
+        if not path.exists():
+            continue
+        defaults = SAMPLE_DEFAULTS.get(sample_id, {})
+        items.append(
+            {
+                "sample_id": sample_id,
+                "label": defaults.get("label") or sample_id,
+                "category": defaults.get("category"),
+                "location": defaults.get("location"),
+            }
+        )
+    return items
 
 
 def landing_metadata(category: str | None, location: str | None, shelf_label: str | None) -> dict[str, Any]:

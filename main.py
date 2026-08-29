@@ -6,7 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 load_dotenv()
 
@@ -365,23 +365,25 @@ def _client_ip(request: Request) -> str | None:
 
 
 @app.get("/landing/samples")
-def landing_samples():
-    from app.landing_leads import SAMPLE_DEFAULTS, SAMPLE_IMAGES
+def landing_samples(request: Request):
+    from app.landing_leads import list_samples
 
-    samples = []
-    for sample_id, path in SAMPLE_IMAGES.items():
-        if not path.exists():
-            continue
-        defaults = SAMPLE_DEFAULTS.get(sample_id, {})
-        samples.append(
-            {
-                "sample_id": sample_id,
-                "label": defaults.get("label") or sample_id,
-                "category": defaults.get("category"),
-                "location": defaults.get("location"),
-            }
-        )
+    base = str(request.base_url).rstrip("/")
+    samples = list_samples()
+    for sample in samples:
+        sample["preview_url"] = f"{base}/landing/samples/{sample['sample_id']}/image"
     return {"samples": samples}
+
+
+@app.get("/landing/samples/{sample_id}/image")
+def landing_sample_image(sample_id: str):
+    from app.landing_leads import resolve_sample_image
+
+    try:
+        data, _ = resolve_sample_image(sample_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/landing/session/{session_token}")
