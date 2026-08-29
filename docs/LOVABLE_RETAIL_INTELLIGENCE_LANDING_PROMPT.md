@@ -1,137 +1,115 @@
-# Lovable Prompt — `/retail-intelligence` Minimal Lead Landing (v2)
+# Lovable Prompt — `/retail-intelligence` Professional Lead Landing (v3)
 
-Paste into Lovable chat → **Publish** to `https://aislix.com/retail-intelligence`.
+Paste into Lovable → **Publish** to `https://aislix.com/retail-intelligence`.
 
-**Backend:** `https://aislix-backend-production.up.railway.app`  
-**Env:** `VITE_AISLIX_API_URL=https://aislix-backend-production.up.railway.app`
+**Backend API:** `https://aislix-backend-production.up.railway.app`  
+**Env var:** `VITE_AISLIX_API_URL=https://aislix-backend-production.up.railway.app`
+
+**Sample image (always visible by default):**  
+`https://aislix-backend-production.up.railway.app/landing/samples/lays-a1l/image`
 
 ---
 
 ```
-RETAIL INTELLIGENCE — STRIP TO MINIMAL LEAD LANDING PAGE (v2)
+/retail-intelligence — REBUILD AS PROFESSIONAL LINKEDIN AD LANDING (v3)
 
-CRITICAL — DO NOT TOUCH:
-- Homepage "/" (src/routes/index.tsx) — unchanged
-- /signup, /login, /dashboard auth flows (small additive hooks only)
-- LinkedIn Insight Tag
-
-ONLY REWRITE:
-- /retail-intelligence page + components in src/components/landing/retail-intelligence/
-- src/lib/landing-scan-api.ts
+DO NOT MODIFY: "/", /signup, /login, /dashboard core flows, LinkedIn Insight Tag.
+ONLY REBUILD: /retail-intelligence + src/components/landing/retail-intelligence/* + src/lib/landing-scan-api.ts
 
 ══════════════════════════════════════════════════════════════
-WHAT IS WRONG TODAY — FIX ALL OF THIS
+BUGS TO FIX FROM CURRENT BUILD
 ══════════════════════════════════════════════════════════════
 
-1. Page looks like a full marketing homepage (hero, how-it-works, capabilities, use cases) — REMOVE ALL THAT.
-   This is a LinkedIn ad landing page. User should see ONLY: headline → live demo → lead form.
-
-2. Clicking "Try Sample Shelf" shows empty left panel while scanning — WRONG.
-   Show the shelf image IMMEDIATELY while AI runs (see Step 3).
-
-3. Results table shows "Compliance / On planogram" — WRONG for demo scans (no planogram uploaded).
-   Backend now returns scan_mode: "audit_only", has_planogram: false, status_label per row.
-   Hide Compliance column entirely. Use Status column: "Detected" | "Needs review".
-
-4. No CSV download — ADD "Download CSV" button after results.
-
-5. Too many nav links and CTAs to /signup before scan — simplify nav to logo + Log in only.
+❌ Sample image not visible on page load — FIX: show Lay's rack image immediately (see Step 2)
+❌ Empty left panel while scanning — FIX: keep preview image visible with "Analyzing…" overlay
+❌ Wrong products (Classic Salted, Sizzlin Hot) — backend now uses FULL scan engine + planogram for sample; display API results only
+❌ No lead capture form — ADD mandatory lead section (Step 4)
+❌ Page still looks like homepage — STRIP to hero + demo + lead only (Step 1)
 
 ══════════════════════════════════════════════════════════════
-PAGE STRUCTURE (ONLY 3 SECTIONS)
+STEP 1 — PAGE LAYOUT (match attached design reference)
 ══════════════════════════════════════════════════════════════
 
-┌─────────────────────────────────────────────────────────┐
-│  [AISLIX logo]                              [Log in]    │  ← minimal header
-├─────────────────────────────────────────────────────────┤
-│  H1: Turn Any Shelf Photo Into Retail Intelligence      │  ← compact hero (1 screen max)
-│  1-line subhead + trust: "3 free scans • No credit card"│
-├─────────────────────────────────────────────────────────┤
-│  LIVE DEMO (id="demo") — full width, main focus         │
-│  [Try Sample Shelf] [Upload Shelf Photo]                │
-│  ┌──────────────────┬──────────────────────────────┐    │
-│  │ Shelf image      │ Results / scanning state     │    │
-│  └──────────────────┴──────────────────────────────┘    │
-│  [Download CSV]  (after results)                        │
-├─────────────────────────────────────────────────────────┤
-│  LEAD CAPTURE (id="lead") — appears after scan results  │
-│  Email + Name + Company → Continue → Create account     │
-├─────────────────────────────────────────────────────────┤
-│  Minimal footer: © Aislix • Privacy • Terms             │
-└─────────────────────────────────────────────────────────┘
+Visual style (from reference mockup):
+- Dark navy hero background (#0B1220 or similar)
+- Teal accent CTA buttons (#14B8A6)
+- Clean white demo card below hero
+- Professional B2B SaaS feel (Stripe / Linear quality)
 
-DELETE these sections entirely if they exist:
-  #how-it-works, #capabilities, #use-cases, #problem, #product-output,
-  long hero with dashboard screenshot, 3-step flow diagram, duplicate CTAs.
+PAGE SECTIONS — ONLY THESE THREE:
 
-DO NOT link logo to "/" — keep user on landing: logo → /retail-intelligence
+┌─────────────────────────────────────────────────────────────┐
+│ SECTION A — HERO (dark navy, full width)                    │
+│   Left: H1 "Audit Every Aisle. From a Single Photo."        │
+│         Subhead (1 sentence) + trust pills:                 │
+│         "No card required" • "3 free scans" • "Results in ~60s"│
+│   Right: NO static mockup — real demo starts in Section B   │
+├─────────────────────────────────────────────────────────────┤
+│ SECTION B — LIVE DEMO (white bg, id="demo") — MAIN PRODUCT  │
+│   Headline: "See What Aislix Sees"                          │
+│   [Try Sample Shelf]  [Upload Shelf Photo]                  │
+│   ┌─────────────────────┬──────────────────────────────┐  │
+│   │ SHELF IMAGE         │ RESULTS / SCANNING           │  │
+│   │ (always visible)    │                              │  │
+│   └─────────────────────┴──────────────────────────────┘  │
+│   [Download CSV] after results                              │
+├─────────────────────────────────────────────────────────────┤
+│ SECTION C — LEAD CAPTURE (id="lead") — REQUIRED             │
+│   Dark or light card, prominent, cannot be missing          │
+│   Email + Name + Company → Continue → Create Free Account   │
+├─────────────────────────────────────────────────────────────┤
+│ Minimal footer: © Aislix • Privacy • Terms                  │
+└─────────────────────────────────────────────────────────────┘
+
+DELETE entirely if present:
+  #how-it-works, #capabilities, #use-cases, #problem, marketing grids,
+  duplicate "Start Free Shelf Scan" header buttons, homepage nav links.
+
+Header: AISLIX logo (→ /retail-intelligence) + "Log in" link only. NO other nav.
 
 ══════════════════════════════════════════════════════════════
-STEP 1 — API CLIENT (src/lib/landing-scan-api.ts)
+STEP 2 — DEFAULT SAMPLE IMAGE (CRITICAL)
 ══════════════════════════════════════════════════════════════
+
+On page mount (useEffect), IMMEDIATELY set:
+
+  const SAMPLE_IMAGE = `${import.meta.env.VITE_AISLIX_API_URL}/landing/samples/lays-a1l/image`;
+  setPreviewImageUrl(SAMPLE_IMAGE);
+
+The Lay's rack photo MUST be visible in the left panel BEFORE any click.
+Do NOT show placeholder text "Your shelf photo appears here" when previewImageUrl is set.
+
+Left panel render logic:
+  if (previewImageUrl) → <img src={previewImageUrl} alt="Sample Lay's chip rack" className="w-full h-full object-contain" />
+  if (phase === "scanning") → overlay badge "Analyzing shelf…" on top of image (do NOT hide image)
+  if (phase === "done" && result?.annotated_image_base64) → replace with annotated data-URI
+
+Initial state: phase = "idle", previewImageUrl = SAMPLE_IMAGE (set on mount).
+
+══════════════════════════════════════════════════════════════
+STEP 3 — SCAN FLOW (same engine as production app)
+══════════════════════════════════════════════════════════════
+
+src/lib/landing-scan-api.ts:
 
 const API = import.meta.env.VITE_AISLIX_API_URL;
 
-export type LandingScanResult = {
-  landing_session_id: string;
-  scan_id: string;
-  status: "completed";
-  scan_mode: "audit_only";
-  has_planogram: false;
-  metrics: { total_products?: number; unique_skus?: number; shelf_health_score?: number };
-  inventory: Array<{
-    brand: string;
-    product_name: string;
-    quantity: number;
-    confidence?: number;
-    status_label?: "Detected" | "Needs review";
-    counted_in_totals?: boolean;
-  }>;
-  executive_summary?: string;
-  annotated_image_base64?: string;
-  annotated_image_mime?: string;
-  original_image_base64?: string;
-  original_image_mime?: string;
-  csv_base64?: string;
-  scans_used_today?: number;
-  scans_daily_limit?: number;
-};
+export const DEFAULT_SAMPLE_ID = "lays-a1l";
+export const DEFAULT_SAMPLE_IMAGE = `${API}/landing/samples/${DEFAULT_SAMPLE_ID}/image`;
 
-const SAMPLE_PREVIEW_URL = `${API}/landing/samples/lays-a1l/image`;
-
-export function getSamplePreviewUrl(sampleId = "lays-a1l") {
-  return `${API}/landing/samples/${sampleId}/image`;
-}
-
-function appendUtm(form: FormData) {
-  const p = new URLSearchParams(window.location.search);
-  for (const k of ["utm_source","utm_medium","utm_campaign","utm_content","utm_term"]) {
-    const v = p.get(k);
-    if (v) form.append(k, v);
-  }
-}
-
-export async function runLandingSample(sampleId = "lays-a1l", sid?: string) {
+export async function runLandingSample(sampleId = DEFAULT_SAMPLE_ID, sid?: string) {
   const form = new FormData();
   form.append("sample_id", sampleId);
   if (sid) form.append("landing_session_id", sid);
-  appendUtm(form);
+  // append utm_* from URL
   const res = await fetch(`${API}/landing/scan`, { method: "POST", body: form });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Scan failed");
-  return res.json() as Promise<LandingScanResult>;
+  if (!res.ok) throw new Error((await res.json().catch(()=>({}))).detail || "Scan failed");
+  return res.json();
 }
 
-export async function runLandingScan(file: File, sid?: string) {
-  const form = new FormData();
-  form.append("file", file);
-  if (sid) form.append("landing_session_id", sid);
-  appendUtm(form);
-  const res = await fetch(`${API}/landing/scan`, { method: "POST", body: form });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Scan failed");
-  return res.json() as Promise<LandingScanResult>;
-}
+export async function runLandingUpload(file: File, sid?: string) { /* same pattern with form.append("file", file) */ }
 
-export function downloadLandingCsv(result: LandingScanResult) {
+export function downloadLandingCsv(result: { csv_base64?: string; scan_id?: string }) {
   if (!result.csv_base64) return;
   const bytes = Uint8Array.from(atob(result.csv_base64), c => c.charCodeAt(0));
   const blob = new Blob([bytes], { type: "text/csv" });
@@ -142,151 +120,108 @@ export function downloadLandingCsv(result: LandingScanResult) {
   URL.revokeObjectURL(a.href);
 }
 
-export async function captureLandingLead(payload: {
-  landing_session_id: string; email: string; name?: string; company?: string;
-}) {
-  await fetch(`${API}/landing/lead`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-}
+// captureLandingLead, convertLandingSession, persistLandingSession, signupUrlWithLanding — keep from prior implementation
 
-export async function convertLandingSession(sid: string, userId: string) {
-  await fetch(`${API}/landing/convert`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ landing_session_id: sid, user_id: userId }),
-  });
-}
+"Try Sample Shelf" button handler:
+  1. setPhase("scanning") — image stays visible (previewImageUrl unchanged)
+  2. const result = await runLandingSample()
+  3. persistLandingSession(result)
+  4. setResult(result); setPhase("done")
+  5. Show annotated image on left; metrics + table on right
+  6. scrollTo(#lead) smoothly after 1s
 
-export function persistLandingSession(r: LandingScanResult) {
-  sessionStorage.setItem("aislix_landing_session_id", r.landing_session_id);
-  sessionStorage.setItem("aislix_landing_scan_result", JSON.stringify(r));
-}
+"Upload Shelf Photo" handler:
+  1. User picks file → setPreviewImageUrl(URL.createObjectURL(file)) IMMEDIATELY
+  2. setPhase("scanning") → runLandingUpload(file) → same as above
 
-export function signupUrlWithLanding() {
-  const p = new URLSearchParams(window.location.search);
-  const sid = sessionStorage.getItem("aislix_landing_session_id");
-  if (sid) p.set("landing_session_id", sid);
-  const qs = p.toString();
-  return qs ? `/signup?${qs}` : "/signup";
-}
+RESULTS TABLE — columns:
+  Brand | Product | Qty | Conf. | Status
 
-══════════════════════════════════════════════════════════════
-STEP 2 — DEMO UI (MOST IMPORTANT)
-══════════════════════════════════════════════════════════════
+  Use result.inventory[].status_label → "Detected" | "Needs review"
+  NEVER show "Compliance", "On planogram", or planogram columns
+  (Backend sets has_planogram for sample internally — do not surface planogram UI)
 
-Component: RetailIntelligenceDemo.tsx
+METRICS (from result.metrics):
+  Products detected → total_products
+  Unique SKUs → unique_skus
+  Shelf health → shelf_health_score
 
-Layout: 2-column on desktop (image left 55%, results right 45%), stacked on mobile.
+Below table: "{scans_used_today} of {scans_daily_limit} free demo scans used today"
 
-TABS:
-  • "Try Sample Shelf" → handleSampleScan()
-  • "Upload Shelf Photo" → hidden file input
-
-IMAGE PANEL — FIX EMPTY STATE DURING SCAN:
-
-  State: previewImageUrl: string | null
-
-  On "Try Sample Shelf" click — BEFORE fetch:
-    setPreviewImageUrl(getSamplePreviewUrl("lays-a1l"));
-    setPhase("scanning");
-
-  On file upload — BEFORE fetch:
-    const url = URL.createObjectURL(file);
-    setPreviewImageUrl(url);
-    setPhase("scanning");
-
-  While scanning:
-    LEFT panel MUST show previewImageUrl (NOT empty placeholder text)
-    Overlay subtle pulse on image + badge "Analyzing…"
-    RIGHT panel: spinner + "Analyzing shelf… 30–90s"
-
-  On success:
-    Replace preview with annotated image:
-      src={`data:${result.annotated_image_mime};base64,${result.annotated_image_base64}`}
-    If annotated missing, fallback to original_image_base64
-
-RESULTS PANEL (right):
-
-  Metrics row (3 cards):
-    Products detected → metrics.total_products
-    Unique SKUs → metrics.unique_skus
-    Shelf health → metrics.shelf_health_score
-
-  Executive summary paragraph (1–2 lines max)
-
-  Table columns — NO PLANogram:
-    Brand | Product | Qty | Conf. | Status
-    Status from inventory[].status_label ("Detected" | "Needs review")
-    NEVER show "On planogram" or "Compliance" on this page
-    If has_planogram === false (always for landing), do not render planogram UI
-
-  Footer line: "{scans_used_today} of {scans_daily_limit} free demo scans used today"
-
-  Actions row below table:
-    [Download CSV] → downloadLandingCsv(result) — outline button with Download icon
-    Disabled until result.csv_base64 exists
-
-DO NOT use static/hardcoded demo data. All from API response.
+Below demo: [Download CSV] button (outline, Download icon) → downloadLandingCsv(result)
 
 ══════════════════════════════════════════════════════════════
-STEP 3 — LEAD CAPTURE (id="lead")
+STEP 4 — LEAD CAPTURE (MUST EXIST — currently missing)
 ══════════════════════════════════════════════════════════════
 
-Show ONLY after scan completes (scroll into view smoothly).
+Section id="lead" — always on page, scroll-into-view after first scan.
 
-Card design — clean white card, subtle border, centered max-w-lg:
+Design: centered card, max-w-xl, shadow, professional.
 
-  H2: Save your results & analyze more shelves
-  Sub: Enter your work email to get 3 free shelf scans in your workspace.
+  Eyebrow: "Continue with Aislix"
+  H2: "Save your shelf audit & unlock 3 free scans"
+  Sub: "Enter your work email. No credit card required."
 
-  Fields: Email* | Name | Company
-  [Continue] → captureLandingLead → show success state:
-    "Thanks! Create your free account to continue."
-    [Create Free Account →] signupUrlWithLanding()
+  Form:
+    Email *     (type=email, required)
+    Full name   (optional)
+    Company     (optional)
 
-  Small link: "Skip for now" → signupUrlWithLanding()
+  Primary button (teal): "Continue"
+    → await captureLandingLead({ landing_session_id, email, name, company })
+    → show inline success + second CTA
 
-Results remain visible above — form does NOT hide or block results.
+  After submit success:
+    "You're all set."
+    [Create Free Account →] links to signupUrlWithLanding()
 
-══════════════════════════════════════════════════════════════
-STEP 4 — VISUAL DESIGN (professional ad landing)
-══════════════════════════════════════════════════════════════
+  Secondary link: "Skip for now" → signupUrlWithLanding()
 
-- Full viewport height demo section — this IS the product
-- White/light gray background, navy accent (match existing Aislix brand)
-- No marketing fluff below fold
-- No duplicate "Start Free Shelf Scan" buttons in header (remove header CTA)
-- Header: logo left, "Log in" text link right only
-- Typography: one H1, demo H2 "See What Aislix Sees", rest body text
-- Mobile: image on top, results below, lead form last
-- No sticky bottom bar (cleaner for ad landing)
+Lead section is visible on page load (below demo) but user scrolls to it after scan.
+Do NOT hide lead form behind signup gate before scan.
 
-Reference feel: Stripe/Linear demo pages — product-first, minimal chrome.
+Also add small lead prompt INSIDE results panel after scan:
+  "Want to save this audit?" → scroll to #lead
 
 ══════════════════════════════════════════════════════════════
-STEP 5 — SIGNUP HOOK (minimal change to /signup)
+STEP 5 — HERO CTAs
 ══════════════════════════════════════════════════════════════
 
-After signUp success + user.id:
-  convertLandingSession(landing_session_id, user.id)
+Primary (teal): "Try Sample Shelf" → triggers handleSampleScan() + scroll to #demo
+Secondary (outline white): "Upload Your Shelf Photo" → opens file picker + scroll to #demo
 
-Read landing_session_id from URL query or sessionStorage.
+Do NOT link hero buttons to /signup.
 
 ══════════════════════════════════════════════════════════════
-STEP 6 — QA CHECKLIST
+STEP 6 — SIGNUP CONVERSION HOOK
 ══════════════════════════════════════════════════════════════
 
-✓ Page has ONLY: compact hero + demo + lead form + minimal footer
-✓ No how-it-works / capabilities / use cases sections
-✓ Click "Try Sample Shelf" → Lay's image appears IMMEDIATELY on left
-✓ After ~60s → annotated image + real inventory on right
-✓ No "On planogram" or Compliance column anywhere
-✓ Download CSV works and file opens in Excel
-✓ Lead form appears after results
-✓ / unchanged, /retail-intelligence public, no login required to scan
+On /signup after successful signUp:
+  if (landing_session_id) convertLandingSession(landing_session_id, user.id)
 
-Publish when done.
+Read landing_session_id from URL ?landing_session_id= or sessionStorage.
+
+══════════════════════════════════════════════════════════════
+STEP 7 — RESPONSIVE
+══════════════════════════════════════════════════════════════
+
+Desktop: demo 2-column (55% image / 45% results)
+Mobile: image stacked above results; lead form full width
+Hero: stack text above demo on mobile
+
+══════════════════════════════════════════════════════════════
+STEP 8 — QA (must pass before publish)
+══════════════════════════════════════════════════════════════
+
+✓ Page load → Lay's rack image visible immediately (no click needed)
+✓ Click "Try Sample Shelf" → image stays visible, spinner on right, ~60s wait
+✓ Results show Indian Lay's variants (Magic Masala, Tomato Tango, Cream & Onion) — NOT US flavors
+✓ Annotated image replaces preview when done
+✓ Download CSV works
+✓ Lead form exists with Email/Name/Company and submits to POST /landing/lead
+✓ No planogram/compliance columns in table
+✓ Page has ONLY hero + demo + lead + footer (no homepage sections)
+✓ / unchanged
+
+Publish when QA passes.
 ```

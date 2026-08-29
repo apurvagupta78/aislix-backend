@@ -24,10 +24,16 @@ SAMPLE_IMAGES: dict[str, Path] = {
     "lays-a1l": BASE_DIR / "data" / "reference" / "lays_rack_a1l.jpg",
 }
 
+SAMPLE_PLANOGRAMS: dict[str, Path] = {
+    "lays-a1l": BASE_DIR / "data" / "fixtures" / "planogram_lays_a1l.csv",
+}
+
 SAMPLE_DEFAULTS: dict[str, dict[str, str]] = {
     "lays-a1l": {
-        "label": "Lay's chip rack (sample)",
+        "label": "Lay's chip rack — Magic Masala, Tomato Tango, Cream & Onion",
         "category": "Packaged Food & Snacks",
+        "sub_category": "chips",
+        "sub_category_label": "Chips",
         "location": "A-1-L",
         "shelf_label": "A-1-L",
     },
@@ -146,14 +152,15 @@ def sanitize_landing_inventory(inventory: list[dict[str, Any]]) -> list[dict[str
     return rows
 
 
-def landing_scan_response(full: dict[str, Any], session_token: str) -> dict[str, Any]:
+def landing_scan_response(full: dict[str, Any], session_token: str, *, sample_id: str | None = None) -> dict[str, Any]:
     inventory = sanitize_landing_inventory(full.get("inventory") or [])
     return {
         "landing_session_id": session_token,
         "scan_id": full.get("scan_id"),
         "status": "completed",
-        "scan_mode": "audit_only",
-        "has_planogram": False,
+        "scan_mode": "audit_only" if not sample_id else "sample_with_planogram",
+        "has_planogram": bool(sample_id),
+        "sample_id": sample_id,
         "metrics": full.get("metrics") or full.get("summary"),
         "inventory": inventory,
         "products": full.get("products") or [],
@@ -351,7 +358,7 @@ def get_session_public(session_token: str) -> dict[str, Any] | None:
             "lead_captured": bool(row.get("lead_email")),
             "signed_up": bool(row.get("signup_completed")),
         }
-    merged = landing_scan_response(result, session_token)
+    merged = landing_scan_response(result, session_token, sample_id=row.get("sample_id"))
     merged["status"] = "completed"
     merged["lead_captured"] = bool(row.get("lead_email"))
     merged["signed_up"] = bool(row.get("signup_completed"))
@@ -390,17 +397,50 @@ def list_samples() -> list[dict[str, Any]]:
                 "label": defaults.get("label") or sample_id,
                 "category": defaults.get("category"),
                 "location": defaults.get("location"),
+                "is_default": sample_id == "lays-a1l",
             }
         )
     return items
 
 
-def landing_metadata(category: str | None, location: str | None, shelf_label: str | None) -> dict[str, Any]:
+def load_sample_planogram(sample_id: str) -> list[dict[str, Any]]:
+    path = SAMPLE_PLANOGRAMS.get(sample_id)
+    if path is None or not path.exists():
+        return []
+    from app.planogram_csv import parse_csv_text
+
+    parsed = parse_csv_text(path.read_text(encoding="utf-8"))
+    return [row["data"] for row in parsed.get("rows", []) if row.get("valid") and row.get("data")]
+
+
+def landing_metadata(
+    category: str | None,
+    location: str | None,
+    shelf_label: str | None,
+    *,
+    sample_id: str | None = None,
+    sample_defaults: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    defaults = sample_defaults or {}
     meta: dict[str, Any] = {"export_facings": True}
-    if category:
-        meta["category"] = category
-    if location:
-        meta["location"] = location
-    if shelf_label:
-        meta["shelf_label"] = shelf_label
+    cat = category or defaults.get("category")
+    loc = location or defaults.get("location")
+    label = shelf_label or defaults.get("shelf_label")
+    if cat:
+        meta["category"] = cat
+    if loc:
+        meta["location"] = loc
+    if label:
+        meta["shelf_label"] = label
+    sub = defaults.get("sub_category")
+    sub_label = defaults.get("sub_category_label")
+    if sub:
+        meta["sub_category"] = sub
+    if sub_label:
+        meta["sub_category_label"] = sub_label
+    if sample_id:
+        planogram_items = load_sample_planogram(sample_id)
+        if planogram_items:
+            meta["planogram_items"] = planogram_items
+            meta["planogram_items_full"] = planogram_items
     return meta

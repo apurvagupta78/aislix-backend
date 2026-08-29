@@ -1,0 +1,17 @@
+location,category,sub_category,brand,product_name,variant,expected_qty,sku,shelf_position
+A-1-L,Packaged Food & Snacks,Chips,Lay's,India's Magic Masala,,2,A1L-LAYS-001,Shelf 2 / Position 1-2
+A-1-L,Packaged Food & Snacks,Chips,Lay's,India's Magic Masala,,2,A1L-LAYS-002,Shelf 2 / Position 3-4
+A-1-L,Packaged Food & Snacks,Chips,Lay's,India's Magic Masala,,2,A1L-LAYS-003,Shelf 2 / Position 5-6
+A-1-L,Packaged Food & Snacks,Chips,Lay's,India's Magic Masala,,1,A1L-LAYS-004,Shelf 2 / Position 7
+A-1-L,Packaged Food & Snacks,Chips,Lay's,India's Magic Masala,,2,A1L-LAYS-005,Shelf 3 / Position 1-2
+A-1-L,Packaged Food & Snacks,Chips,Lay's,India's Magic Masala,,2,A1L-LAYS-006,Shelf 3 / Position 3-4
+A-1-L,Packaged Food & Snacks,Chips,Lay's,India's Magic Masala,,2,A1L-LAYS-007,Shelf 3 / Position 5-6
+A-1-L,Packaged Food & Snacks,Chips,Lay's,Tomato Tango,,2,A1L-LAYS-008,Shelf 4 / Position 1-2
+A-1-L,Packaged Food & Snacks,Chips,Lay's,Tomato Tango,,2,A1L-LAYS-009,Shelf 4 / Position 3-4
+A-1-L,Packaged Food & Snacks,Chips,Lay's,Tomato Tango,,2,A1L-LAYS-010,Shelf 4 / Position 5-6
+A-1-L,Packaged Food & Snacks,Chips,Lay's,American Style Cream & Onion,,2,A1L-LAYS-011,Shelf 5 / Position 1-2
+A-1-L,Packaged Food & Snacks,Chips,Lay's,American Style Cream & Onion,,2,A1L-LAYS-012,Shelf 5 / Position 3-4
+A-1-L,Packaged Food & Snacks,Chips,Lay's,American Style Cream & Onion,,2,A1L-LAYS-013,Shelf 5 / Position 5-6
+A-1-L,Packaged Food & Snacks,Chips,Lay's,American Style Cream & Onion,,2,A1L-LAYS-014,Shelf 6 / Position 1-2
+A-1-L,Packaged Food & Snacks,Chips,Lay's,American Style Cream & Onion,,2,A1L-LAYS-015,Shelf 6 / Position 3-4
+A-1-L,Packaged Food & Snacks,Chips,Lay's,American Style Cream & Onion,,2,A1L-LAYS-016,Shelf 6 / Position 5-6

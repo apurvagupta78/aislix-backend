@@ -6,6 +6,7 @@ from app.landing_leads import (
     hash_ip,
     landing_metadata,
     landing_scan_response,
+    load_sample_planogram,
     new_session_token,
     parse_utm,
     sanitize_landing_inventory,
@@ -46,6 +47,28 @@ def test_landing_metadata_enables_facings():
     assert meta["location"] == "A-1-Z"
 
 
+def test_landing_metadata_sample_loads_planogram():
+    from app.landing_leads import SAMPLE_DEFAULTS
+
+    meta = landing_metadata(
+        None,
+        None,
+        None,
+        sample_id="lays-a1l",
+        sample_defaults=SAMPLE_DEFAULTS["lays-a1l"],
+    )
+    assert meta["category"] == "Packaged Food & Snacks"
+    assert meta["sub_category"] == "chips"
+    assert len(meta.get("planogram_items") or []) >= 10
+
+
+def test_load_sample_planogram_lays():
+    items = load_sample_planogram("lays-a1l")
+    assert len(items) >= 10
+    brands = {i.get("brand") for i in items}
+    assert "Lay's" in brands or "Lays" in brands
+
+
 def test_slim_scan_result_strips_heavy_fields():
     full = {
         "scan_id": "abc123",
@@ -76,10 +99,11 @@ def test_landing_scan_response_shape():
         "facings_debug": [{"x1": 1, "y1": 2, "x2": 3, "y2": 4}],
         "planogram_compliance": {"compliance_percent": 100},
     }
-    out = landing_scan_response(full, "session-token-1")
+    out = landing_scan_response(full, "session-token-1", sample_id="lays-a1l")
     assert out["landing_session_id"] == "session-token-1"
-    assert out["scan_mode"] == "audit_only"
-    assert out["has_planogram"] is False
+    assert out["scan_mode"] == "sample_with_planogram"
+    assert out["has_planogram"] is True
+    assert out["sample_id"] == "lays-a1l"
     assert "planogram_compliance" not in out
     assert out["csv_base64"] == "Y3N2"
     assert out["inventory"][0]["status_label"] == "Detected"

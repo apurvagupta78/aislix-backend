@@ -441,6 +441,7 @@ async def landing_scan(request: Request):
     user_agent = request.headers.get("user-agent")
 
     image_bytes: bytes | None = None
+    sample_defaults: dict[str, str] = {}
     if sample_id:
         try:
             image_bytes, sample_defaults = resolve_sample_image(sample_id)
@@ -473,7 +474,14 @@ async def landing_scan(request: Request):
         user_agent=user_agent,
         sample_id=sample_id,
     )
-    metadata = landing_metadata(category, location, shelf_label)
+    sample_defaults = sample_defaults if sample_id else {}
+    metadata = landing_metadata(
+        category,
+        location,
+        shelf_label,
+        sample_id=sample_id,
+        sample_defaults=sample_defaults if sample_id else None,
+    )
 
     try:
         result = run_scan_from_bytes(image_bytes, metadata=metadata)
@@ -492,7 +500,7 @@ async def landing_scan(request: Request):
         full_result=result,
     )
 
-    response = landing_scan_response(result, token)
+    response = landing_scan_response(result, token, sample_id=sample_id)
     response["scans_used_today"] = used
     response["scans_daily_limit"] = limit
     return response
