@@ -21,6 +21,7 @@ MAX_BYTES = int(os.getenv("LANDING_SCAN_MAX_BYTES", str(10 * 1024 * 1024)))
 ENABLED = os.getenv("LANDING_SCAN_ENABLED", "true").lower() in {"1", "true", "yes"}
 
 SAMPLE_IMAGES: dict[str, Path] = {
+    "shampoo-a1z": BASE_DIR / "data" / "reference" / "shampoo_a1z.jpg",
     "lays-a1l": BASE_DIR / "data" / "reference" / "lays_rack_a1l.jpg",
 }
 
@@ -29,6 +30,14 @@ SAMPLE_PLANOGRAMS: dict[str, Path] = {
 }
 
 SAMPLE_DEFAULTS: dict[str, dict[str, str]] = {
+    "shampoo-a1z": {
+        "label": "Personal care shampoo shelf (sample)",
+        "category": "Personal Care",
+        "sub_category": "shampoo",
+        "sub_category_label": "Shampoo",
+        "location": "A-1-Z",
+        "shelf_label": "A-1-Z",
+    },
     "lays-a1l": {
         "label": "Lay's chip rack — Magic Masala, Tomato Tango, Cream & Onion",
         "category": "Packaged Food & Snacks",
@@ -38,6 +47,8 @@ SAMPLE_DEFAULTS: dict[str, dict[str, str]] = {
         "shelf_label": "A-1-L",
     },
 }
+
+DEFAULT_SAMPLE_ID = "shampoo-a1z"
 
 _rate_cache: dict[str, tuple[int, str]] = {}
 
@@ -397,7 +408,7 @@ def list_samples() -> list[dict[str, Any]]:
                 "label": defaults.get("label") or sample_id,
                 "category": defaults.get("category"),
                 "location": defaults.get("location"),
-                "is_default": sample_id == "lays-a1l",
+                "is_default": sample_id == DEFAULT_SAMPLE_ID,
             }
         )
     return items

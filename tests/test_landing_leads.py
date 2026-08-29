@@ -69,6 +69,22 @@ def test_load_sample_planogram_lays():
     assert "Lay's" in brands or "Lays" in brands
 
 
+def test_shampoo_sample_defaults():
+    from app.landing_leads import DEFAULT_SAMPLE_ID, SAMPLE_DEFAULTS
+
+    assert DEFAULT_SAMPLE_ID == "shampoo-a1z"
+    meta = landing_metadata(
+        None,
+        None,
+        None,
+        sample_id="shampoo-a1z",
+        sample_defaults=SAMPLE_DEFAULTS["shampoo-a1z"],
+    )
+    assert meta["category"] == "Personal Care"
+    assert meta["sub_category"] == "shampoo"
+    assert "planogram_items" not in meta
+
+
 def test_slim_scan_result_strips_heavy_fields():
     full = {
         "scan_id": "abc123",
