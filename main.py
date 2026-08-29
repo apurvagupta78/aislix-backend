@@ -539,7 +539,7 @@ async def landing_lead(request: Request):
         utm=utm,
     )
 
-    email_sent, email_error = send_landing_onboarding_email(
+    email_sent, email_error, signup_url = send_landing_onboarding_email(
         email=email,
         name=(body.get("name") or "").strip() or None,
         landing_session_id=token,
@@ -552,9 +552,10 @@ async def landing_lead(request: Request):
         "landing_session_id": token,
         "persisted": bool(row),
         "email_sent": email_sent,
+        "signup_url": signup_url,
         "message": "Check your email to continue your Aislix onboarding."
         if email_sent
-        else "Details saved. You can create your free account below.",
+        else "Details saved. Use the button below to create your free account.",
         "email_error": email_error if not email_sent else None,
     }
 
