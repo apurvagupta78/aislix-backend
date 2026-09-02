@@ -75,20 +75,51 @@ def build_make_multipart(
 ) -> tuple[dict[str, tuple[str, bytes, str]], dict[str, str]]:
     """Build multipart body matching Make Custom Webhook `image` file collection."""
     from app.report_generator import encode_shelf_image_bytes
+    from app.scan_context import resolve_scan_context
 
     jpeg = encode_shelf_image_bytes(image)
     filename = os.getenv("MAKE_IMAGE_FILENAME", f"{scan_id}.jpg")
     field = os.getenv("MAKE_IMAGE_FIELD", "image")
     files = {field: (filename, jpeg, "image/jpeg")}
-    data: dict[str, str] = {"scan_id": scan_id}
-    if metadata.get("category"):
-        data["category"] = str(metadata["category"])
-    if metadata.get("sub_category"):
-        data["sub_category"] = str(metadata["sub_category"])
-    if metadata.get("shelf_label"):
-        data["shelf_label"] = str(metadata["shelf_label"])
-    if metadata.get("planogram_items"):
-        data["metadata"] = json.dumps(metadata)
+
+    scan_context = resolve_scan_context(metadata)
+    audit_sub = scan_context.get("sub_category") or metadata.get("sub_category") or ""
+    audit_label = (
+        scan_context.get("sub_category_label")
+        or metadata.get("sub_category_label")
+        or audit_sub.replace("_", " ").title()
+    )
+    payload_metadata = {
+        **metadata,
+        "scan_context": {
+            "aislix_category": scan_context.get("aislix_category"),
+            "sub_category": audit_sub,
+            "sub_category_label": audit_label,
+            "shelf_label": scan_context.get("shelf_label") or metadata.get("shelf_label"),
+            "location": scan_context.get("location") or metadata.get("location"),
+        },
+        "audit_instructions": (
+            "Detect EVERY visible product on this shelf image — not only the audit sub-category. "
+            "Include beverages (water bottles), mouthwash, snacks, cleaning products, and any other SKUs. "
+            f"The user is auditing for '{audit_label}' but all products must appear in the JSON. "
+            "For each product return: brand, product, variant, qty, confidence, shelf_position, "
+            "and product_category (e.g. toothpaste, water, mouthwash, dishwash). "
+            "Flag mismatches by setting product_category to the true category even when auditing another."
+        ),
+    }
+
+    data: dict[str, str] = {
+        "scan_id": scan_id,
+        "metadata": json.dumps(payload_metadata),
+    }
+    if metadata.get("category") or scan_context.get("aislix_category"):
+        data["category"] = str(metadata.get("category") or scan_context.get("aislix_category"))
+    if audit_sub:
+        data["sub_category"] = str(audit_sub)
+    if audit_label:
+        data["sub_category_label"] = str(audit_label)
+    if metadata.get("shelf_label") or scan_context.get("shelf_label"):
+        data["shelf_label"] = str(metadata.get("shelf_label") or scan_context.get("shelf_label"))
     return files, data
 
 
@@ -156,6 +187,13 @@ def _map_make_products(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         qty = max(1, int(row.get("qty") or row.get("quantity") or row.get("facings") or 1))
         confidence = float(row.get("confidence") or 0.0)
         shelf_position = (row.get("shelf_position") or row.get("position") or row.get("shelf") or "").strip()
+        product_category = (
+            row.get("product_category")
+            or row.get("category")
+            or row.get("detected_category")
+            or ""
+        ).strip()
+        pack_text = f"{brand} {product_name} {variant} {product_category}".strip()
         inventory.append(
             {
                 "brand": brand,
@@ -166,6 +204,8 @@ def _map_make_products(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "confidence": confidence,
                 "shelf_position": shelf_position,
                 "location": shelf_position,
+                "product_category": product_category,
+                "pack_text": pack_text,
                 "counted_in_totals": True,
                 "stock_status": "in_stock" if qty > 2 else "low_stock",
             }

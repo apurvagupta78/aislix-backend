@@ -60,15 +60,27 @@ def _expand_inventory_to_classified(inventory: list[dict]) -> list[dict]:
     classified: list[dict] = []
     for row in inventory:
         qty = max(1, int(row.get("facings") or row.get("quantity") or 1))
+        pack_text = (row.get("pack_text") or "").strip() or " ".join(
+            filter(
+                None,
+                [
+                    row.get("brand"),
+                    row.get("product_name"),
+                    row.get("variant"),
+                    row.get("product_category"),
+                ],
+            )
+        )
         for _ in range(qty):
             classified.append(
                 {
                     "brand": row.get("brand") or "Unknown",
                     "product_name": row.get("product_name") or "Unknown",
                     "variant": row.get("variant") or "",
-                    "category": row.get("category") or "General",
+                    "category": row.get("category") or row.get("product_category") or "General",
                     "sku": row.get("sku") or "",
                     "confidence": float(row.get("confidence") or 0.0),
+                    "pack_text": pack_text,
                     "recognition_source": "make.com",
                     "x1": 0,
                     "y1": 0,
@@ -185,10 +197,27 @@ def finalize_make_scan(
         "SCAN_EXPORT_FACINGS", ""
     ).lower() in {"1", "true", "yes"}
 
+    annotated_source = classified
     if _has_bbox_facings(classified):
         annotated = generate_annotated_image(image, classified)
     else:
-        annotated = image.copy()
+        from app.make_annotate import build_local_detection_facings, make_local_annotate_enabled
+
+        if make_local_annotate_enabled():
+            try:
+                local_facings = build_local_detection_facings(image, metadata, scan_context, inventory)
+                if local_facings:
+                    compliance_local = analyze_subcategory_compliance(local_facings, scan_context)
+                    annotated_source = compliance_local["classified"]
+                    annotated = generate_annotated_image(image, annotated_source)
+                    metrics["detection_mode"] = "make.com+local_yolo"
+                else:
+                    annotated = image.copy()
+            except Exception as exc:
+                print(f"Make local annotate skipped: {exc}")
+                annotated = image.copy()
+        else:
+            annotated = image.copy()
 
     original_jpeg = encode_shelf_image_bytes(image)
     annotated_jpeg = encode_annotated_image_bytes(annotated)
@@ -263,9 +292,9 @@ def finalize_make_scan(
                     "confidence": r.get("confidence"),
                     "recognition_source": r.get("recognition_source"),
                 }
-                for r in classified
+                for r in annotated_source
             ]
-            if export_facings
+            if export_facings and _has_bbox_facings(annotated_source)
             else None
         ),
         "scan_context": {

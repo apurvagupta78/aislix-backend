@@ -256,7 +256,7 @@ SUB_CATEGORY_PRODUCT_KEYWORDS: dict[str, list[str]] = {
     "coffee": ["coffee", "nescafe", "instant coffee", "filter coffee"],
     "soft_drinks": ["cola", "coke", "pepsi", "sprite", "fanta", "mirinda", "soft drink", "soda"],
     "juices": ["juice", "mango drink", "fruit drink", "nectar"],
-    "water": ["mineral water", "packaged water", "drinking water"],
+    "water": ["water", "mineral water", "packaged water", "drinking water", "aqua", "bisleri", "aquafina", "kinley", "bailey"],
     "ice_cream": ["ice cream", "kulfi", "funwich", "frozen dessert", "sorbet", "gelato", "cone", "sandwich"],
     "energy_drinks": ["energy drink", "red bull", "monster"],
     "sports_drinks": ["sports drink", "electrolyte", "isotonic"],

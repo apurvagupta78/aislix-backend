@@ -43,11 +43,13 @@ def test_build_make_json_payload_includes_metadata(tiny_image):
 
 
 def test_build_make_multipart_uses_image_field(tiny_image):
-    files, data = build_make_multipart("abc123", tiny_image, {"category": "Snacks", "shelf_label": "A-1-L"})
+    files, data = build_make_multipart("abc123", tiny_image, {"category": "Personal Care", "sub_category": "toothpaste", "shelf_label": "A-1-L"})
     assert "image" in files
     assert files["image"][2] == "image/jpeg"
     assert data["scan_id"] == "abc123"
-    assert data["category"] == "Snacks"
+    assert data["category"] == "Personal Care"
+    assert data["sub_category"] == "toothpaste"
+    assert "audit_instructions" in json.loads(data["metadata"])
 
 
 def test_parse_make_response_partial_inventory():
