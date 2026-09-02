@@ -164,7 +164,29 @@ def _detect_boxes_for_scan(
     return boxes, shelf_mode, gap_stats
 
 
-def run_scan_from_image(image: np.ndarray, scan_id: str | None = None, metadata: dict | None = None) -> dict:
+def run_scan_from_image(
+    image: np.ndarray,
+    scan_id: str | None = None,
+    metadata: dict | None = None,
+    *,
+    image_url: str | None = None,
+) -> dict:
+    from app.make_scan import make_fallback_local, run_make_scan_from_image, use_make_provider
+
+    if use_make_provider():
+        try:
+            return run_make_scan_from_image(
+                image,
+                scan_id=scan_id,
+                metadata=metadata,
+                image_url=image_url,
+            )
+        except Exception as exc:
+            if make_fallback_local():
+                print(f"Make scan failed, falling back to local pipeline: {exc}")
+            else:
+                raise
+
     started = time.time()
     scan_id = scan_id or uuid.uuid4().hex[:8]
     metadata = metadata or {}
@@ -493,4 +515,4 @@ def run_scan_from_bytes(data: bytes, **kwargs) -> dict:
 
 
 def run_scan_from_url(url: str, **kwargs) -> dict:
-    return run_scan_from_image(load_image_from_url(url), **kwargs)
+    return run_scan_from_image(load_image_from_url(url), image_url=url, **kwargs)

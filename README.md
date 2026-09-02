@@ -50,6 +50,58 @@ uvicorn main:app --reload --port 8000
 - `DETECTION_MODE=standard` (set to `sahi` for slicing-aided tiled YOLO — see `data/benchmark/README.md`)
 - `SAHI_TILE_SIZE=640` / `SAHI_OVERLAP_RATIO=0.25` (optional SAHI tuning)
 
+### Make.com scan provider (optional)
+
+Replace the local YOLO/OCR pipeline with a Make.com custom webhook:
+
+- `SCAN_PROVIDER=make` — use Make.com for all scans (`POST /scan`, `POST /landing/scan`, `POST /scan/export-assets`)
+- `MAKE_SCAN_WEBHOOK_URL` — Make custom webhook URL (required when `SCAN_PROVIDER=make`)
+- `MAKE_WEBHOOK_SECRET` — optional shared secret sent as `X-Aislix-Secret`
+- `MAKE_SCAN_TIMEOUT_SECONDS=90` — webhook timeout
+- `MAKE_FALLBACK_LOCAL=false` — set `true` to retry the local pipeline if Make fails
+- `MAKE_UPLOAD_MODE=multipart` — send shelf photo as `image` file (matches Make Custom Webhook); set `json` for base64 payload
+- `MAKE_IMAGE_FIELD=image` — multipart file field name (default matches your Shelf Sense AI scenario)
+
+**Request payload** — default multipart (matches Make `image` collection):
+
+- File field `image` — JPEG shelf photo (`name`, `mime`, `data`)
+- Form fields: `scan_id`, `category`, `sub_category`, `shelf_label`, `metadata` (JSON when planogram present)
+
+Alternative JSON mode (`MAKE_UPLOAD_MODE=json`):
+
+```json
+{
+  "scan_id": "abc123",
+  "image_base64": "<jpeg>",
+  "image_mime": "image/jpeg",
+  "image_url": "https://optional-signed-url",
+  "metadata": { "category": "Personal Care", "planogram_items": [] }
+}
+```
+
+**Response** — either full Aislix scan JSON (`inventory` + `metrics` + `executive_summary`), partial inventory/facings, or **Shelf Sense AI** OpenAI output:
+
+```json
+{
+  "products": [
+    {
+      "brand": "Crax",
+      "product": "Rings",
+      "variant": "",
+      "qty": 4,
+      "confidence": 0.99,
+      "shelf_position": "Top Left Front"
+    }
+  ]
+}
+```
+
+The webhook may return this as a JSON string (OpenAI `Message.Content`); the backend maps `product` → `product_name`, `qty` → `quantity`/`facings`, and preserves `shelf_position` per row.
+
+Partial responses are normalized by the backend (metrics, PDF, CSV, planogram compare).
+
+**Dashboard compatibility:** Make replaces only AI recognition. The backend still returns the full Aislix scan payload: `inventory`, `products`, `metrics`, `planogram_compliance`, `executive_summary`, `pdf_base64`, `csv_base64`, `original_image_base64`, and `annotated_image_base64`. Without bounding boxes from Make, the annotated image is the clean shelf photo (same as shelfsense1.lovable.app). Planogram compliance still runs when `planogram_items` are sent in scan metadata.
+
 ### RetailKLIP on Railway (bundled in Docker)
 
 The fine-tuned checkpoint `models/retailklip_vitb32.pt` (~335 MB) is stored in **Git LFS**. The Dockerfile uses a multi-stage build that `git clone`s the repo and runs `git lfs pull` (Railway’s Docker context does not include `.git`, so a plain `COPY` only gets the pointer stub).

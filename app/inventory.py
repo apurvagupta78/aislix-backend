@@ -252,6 +252,7 @@ def inventory_to_api_products(inventory: list[dict]) -> list[dict]:
                 "counted_in_totals": row.get("counted_in_totals", True),
                 "exclusion_reason": row.get("exclusion_reason") or "",
                 "needs_review": row.get("compliance_status") == "needs_review",
+                "shelf_position": row.get("shelf_position") or row.get("location") or "",
             }
         )
     return products
