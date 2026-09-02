@@ -103,7 +103,8 @@ def build_make_multipart(
             "Include beverages (water bottles), mouthwash, snacks, cleaning products, and any other SKUs. "
             f"The user is auditing for '{audit_label}' but all products must appear in the JSON. "
             "For each product return: brand, product, variant, qty, confidence, shelf_position, "
-            "and product_category (e.g. toothpaste, water, mouthwash, dishwash). "
+            "product_category (e.g. toothpaste, water, mouthwash), and bbox_2d [x1,y1,x2,y2] "
+            "normalized 0-1000 for annotated overlay on the shelf photo. "
             "Flag mismatches by setting product_category to the true category even when auditing another."
         ),
     }
@@ -173,7 +174,6 @@ def _unwrap_make_body(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _map_make_products(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Map Shelf Sense AI rows 1:1 — preserve shelf_position per row (no SKU merge)."""
     inventory: list[dict[str, Any]] = []
     for row in rows:
         brand = (row.get("brand") or "Unknown").strip() or "Unknown"
@@ -213,6 +213,103 @@ def _map_make_products(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return inventory
 
 
+def _scale_coord(value: float, axis: int, *, normalized_1000: bool = False) -> int:
+    if normalized_1000:
+        return int(max(0, min(axis - 1, round(value / 1000.0 * axis))))
+    if 0.0 <= value <= 1.0:
+        return int(max(0, min(axis - 1, round(value * axis))))
+    return int(max(0, min(axis - 1, round(value))))
+
+
+def _parse_product_bbox(row: dict[str, Any], img_w: int, img_h: int) -> tuple[int, int, int, int] | None:
+    """Parse bbox from OpenAI product row (pixels, 0-1, or 0-1000 normalized)."""
+    coords: list[float] | None = None
+    normalized_1000 = False
+
+    bbox_2d = row.get("bbox_2d") or row.get("bounding_box_2d")
+    if isinstance(bbox_2d, list) and len(bbox_2d) >= 4:
+        coords = [float(bbox_2d[i]) for i in range(4)]
+        normalized_1000 = max(coords) > 1.0
+    else:
+        bbox = row.get("bbox") or row.get("bounding_box") or row.get("box")
+        if isinstance(bbox, dict):
+            if all(bbox.get(k) is not None for k in ("x1", "y1", "x2", "y2")):
+                coords = [float(bbox[k]) for k in ("x1", "y1", "x2", "y2")]
+            elif all(bbox.get(k) is not None for k in ("left", "top", "right", "bottom")):
+                coords = [
+                    float(bbox["left"]),
+                    float(bbox["top"]),
+                    float(bbox["right"]),
+                    float(bbox["bottom"]),
+                ]
+        elif all(row.get(k) is not None for k in ("x1", "y1", "x2", "y2")):
+            coords = [float(row[k]) for k in ("x1", "y1", "x2", "y2")]
+
+    if not coords:
+        return None
+
+    if max(coords) <= 1.0:
+        x1 = _scale_coord(coords[0], img_w)
+        y1 = _scale_coord(coords[1], img_h)
+        x2 = _scale_coord(coords[2], img_w)
+        y2 = _scale_coord(coords[3], img_h)
+    else:
+        normalized_1000 = normalized_1000 or max(coords) <= 1000.0
+        x1 = _scale_coord(coords[0], img_w, normalized_1000=normalized_1000)
+        y1 = _scale_coord(coords[1], img_h, normalized_1000=normalized_1000)
+        x2 = _scale_coord(coords[2], img_w, normalized_1000=normalized_1000)
+        y2 = _scale_coord(coords[3], img_h, normalized_1000=normalized_1000)
+
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return x1, y1, x2, y2
+
+
+def build_facings_from_make_products(
+    rows: list[dict[str, Any]],
+    image_shape: tuple[int, ...],
+) -> list[dict[str, Any]]:
+    """Turn OpenAI product rows with bbox into facings for annotated image rendering."""
+    img_h, img_w = int(image_shape[0]), int(image_shape[1])
+    facings: list[dict[str, Any]] = []
+    for row in rows:
+        bbox = _parse_product_bbox(row, img_w, img_h)
+        if bbox is None:
+            continue
+        x1, y1, x2, y2 = bbox
+        brand = (row.get("brand") or "Product").strip() or "Product"
+        product_name = (
+            row.get("product_name") or row.get("product") or row.get("name") or "Detected"
+        ).strip() or "Detected"
+        variant = (row.get("variant") or "").strip()
+        product_category = (
+            row.get("product_category") or row.get("category") or row.get("detected_category") or ""
+        ).strip()
+        facings.append(
+            {
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": y2,
+                "brand": brand,
+                "product_name": product_name,
+                "variant": variant,
+                "confidence": float(row.get("confidence") or 0.0),
+                "pack_text": f"{brand} {product_name} {variant} {product_category}".strip(),
+                "recognition_source": "make.com+openai_bbox",
+            }
+        )
+    return facings
+
+
+def _raw_product_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
+    for key in ("products", "Products"):
+        rows = data.get(key)
+        if isinstance(rows, list):
+            return rows
+    return []
+
+
 def _products_from_make_data(data: dict[str, Any]) -> list[dict[str, Any]] | None:
     for key in ("products", "Products", "inventory"):
         rows = data.get(key)
@@ -233,6 +330,11 @@ def parse_make_response(raw: Any) -> dict[str, Any]:
 
     facings = data.get("facings") or data.get("classified") or data.get("products_detected")
     summary = data.get("executive_summary") or data.get("summary_text") or data.get("summary")
+    annotated_image_base64 = (
+        data.get("annotated_image_base64")
+        or data.get("annotated_image")
+        or data.get("overlay_image_base64")
+    )
 
     is_full = (
         isinstance(inventory, list)
@@ -245,6 +347,8 @@ def parse_make_response(raw: Any) -> dict[str, Any]:
         "raw": data,
         "inventory": inventory if isinstance(inventory, list) else None,
         "facings": facings if isinstance(facings, list) else None,
+        "product_rows": _raw_product_rows(data),
+        "annotated_image_base64": annotated_image_base64 if isinstance(annotated_image_base64, str) else None,
         "executive_summary": summary if isinstance(summary, str) else None,
     }
 

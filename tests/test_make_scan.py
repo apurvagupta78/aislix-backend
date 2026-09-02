@@ -11,6 +11,7 @@ import pytest
 from app.landing_leads import landing_scan_response
 from app.make_scan import (
     MakeScanError,
+    build_facings_from_make_products,
     build_make_json_payload,
     build_make_multipart,
     call_make_webhook,
@@ -117,6 +118,51 @@ def test_parse_make_response_json_string_body():
     parsed = parse_make_response(raw)
     assert parsed["inventory"][0]["brand"] == "Lays"
     assert parsed["inventory"][0]["quantity"] == 3
+
+
+def test_build_facings_from_openai_bbox():
+    rows = [
+        {
+            "brand": "Frau",
+            "product": "Water",
+            "variant": "",
+            "qty": 3,
+            "confidence": 0.92,
+            "product_category": "water",
+            "bbox_2d": [50, 700, 200, 950],
+        }
+    ]
+    facings = build_facings_from_make_products(rows, (1000, 800, 3))
+    assert len(facings) == 1
+    assert facings[0]["brand"] == "Frau"
+    assert facings[0]["x2"] > facings[0]["x1"]
+    assert facings[0]["y2"] > facings[0]["y1"]
+
+
+def test_finalize_make_scan_uses_openai_bbox_for_annotated_image(tiny_image):
+    parsed = parse_make_response(
+        {
+            "products": [
+                {
+                    "brand": "Colgate",
+                    "product": "Toothpaste",
+                    "qty": 4,
+                    "confidence": 0.95,
+                    "bbox_2d": [100, 100, 400, 300],
+                }
+            ],
+            "executive_summary": "Toothpaste shelf.",
+        }
+    )
+    result = finalize_make_scan(
+        tiny_image,
+        scan_id="bbox-test",
+        metadata={"category": "Personal Care", "sub_category": "toothpaste", "export_facings": True},
+        parsed=parsed,
+        processing_ms=800,
+    )
+    assert result["annotated_image_base64"]
+    assert result["metrics"]["detection_mode"] == "make.com+openai_bbox"
 
 
 def test_parse_make_response_preserves_shelf_rows():

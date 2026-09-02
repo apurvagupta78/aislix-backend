@@ -131,6 +131,12 @@ def finalize_make_scan(
     raw = parsed["raw"]
     facings = parsed.get("facings") or []
     inventory = parsed.get("inventory")
+    make_annotated_b64 = parsed.get("annotated_image_base64")
+
+    if not facings and parsed.get("product_rows"):
+        from app.make_scan import build_facings_from_make_products
+
+        facings = build_facings_from_make_products(parsed["product_rows"], image.shape)
 
     classified: list[dict]
     if facings:
@@ -198,8 +204,12 @@ def finalize_make_scan(
     ).lower() in {"1", "true", "yes"}
 
     annotated_source = classified
-    if _has_bbox_facings(classified):
+    if make_annotated_b64:
+        annotated = None
+        metrics["detection_mode"] = "make.com+openai_image"
+    elif _has_bbox_facings(classified):
         annotated = generate_annotated_image(image, classified)
+        metrics["detection_mode"] = "make.com+openai_bbox"
     else:
         from app.make_annotate import build_local_detection_facings, make_local_annotate_enabled
 
@@ -220,8 +230,16 @@ def finalize_make_scan(
             annotated = image.copy()
 
     original_jpeg = encode_shelf_image_bytes(image)
-    annotated_jpeg = encode_annotated_image_bytes(annotated)
-    annotated_dims = annotated_image_dimensions(annotated)
+    if make_annotated_b64:
+        try:
+            annotated_jpeg = base64.b64decode(make_annotated_b64)
+            annotated_dims = annotated_image_dimensions(image)
+        except Exception:
+            annotated_jpeg = encode_annotated_image_bytes(image.copy())
+            annotated_dims = annotated_image_dimensions(image)
+    else:
+        annotated_jpeg = encode_annotated_image_bytes(annotated)
+        annotated_dims = annotated_image_dimensions(annotated)
     original_b64 = base64.b64encode(original_jpeg).decode("utf-8")
     annotated_b64 = base64.b64encode(annotated_jpeg).decode("utf-8")
     metrics["annotated_image_width"] = annotated_dims["width"]
