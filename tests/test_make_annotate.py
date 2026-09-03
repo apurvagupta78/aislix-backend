@@ -6,6 +6,7 @@ import numpy as np
 
 from app.make_annotate import (
     _assign_inventory_to_boxes,
+    _bands_from_shelf_rows,
     _filter_product_zone_boxes,
     _proportional_row_counts,
     build_sku_band_facings,
@@ -138,6 +139,35 @@ def test_build_sku_band_facings_ignores_untrusted_gpt_bboxes_by_default():
     assert bands[1]["variant"] == "Tomato tango"
     assert bands[0]["y1"] < bands[1]["y1"] < bands[2]["y1"]
 
+
+def test_bands_from_shelf_rows_lays_planogram_three_bands():
+    """Lay's rack: 6 detected rows → 3 SKU bands (3+1+2 rows) in planogram order."""
+    row_bounds = [
+        {"x1": 50, "y1": 150, "x2": 700, "y2": 230},
+        {"x1": 50, "y1": 240, "x2": 700, "y2": 320},
+        {"x1": 50, "y1": 330, "x2": 700, "y2": 410},
+        {"x1": 50, "y1": 420, "x2": 700, "y2": 500},
+        {"x1": 50, "y1": 510, "x2": 700, "y2": 590},
+        {"x1": 50, "y1": 600, "x2": 700, "y2": 680},
+    ]
+    inventory = [
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "Magic Masala", "quantity": 18},
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "Tomato tango", "quantity": 12},
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "American cream and onion", "quantity": 12},
+    ]
+    weights = [19, 6, 12]
+    bands = _bands_from_shelf_rows(inventory, row_bounds, weights, img_w=800)
+    assert len(bands) == 3
+    assert bands[0]["variant"] == "Magic Masala"
+    assert bands[0]["y1"] == 150
+    assert bands[0]["y2"] == 410
+    assert bands[1]["variant"] == "Tomato tango"
+    assert bands[1]["y1"] == 420
+    assert bands[2]["variant"] == "American cream and onion"
+    assert bands[2]["y1"] == 510
+
+
+def test_build_sku_band_facings_toothpaste_many_skus():
     image = np.zeros((1200, 800, 3), dtype=np.uint8)
     inventory = [
         {"brand": "Colgate", "product_name": "Toothpaste", "variant": "Triple Acción", "quantity": 24},

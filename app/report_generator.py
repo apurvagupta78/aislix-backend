@@ -116,8 +116,13 @@ def generate_annotated_image(image: np.ndarray, classified: list[dict]) -> np.nd
         )
         pad = 4
         label_h = text_h + baseline + pad * 2
+        band_overlay = "band" in (item.get("recognition_source") or "")
 
-        if y1 - label_h >= 0:
+        if band_overlay:
+            bg_y1 = min(y1 + pad, max(y1, y2 - label_h - pad))
+            bg_y2 = min(img_h - 1, bg_y1 + label_h)
+            text_y = bg_y1 + text_h + pad
+        elif y1 - label_h >= 0:
             bg_y1, bg_y2 = y1 - label_h, y1
             text_y = y1 - pad - baseline
         else:

@@ -192,12 +192,102 @@ def _band_layout_from_openai_facings(
     return [zone for _row, zone in paired]
 
 
+def _row_bounds_from_clusters(rows: list[list[dict]]) -> list[dict]:
+    bounds: list[dict] = []
+    for row in rows:
+        if not row:
+            continue
+        bounds.append(
+            {
+                "x1": min(int(b["x1"]) for b in row),
+                "y1": min(int(b["y1"]) for b in row),
+                "x2": max(int(b["x2"]) for b in row),
+                "y2": max(int(b["y2"]) for b in row),
+            }
+        )
+    return bounds
+
+
+def _shelf_row_bounds_from_image(
+    image: np.ndarray,
+    metadata: dict[str, Any],
+    scan_context: dict[str, Any],
+) -> list[dict]:
+    """Detect physical shelf rows via local YOLO — used only for band placement, not labels."""
+    if not make_local_annotate_enabled():
+        return []
+    img_h = int(image.shape[0])
+    try:
+        boxes = _detect_product_boxes(image, metadata, scan_context)
+    except Exception:
+        return []
+    boxes = _filter_product_zone_boxes(boxes, img_h)
+    if len(boxes) < 2:
+        return []
+    rows = _cluster_boxes_into_rows(boxes)
+    bounds = _row_bounds_from_clusters(rows)
+    return bounds if len(bounds) >= 2 else []
+
+
+def _bands_from_shelf_rows(
+    inv_rows: list[dict],
+    row_bounds: list[dict],
+    weights: list[int],
+    *,
+    img_w: int,
+) -> list[dict]:
+    """Merge detected shelf rows into one band per inventory SKU (planogram-weighted)."""
+    n_rows = len(row_bounds)
+    if n_rows <= 0 or not inv_rows:
+        return []
+
+    row_counts = _proportional_row_counts(n_rows, weights)
+    bands: list[dict] = []
+    row_idx = 0
+    for inv, count in zip(inv_rows, row_counts):
+        if count <= 0:
+            continue
+        group = row_bounds[row_idx : row_idx + count]
+        if not group:
+            break
+        pad = max(2, int(img_w * 0.01))
+        x1 = max(0, min(b["x1"] for b in group) - pad)
+        x2 = min(img_w - 1, max(b["x2"] for b in group) + pad)
+        y1 = min(b["y1"] for b in group)
+        y2 = max(b["y2"] for b in group)
+        qty = int(inv.get("quantity") or inv.get("facings") or 0)
+        bands.append(
+            {
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": max(y1 + 1, y2),
+                "brand": inv.get("brand") or "Product",
+                "product_name": inv.get("product_name") or inv.get("product") or "Detected",
+                "variant": inv.get("variant") or "",
+                "confidence": float(inv.get("confidence") or 0.0),
+                "annotation_qty": qty,
+                "pack_text": " ".join(
+                    filter(
+                        None,
+                        [inv.get("brand"), inv.get("product_name") or inv.get("product"), inv.get("variant")],
+                    )
+                ).strip(),
+                "recognition_source": "make.com+shelf_row_band",
+            }
+        )
+        row_idx += count
+    return bands
+
+
 def build_sku_band_facings(
     image: np.ndarray,
     inventory: list[dict],
     *,
     planogram_items: list[dict] | None = None,
     openai_facings: list[dict] | None = None,
+    metadata: dict[str, Any] | None = None,
+    scan_context: dict[str, Any] | None = None,
 ) -> list[dict]:
     """One horizontal band per inventory SKU — labels/qty come from GPT inventory directly."""
     img_h, img_w = int(image.shape[0]), int(image.shape[1])
@@ -214,8 +304,16 @@ def build_sku_band_facings(
     if not inv_rows:
         return []
 
-    layouts = _band_layout_from_openai_facings(inv_rows, openai_facings or [], image.shape)
     weights = [_weight_for_inventory_row(row, plano_rows, idx=i) for i, row in enumerate(inv_rows)]
+
+    if metadata is not None and scan_context is not None:
+        row_bounds = _shelf_row_bounds_from_image(image, metadata, scan_context)
+        if row_bounds:
+            row_bands = _bands_from_shelf_rows(inv_rows, row_bounds, weights, img_w=img_w)
+            if row_bands:
+                return normalize_classified_labels(row_bands)
+
+    layouts = _band_layout_from_openai_facings(inv_rows, openai_facings or [], image.shape)
 
     bands: list[dict] = []
     if layouts and len(layouts) == len(inv_rows):
@@ -299,9 +397,17 @@ def build_make_annotated_facings(
             inventory,
             planogram_items=planogram_items,
             openai_facings=gpt_layout_facings,
+            metadata=metadata,
+            scan_context=scan_context,
         )
         if bands:
-            mode = "make.com+planogram_band" if planogram_items else "make.com+sku_band"
+            src = bands[0].get("recognition_source") or ""
+            if "shelf_row_band" in src:
+                mode = "make.com+shelf_row_band"
+            elif planogram_items:
+                mode = "make.com+planogram_band"
+            else:
+                mode = "make.com+sku_band"
             return bands, mode
 
     if (
@@ -333,7 +439,13 @@ def build_make_annotated_facings(
         except Exception as exc:
             print(f"Make local annotate skipped: {exc}")
 
-    bands = build_sku_band_facings(image, inventory, planogram_items=planogram_items)
+    bands = build_sku_band_facings(
+        image,
+        inventory,
+        planogram_items=planogram_items,
+        metadata=metadata,
+        scan_context=scan_context,
+    )
     if bands:
         return bands, "make.com+sku_band"
     return [], "make.com"
