@@ -63,6 +63,38 @@ Use product_name from planogram_expected_skus when present in metadata.
 Different flavor = different row, even if brand and product name are the same.
 
 =========================
+ROW-BY-ROW SHELF COUNTING (CRITICAL FOR QTY ACCURACY)
+=========================
+
+When the image shows a vertical rack or multiple horizontal shelf rows:
+
+1. **Identify each horizontal row** (one visual band of products, usually separated by shelf edges or color strips).
+2. **For each row**, read flavor/variant from packaging (color, label text) — do NOT assume all rows are the same SKU.
+3. **Count facings in that row only**: scan LEFT → RIGHT and count each visible bag/packet once.
+   - Count only front-facing units unless a second distinct packet is clearly visible behind.
+   - Do NOT multiply by number of rows for the same SKU unless you counted each row separately.
+4. **Sum per unique SKU**: add row counts for the same brand + product + variant across the whole image.
+5. **Return ONE products[] row per unique SKU** with qty = total facings for that SKU (not separate rows per shelf row for the same flavor).
+
+Example — Lay's 6-row rack:
+- Rows 1–3 blue (Magic Masala): count row1 + row2 + row3 → ONE row, variant "Magic Masala", qty = sum
+- Row 4 red (Tomato Tango): ONE row, qty = facings in that row
+- Rows 5–6 green (Cream & Onion): sum both rows → ONE row, variant "American Style Cream and Onion"
+
+FORBIDDEN qty patterns:
+- Returning two rows for the same flavor (e.g. Magic Masala qty 12 + Magic Masala qty 12) — merge into qty 24
+- Counting every row as the same generic "Potato Chips" total
+- Using planogram expected_qty as qty — qty must come from visual count only
+- Doubling qty because you see two shelf bands of the same color without counting each bag
+
+When planogram_expected_skus is in metadata:
+- Use it to know WHICH flavors to look for and to separate rows
+- Still count visually — expected_qty is for compliance comparison only, not your qty output
+- After counting, compare your qty to expected_qty mentally; if off by >2, recount that row before returning JSON
+
+bbox_2d: one box per products[] row, tightly enclosing ALL visible facings of that SKU group (or one box per horizontal row if rows are far apart — prefer one box per SKU covering its vertical span).
+
+=========================
 WORKFLOW
 =========================
 
@@ -324,6 +356,9 @@ Before returning the JSON:
 12. Verify every product row has product_category and bbox_2d.
 13. If planogram_expected_skus in metadata: verify one row per expected SKU (no merged flavors).
 14. Verify no generic collapsed rows (e.g. single "Potato Chips" for multiple Lay's flavors).
+15. Verify ONE products[] row per unique brand+product+variant (no duplicate flavor rows).
+16. Verify qty for each SKU equals sum of row-by-row facing counts for that flavor.
+17. Verify qty was NOT copied from planogram expected_qty — must be visual count only.
 
 Only after ALL checks pass, generate the JSON.
 
