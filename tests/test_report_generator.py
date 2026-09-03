@@ -34,6 +34,23 @@ def test_annotation_uses_short_flavor_on_small_boxes():
     assert label == "Magic Masala"
 
 
+def test_annotation_uses_variant_when_product_is_generic():
+    label = _annotation_label(
+        {
+            "brand": "Colgate",
+            "product_name": "Toothpaste",
+            "variant": "Triple Accion",
+            "x1": 0,
+            "x2": 200,
+            "y1": 0,
+            "y2": 100,
+        },
+        img_w=800,
+    )
+    assert "Triple Accion" in label
+    assert "Toothpaste" not in label or "Colgate" in label
+
+
 def test_original_and_annotated_share_dimensions():
     image = np.random.randint(0, 255, (200, 300, 3), dtype=np.uint8)
     classified = [

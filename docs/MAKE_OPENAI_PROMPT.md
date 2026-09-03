@@ -70,9 +70,11 @@ When the image shows a vertical rack or multiple horizontal shelf rows:
 
 1. **Identify each horizontal row** (one visual band of products, usually separated by shelf edges or color strips).
 2. **For each row**, read flavor/variant from packaging (color, label text) — do NOT assume all rows are the same SKU.
-3. **Count facings in that row only**: scan LEFT → RIGHT and count each visible bag/packet once.
-   - Count only front-facing units unless a second distinct packet is clearly visible behind.
-   - Do NOT multiply by number of rows for the same SKU unless you counted each row separately.
+3. **Count facings in that row only**: scan LEFT → RIGHT and count each **front-facing** bag/packet once.
+   - **Default: count ONLY the front row of visible facings** (the packets facing the camera).
+   - Do NOT count depth/stacking unless a **second distinct front face** is clearly visible behind the first.
+   - Do NOT double a row's count because the shelf looks "full" — count each visible front face individually.
+   - On chip racks: if you see 6 bags in a row, qty for that row segment is 6, not 12.
 4. **Sum per unique SKU**: add row counts for the same brand + product + variant across the whole image.
 5. **Return ONE products[] row per unique SKU** with qty = total facings for that SKU (not separate rows per shelf row for the same flavor).
 
@@ -86,13 +88,28 @@ FORBIDDEN qty patterns:
 - Counting every row as the same generic "Potato Chips" total
 - Using planogram expected_qty as qty — qty must come from visual count only
 - Doubling qty because you see two shelf bands of the same color without counting each bag
+- Assuming 2-deep or 3-deep stocking on every facing without visible evidence
+- Counting Tomato Tango as 12 when only 6 front facings are visible in one row
 
 When planogram_expected_skus is in metadata:
 - Use it to know WHICH flavors to look for and to separate rows
 - Still count visually — expected_qty is for compliance comparison only, not your qty output
 - After counting, compare your qty to expected_qty mentally; if off by >2, recount that row before returning JSON
 
-bbox_2d: one box per products[] row, tightly enclosing ALL visible facings of that SKU group (or one box per horizontal row if rows are far apart — prefer one box per SKU covering its vertical span).
+bbox_2d: one box per products[] row — see ANNOTATED IMAGE & BBOX_2D section below.
+
+=========================
+FRONT-FACING COUNT (DEFAULT FOR ALL CATEGORIES)
+=========================
+
+Unless you see clear evidence of multiple front faces in depth:
+- Count ONLY packets whose front face is visible to the camera.
+- One visible front face = qty 1 for that position.
+- Do NOT multiply by 2 or 3 for "typical" shelf depth.
+- Toothpaste boxes, chip bags, shampoo bottles: count visible front units only.
+- Water bottles on lower shelf: count visible bottle fronts left-to-right.
+
+If uncertain between count N and count 2N, choose N (front facings only) unless a second row of faces is clearly visible.
 
 =========================
 WORKFLOW
@@ -239,19 +256,22 @@ If YES: keep it. If NO: remove the duplicate.
 GROUPING RULES
 =========================
 
-After ALL packets have been detected, group products ONLY when ALL of the following match:
-- Brand
-- Product
-- Variant (including flavor)
-- Shelf Position
-- product_category
+After ALL packets have been detected:
 
-Qty must equal the total number of UNIQUE visible packets in that group.
+For vertical racks / multi-row shelves (chips, planogram scans):
+- Group by Brand + Product + Variant + product_category ONLY
+- Do NOT split the same flavor into multiple rows because shelf_position differs
+- Sum qty across all horizontal rows for that SKU → ONE products[] row
 
+For flat shelves (toothpaste, shampoo) with distinct variant blocks:
+- Group by Brand + Product + Variant + product_category
+- shelf_position may differ within same variant block — still ONE row per unique SKU
+
+Qty must equal total front-facing visible packets in that group.
 Different variant or flavor = different row (even same brand).
 Different product_category = different row (e.g. Colgate toothpaste vs Frau water).
 
-The sum of ALL Qty values must equal the total number of UNIQUE packets detected in the image.
+The sum of ALL Qty values must equal the total number of UNIQUE front-facing packets detected.
 
 =========================
 PRODUCT IDENTIFICATION
@@ -309,6 +329,38 @@ Bottom Right Back
 Determine shelf position using where MOST of the packet group appears vertically and horizontally.
 
 =========================
+ANNOTATED IMAGE & BBOX_2D (CRITICAL)
+=========================
+
+The downstream system draws green boxes and labels on the shelf photo using your bbox_2d.
+Bad boxes produce floating labels in empty space — this is a hard failure.
+
+Rules for bbox_2d [x1, y1, x2, y2] normalized 0–1000:
+
+1. **Must sit ON the physical products** — every box must overlap visible product packaging.
+2. **Never draw boxes in empty air** above the shelf, between ceiling and products, or in gaps with no products.
+3. **Tight fit** — box edges should touch the outermost visible units of that SKU group (left/right/top/bottom of the block).
+4. **One box per products[] row** — each inventory row gets exactly one bbox_2d enclosing that SKU's visible region on the shelf.
+5. **Do not merge different variants** into one giant box (e.g. do not one box for all Colgate variants — separate boxes per variant).
+6. **Do not split one variant** into multiple boxes unless they are physically separated on different shelves far apart.
+7. **Include variant in identification** — toothpaste must use variant (Triple Acción, Luminous White), not generic "Toothpaste" only.
+8. **Misplaced products** (water, dishwash on toothpaste shelf) get their own box on the actual product location.
+
+Examples:
+- Lay's Magic Masala rows 1–3: one vertical box covering all blue bags of that flavor
+- Colgate Triple Acción block: one box around that red-box grid only
+- Frau water bottles bottom-left: one box around the water cluster, product_category "water"
+
+FORBIDDEN bbox patterns:
+- Box floating in empty space above shelf (no products inside)
+- Box covering entire image or half the image
+- Box labeled "Colgate - Toothpaste" spanning all Colgate variants
+- Box with y1 < 50 when products start lower on shelf (floating top boxes)
+- Missing bbox_2d on any products[] row
+
+Coordinates: x1,y1 = top-left; x2,y2 = bottom-right; all values 0–1000.
+
+=========================
 BOUNDING BOX (ANNOTATED IMAGE)
 =========================
 
@@ -319,7 +371,8 @@ Coordinates normalized 0-1000:
 - x2,y2 = bottom-right of the group region
 
 Example: water bottles bottom-left might be [40, 720, 220, 980].
-Example: Lay's blue row might be [120, 200, 880, 350].
+Example: Lay's blue Magic Masala rows might be [120, 200, 880, 550].
+Example: Colgate Triple Acción grid might be [80, 180, 420, 480].
 
 The downstream system draws boxes on the original photo using bbox_2d. Omitting bbox_2d breaks annotated results.
 
@@ -357,8 +410,11 @@ Before returning the JSON:
 13. If planogram_expected_skus in metadata: verify one row per expected SKU (no merged flavors).
 14. Verify no generic collapsed rows (e.g. single "Potato Chips" for multiple Lay's flavors).
 15. Verify ONE products[] row per unique brand+product+variant (no duplicate flavor rows).
-16. Verify qty for each SKU equals sum of row-by-row facing counts for that flavor.
+16. Verify qty = sum of row-by-row **front-facing** counts for that flavor.
 17. Verify qty was NOT copied from planogram expected_qty — must be visual count only.
+18. Verify every bbox_2d overlaps visible products (no floating boxes in empty space).
+19. Verify each variant has its own bbox (no one giant box for all Colgate variants).
+20. Verify variant field is filled whenever flavor/type is readable on packaging.
 
 Only after ALL checks pass, generate the JSON.
 

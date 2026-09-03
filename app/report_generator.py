@@ -55,7 +55,24 @@ def _short_product_name(product: str) -> str:
 def _annotation_label(item: dict, img_w: int | None = None) -> str:
     brand = _ascii_label((item.get("brand") or "?").strip())
     product = _ascii_label((item.get("product_name") or "").strip())
+    variant = _ascii_label((item.get("variant") or "").strip())
     short_product = _short_product_name(product)
+    generic_products = {
+        "toothpaste",
+        "potato chips",
+        "shampoo",
+        "conditioner",
+        "soap",
+        "water bottle",
+        "dishwashing liquid",
+        "mouthwash",
+        "unknown",
+    }
+    if variant and (
+        product.lower() in generic_products
+        or variant.lower() not in product.lower()
+    ):
+        short_product = _short_product_name(variant) or variant
     skip_product = product.lower() in {"", "unknown", "unidentified sku", brand.lower()}
     box_w = int(item.get("x2", 0)) - int(item.get("x1", 0))
     near_edge = img_w is not None and int(item.get("x2", 0)) >= img_w - 12
