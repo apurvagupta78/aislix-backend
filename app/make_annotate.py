@@ -26,6 +26,11 @@ def make_per_box_annotate_enabled() -> bool:
     return os.getenv("MAKE_ANNOTATE_PER_BOX", "false").lower() in {"1", "true", "yes"}
 
 
+def make_sku_band_use_gpt_layout() -> bool:
+    """GPT bbox spans for SKU bands are often wrong — off by default."""
+    return os.getenv("MAKE_SKU_BAND_USE_GPT_LAYOUT", "false").lower() in {"1", "true", "yes"}
+
+
 def _annotate_env_float(name: str, default: float) -> float:
     raw = os.getenv(name, "").strip()
     if not raw:
@@ -157,10 +162,17 @@ def _facing_to_zone(facing: dict[str, Any]) -> tuple[int, int, int, int]:
 def _band_layout_from_openai_facings(
     inv_rows: list[dict],
     openai_facings: list[dict],
-    default_zone: tuple[int, int, int, int],
+    image_shape: tuple[int, ...],
 ) -> list[tuple[int, int, int, int]] | None:
-    """Use GPT bbox vertical spans when we have one box per inventory SKU."""
+    """Use GPT bbox vertical spans only when trusted and one box per inventory SKU."""
+    if not make_sku_band_use_gpt_layout():
+        return None
     if len(openai_facings) != len(inv_rows):
+        return None
+
+    from app.make_scan import openai_bbox_facings_trusted
+
+    if not openai_bbox_facings_trusted(openai_facings, inv_rows, image_shape):
         return None
 
     keyed: dict[tuple[str, str, str], dict] = {}
@@ -169,15 +181,15 @@ def _band_layout_from_openai_facings(
         if key not in keyed:
             keyed[key] = facing
 
-    layouts: list[tuple[int, int, int, int]] = []
+    paired: list[tuple[dict, tuple[int, int, int, int]]] = []
     for row in inv_rows:
         facing = keyed.get(_inventory_sku_key(row))
         if not facing:
             return None
-        layouts.append(_facing_to_zone(facing))
+        paired.append((row, _facing_to_zone(facing)))
 
-    layouts.sort(key=lambda z: (z[1] + z[3]) / 2.0)
-    return layouts
+    paired.sort(key=lambda item: (item[1][1] + item[1][3]) / 2.0)
+    return [zone for _row, zone in paired]
 
 
 def build_sku_band_facings(
@@ -202,12 +214,16 @@ def build_sku_band_facings(
     if not inv_rows:
         return []
 
-    layouts = _band_layout_from_openai_facings(inv_rows, openai_facings or [], default_zone)
+    layouts = _band_layout_from_openai_facings(inv_rows, openai_facings or [], image.shape)
     weights = [_weight_for_inventory_row(row, plano_rows, idx=i) for i, row in enumerate(inv_rows)]
 
     bands: list[dict] = []
-    if layouts:
-        for inv, (bx1, by1, bx2, by2) in zip(inv_rows, layouts):
+    if layouts and len(layouts) == len(inv_rows):
+        layout_rows = sorted(
+            zip(inv_rows, layouts),
+            key=lambda item: (item[1][1] + item[1][3]) / 2.0,
+        )
+        for inv, (bx1, by1, bx2, by2) in layout_rows:
             qty = int(inv.get("quantity") or inv.get("facings") or 0)
             bands.append(
                 {
@@ -277,20 +293,12 @@ def build_make_annotated_facings(
     max_sku_bands = int(os.getenv("MAKE_SKU_BAND_MAX", "30"))
 
     if make_sku_band_annotate_enabled() and 1 <= unique_skus <= max_sku_bands:
-        relabeled_openai = openai_facings or []
-        if relabeled_openai and planogram_items:
-            from app.make_scan import relabel_facings_by_vertical_order
-
-            relabeled_openai = relabel_facings_by_vertical_order(
-                relabeled_openai,
-                inventory,
-                planogram_items=planogram_items,
-            )
+        gpt_layout_facings = openai_facings if make_sku_band_use_gpt_layout() else None
         bands = build_sku_band_facings(
             image,
             inventory,
             planogram_items=planogram_items,
-            openai_facings=relabeled_openai,
+            openai_facings=gpt_layout_facings,
         )
         if bands:
             mode = "make.com+planogram_band" if planogram_items else "make.com+sku_band"

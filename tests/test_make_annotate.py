@@ -84,7 +84,60 @@ def test_build_sku_band_facings_one_box_per_sku_with_qty():
     assert bands[0]["y1"] < bands[1]["y1"] < bands[2]["y1"]
 
 
-def test_build_sku_band_facings_toothpaste_many_skus():
+def test_build_sku_band_facings_ignores_untrusted_gpt_bboxes_by_default():
+    """GPT bbox spans must not drive band placement unless explicitly enabled."""
+    image = np.zeros((1000, 800, 3), dtype=np.uint8)
+    inventory = [
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "Magic Masala", "quantity": 16},
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "Tomato tango", "quantity": 12},
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "American cream and onion", "quantity": 8},
+    ]
+    planogram = [
+        {"brand": "Lays", "variant": "Magic Masala", "expected_qty": 19},
+        {"brand": "Lays", "variant": "Tomato tango", "expected_qty": 6},
+        {"brand": "Lays", "variant": "American cream and onion", "expected_qty": 12},
+    ]
+    # Swapped vertical GPT boxes — would mislabel if used for layout.
+    openai_facings = [
+        {
+            "brand": "Lays",
+            "product_name": "Potato Chips",
+            "variant": "Magic Masala",
+            "x1": 40,
+            "y1": 500,
+            "x2": 760,
+            "y2": 700,
+        },
+        {
+            "brand": "Lays",
+            "product_name": "Potato Chips",
+            "variant": "Tomato tango",
+            "x1": 40,
+            "y1": 120,
+            "x2": 760,
+            "y2": 320,
+        },
+        {
+            "brand": "Lays",
+            "product_name": "Potato Chips",
+            "variant": "American cream and onion",
+            "x1": 40,
+            "y1": 720,
+            "x2": 760,
+            "y2": 920,
+        },
+    ]
+    bands = build_sku_band_facings(
+        image,
+        inventory,
+        planogram_items=planogram,
+        openai_facings=openai_facings,
+    )
+    assert len(bands) == 3
+    assert bands[0]["variant"] == "Magic Masala"
+    assert bands[1]["variant"] == "Tomato tango"
+    assert bands[0]["y1"] < bands[1]["y1"] < bands[2]["y1"]
+
     image = np.zeros((1200, 800, 3), dtype=np.uint8)
     inventory = [
         {"brand": "Colgate", "product_name": "Toothpaste", "variant": "Triple Acción", "quantity": 24},
