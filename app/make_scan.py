@@ -105,9 +105,31 @@ def build_make_multipart(
             "For each product return: brand, product, variant, qty, confidence, shelf_position, "
             "product_category (e.g. toothpaste, water, mouthwash), and bbox_2d [x1,y1,x2,y2] "
             "normalized 0-1000 for annotated overlay on the shelf photo. "
-            "Flag mismatches by setting product_category to the true category even when auditing another."
+            "Flag mismatches by setting product_category to the true category even when auditing another. "
+            "NEVER collapse different flavors/variants into one generic row (e.g. do NOT return a single "
+            "'Potato Chips' row for Lay's — return separate rows for Magic Masala, Tomato Tango, Cream & Onion). "
+            "Put flavor in variant when product_name is generic."
         ),
     }
+
+    planogram_items = metadata.get("planogram_items") or []
+    if planogram_items:
+        from app.planogram_compliance import _aggregate_planogram_by_product
+
+        expected_skus = _aggregate_planogram_by_product(planogram_items)
+        payload_metadata["planogram_expected_skus"] = [
+            {
+                "brand": row.get("brand"),
+                "product_name": row.get("product_name"),
+                "variant": row.get("variant") or "",
+                "expected_qty": int(row.get("expected_qty") or 0),
+            }
+            for row in expected_skus
+        ]
+        payload_metadata["audit_instructions"] += (
+            " planogram_expected_skus in this metadata lists required SKUs — return a separate products[] "
+            "row for EACH expected SKU with matching product_name/variant; do not merge flavors."
+        )
 
     data: dict[str, str] = {
         "scan_id": scan_id,
