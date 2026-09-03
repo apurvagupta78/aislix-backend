@@ -17,6 +17,7 @@ from app.make_scan import (
     call_make_webhook,
     parse_make_response,
     use_make_provider,
+    _parse_product_bbox,
 )
 from app.scan_post_process import finalize_make_scan
 
@@ -137,6 +138,70 @@ def test_build_facings_from_openai_bbox():
     assert facings[0]["brand"] == "Frau"
     assert facings[0]["x2"] > facings[0]["x1"]
     assert facings[0]["y2"] > facings[0]["y1"]
+
+
+def test_rejects_ceiling_floating_bbox():
+    """GPT often returns boxes in empty ceiling space — backend drops them."""
+    rows = [
+        {
+            "brand": "Colgate",
+            "product": "Toothpaste",
+            "variant": "MaxFresh",
+            "qty": 12,
+            "confidence": 0.9,
+            "bbox_2d": [50, 20, 900, 150],
+        },
+        {
+            "brand": "Colgate",
+            "product": "Toothpaste",
+            "variant": "Visible White",
+            "qty": 8,
+            "confidence": 0.9,
+            "bbox_2d": [80, 180, 420, 480],
+        },
+    ]
+    facings = build_facings_from_make_products(rows, (1600, 900, 3))
+    assert len(facings) == 1
+    assert facings[0]["variant"] == "Visible White"
+
+
+def test_rejects_giant_top_strip_bbox():
+    rows = [
+        {
+            "brand": "Colgate",
+            "product": "Toothpaste",
+            "variant": "",
+            "qty": 40,
+            "confidence": 0.85,
+            "bbox_2d": [10, 10, 990, 200],
+        }
+    ]
+    facings = build_facings_from_make_products(rows, (1600, 900, 3))
+    assert facings == []
+
+
+def test_rejects_oversized_bbox():
+    rows = [
+        {
+            "brand": "Lays",
+            "product": "Potato Chips",
+            "variant": "Magic Masala",
+            "qty": 19,
+            "confidence": 0.95,
+            "bbox_2d": [20, 50, 980, 950],
+        }
+    ]
+    facings = build_facings_from_make_products(rows, (1000, 800, 3))
+    assert facings == []
+
+
+def test_clamps_bbox_to_image_bounds():
+    bbox = _parse_product_bbox({"bbox_2d": [720, 880, 1020, 1020]}, 800, 1000)
+    assert bbox is not None
+    x1, y1, x2, y2 = bbox
+    assert x1 >= 0 and y1 >= 0
+    assert x2 < 800 and y2 < 1000
+    assert x2 > x1 and y2 > y1
 
 
 def test_finalize_make_scan_uses_openai_bbox_for_annotated_image(tiny_image):

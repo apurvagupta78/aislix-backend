@@ -355,8 +355,24 @@ FORBIDDEN bbox patterns:
 - Box floating in empty space above shelf (no products inside)
 - Box covering entire image or half the image
 - Box labeled "Colgate - Toothpaste" spanning all Colgate variants
-- Box with y1 < 50 when products start lower on shelf (floating top boxes)
+- Box with y1 < 80 (8% of height) when products start lower — ceiling/header zone
+- Box area > 45% of total image (backend will DROP oversized boxes)
+- Full-width box (x span > 85%) in top 35% of image when it is only one SKU
+- Box height > 55% AND width > 75% AND y1 < 10% — giant top-anchored box (backend drops)
 - Missing bbox_2d on any products[] row
+
+HARD NUMERIC LIMITS (0–1000 coordinates — backend validates and rejects bad boxes):
+- x1 >= 0, y1 >= 0, x2 <= 1000, y2 <= 1000, x2 > x1, y2 > y1
+- Box area (x2-x1)*(y2-y1) must be <= 450000 (45% of 1000×1000)
+- For single toothpaste variant block: typical height 80–220 (one shelf band), width 120–450
+- For Lay's one flavor spanning 2–3 rows: height up to ~350, width 700–920
+- y1 for first product row is usually >= 100 on most shelf photos — never put y1 at 10–50 unless product is literally at the top edge
+- Each bbox must visually contain ONLY one variant's packaging (same colors/text)
+
+Before returning JSON, for EACH bbox_2d ask:
+1. "If I draw this rectangle, does it touch ONLY this SKU's packages?"
+2. "Is any corner in empty ceiling/wall space?" → if yes, redraw tighter.
+3. "Does this box cover a different brand/variant below or above?" → split into separate boxes.
 
 Coordinates: x1,y1 = top-left; x2,y2 = bottom-right; all values 0–1000.
 
@@ -415,6 +431,8 @@ Before returning the JSON:
 18. Verify every bbox_2d overlaps visible products (no floating boxes in empty space).
 19. Verify each variant has its own bbox (no one giant box for all Colgate variants).
 20. Verify variant field is filled whenever flavor/type is readable on packaging.
+21. Verify no bbox area > 45% of image and no ceiling boxes with y1 < 80 unless product is at top edge.
+22. Verify each bbox height matches ONE shelf band OR one multi-row chip flavor (not whole shelf).
 
 Only after ALL checks pass, generate the JSON.
 

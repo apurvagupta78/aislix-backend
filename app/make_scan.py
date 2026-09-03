@@ -243,6 +243,78 @@ def _scale_coord(value: float, axis: int, *, normalized_1000: bool = False) -> i
     return int(max(0, min(axis - 1, round(value))))
 
 
+def _bbox_env_float(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _clamp_bbox(x1: int, y1: int, x2: int, y2: int, img_w: int, img_h: int) -> tuple[int, int, int, int]:
+    x1 = max(0, min(x1, img_w - 1))
+    x2 = max(0, min(x2, img_w - 1))
+    y1 = max(0, min(y1, img_h - 1))
+    y2 = max(0, min(y2, img_h - 1))
+    if x2 <= x1:
+        x2 = min(img_w - 1, x1 + 1)
+    if y2 <= y1:
+        y2 = min(img_h - 1, y1 + 1)
+    return x1, y1, x2, y2
+
+
+def _validate_product_bbox(
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    img_w: int,
+    img_h: int,
+) -> tuple[int, int, int, int] | None:
+    """Drop GPT boxes that float in ceiling/empty space or cover unrealistic areas."""
+    x1, y1, x2, y2 = _clamp_bbox(x1, y1, x2, y2, img_w, img_h)
+
+    box_w = max(x2 - x1, 1)
+    box_h = max(y2 - y1, 1)
+    img_area = max(img_w * img_h, 1)
+    area_ratio = (box_w * box_h) / img_area
+    height_ratio = box_h / max(img_h, 1)
+    width_ratio = box_w / max(img_w, 1)
+
+    max_area = _bbox_env_float("MAKE_BBOX_MAX_AREA_RATIO", 0.45)
+    ceiling_y1 = _bbox_env_float("MAKE_BBOX_CEILING_Y1_RATIO", 0.12)
+    ceiling_y2 = _bbox_env_float("MAKE_BBOX_CEILING_Y2_RATIO", 0.22)
+    giant_top_width = _bbox_env_float("MAKE_BBOX_GIANT_TOP_WIDTH_RATIO", 0.85)
+    giant_top_y2 = _bbox_env_float("MAKE_BBOX_GIANT_TOP_Y2_RATIO", 0.35)
+    giant_top_y1 = _bbox_env_float("MAKE_BBOX_GIANT_TOP_Y1_RATIO", 0.15)
+    giant_height = _bbox_env_float("MAKE_BBOX_GIANT_HEIGHT_RATIO", 0.55)
+    giant_width = _bbox_env_float("MAKE_BBOX_GIANT_WIDTH_RATIO", 0.75)
+    giant_start_y1 = _bbox_env_float("MAKE_BBOX_GIANT_START_Y1_RATIO", 0.10)
+
+    if area_ratio > max_area:
+        return None
+
+    # Box entirely in ceiling / header band with no products.
+    if y1 < img_h * ceiling_y1 and y2 < img_h * ceiling_y2:
+        return None
+
+    # Full-width shallow strip at top (common GPT failure on toothpaste shelves).
+    if width_ratio > giant_top_width and y1 < img_h * giant_top_y1 and y2 < img_h * giant_top_y2:
+        return None
+
+    # Giant box anchored at top of frame spanning most of the image.
+    if (
+        y1 < img_h * giant_start_y1
+        and height_ratio > giant_height
+        and width_ratio > giant_width
+    ):
+        return None
+
+    return x1, y1, x2, y2
+
+
 def _parse_product_bbox(row: dict[str, Any], img_w: int, img_h: int) -> tuple[int, int, int, int] | None:
     """Parse bbox from OpenAI product row (pixels, 0-1, or 0-1000 normalized)."""
     coords: list[float] | None = None
@@ -284,7 +356,7 @@ def _parse_product_bbox(row: dict[str, Any], img_w: int, img_h: int) -> tuple[in
 
     if x2 <= x1 or y2 <= y1:
         return None
-    return x1, y1, x2, y2
+    return _validate_product_bbox(x1, y1, x2, y2, img_w, img_h)
 
 
 def build_facings_from_make_products(
