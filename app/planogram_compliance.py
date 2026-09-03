@@ -73,7 +73,7 @@ def _brand_and_type_match(expected: dict, actual: dict, scan_context: dict | Non
     if not exp_sub:
         return True
 
-    act_product = actual.get("product_name") or actual.get("name") or ""
+    act_product = _item_product_blob(actual)
     if not _text_has_kind(act_product, exp_sub):
         return False
 
@@ -102,18 +102,36 @@ def _normalize_product_tokens(product: str) -> str:
     return re.sub(r"\s+", " ", p).strip()
 
 
+def _item_product_blob(item: dict) -> str:
+    """Product name + variant — Make.com puts Lay's flavor in variant when product is generic."""
+    parts = [
+        (item.get("product_name") or item.get("name") or "").strip(),
+        (item.get("variant") or "").strip(),
+    ]
+    return " ".join(part for part in parts if part)
+
+
+def _display_product(item: dict) -> str:
+    name = (item.get("product_name") or item.get("name") or "").strip()
+    variant = (item.get("variant") or "").strip()
+    if variant and variant.lower() not in name.lower():
+        return f"{name} ({variant})" if name else variant
+    return name
+
+
 def _canonical_compliance_key(item: dict) -> str:
     """Stable product key for planogram ↔ inventory matching (merges Lay's flavor aliases)."""
     brand = _brand_key(item)
-    product = _normalize_product_tokens(item.get("product_name") or item.get("name") or "")
-    if brand in {"lays", "lay s"} or brand.startswith("lay"):
+    brand_l = brand.lower()
+    product = _normalize_product_tokens(_item_product_blob(item))
+    if brand_l in {"lays", "lay s", "lay's"} or brand_l.startswith("lay"):
         if "magic masala" in product or ("indias" in product and "masala" in product):
-            return f"{brand}|lays_magic_masala"
+            return f"{brand_l}|lays_magic_masala"
         if "tomato" in product:
-            return f"{brand}|lays_tomato_tango"
+            return f"{brand_l}|lays_tomato_tango"
         if "cream" in product and "onion" in product:
-            return f"{brand}|lays_cream_onion"
-    return f"{brand}|{product}"
+            return f"{brand_l}|lays_cream_onion"
+    return f"{brand_l}|{product}"
 
 
 def _product_match_key(item: dict) -> str:
@@ -221,20 +239,36 @@ def _match_score(expected: dict, actual: dict) -> float:
     if exp_sku and act_sku and exp_sku == act_sku:
         return 1.0
 
+    exp_canon = _canonical_compliance_key(
+        {
+            "brand": expected.get("brand"),
+            "product_name": expected.get("product_name"),
+            "variant": expected.get("variant"),
+        }
+    )
+    act_canon = _canonical_compliance_key(actual)
+    flavor_markers = ("lays_magic_masala", "lays_tomato_tango", "lays_cream_onion")
+    if exp_canon != act_canon and any(m in exp_canon for m in flavor_markers) and any(
+        m in act_canon for m in flavor_markers
+    ):
+        return 0.0
+
     exp_brand = _brand_key({"brand": expected.get("brand"), "product_name": expected.get("product_name")})
     act_brand = _brand_key(actual)
     if exp_brand != act_brand and exp_brand not in act_brand and act_brand not in exp_brand:
         return 0.0
 
-    act_product = actual.get("product_name") or actual.get("name") or ""
-    exp_product_norm = _normalize_product_tokens(expected.get("product_name") or "")
+    act_product = _item_product_blob(actual)
+    exp_product_norm = _normalize_product_tokens(
+        _item_product_blob({"product_name": expected.get("product_name"), "variant": expected.get("variant")})
+    )
     act_product_norm = _normalize_product_tokens(act_product)
     if exp_product_norm and act_product_norm:
         if exp_product_norm == act_product_norm:
             return 0.95
         if exp_product_norm in act_product_norm or act_product_norm in exp_product_norm:
             return 0.88
-    product_score = _token_overlap(expected.get("product_name") or "", act_product)
+    product_score = _token_overlap(_item_product_blob(expected), act_product)
     if product_score >= 0.5:
         return 0.6 + 0.4 * product_score
     # Lay's flavor aliases across planogram CSV vs catalog OCR names.
@@ -283,12 +317,13 @@ def _wrong_location_check(actual: dict, full_store_items: list[dict], current_ai
     if not full_store_items or not current_aisle:
         return None
     act_brand = _brand_key(actual)
-    act_product = _norm(actual.get("product_name") or actual.get("name") or "")
+    act_product = _norm(_item_product_blob(actual))
     for row in full_store_items:
         row_aisle = _norm(row.get("aisle") or row.get("location") or "")
         if not row_aisle or row_aisle == _norm(current_aisle):
             continue
-        if _brand_key(row) == act_brand and _token_overlap(row.get("product_name") or "", act_product) >= 0.4:
+        row_blob = _item_product_blob(row)
+        if _brand_key(row) == act_brand and _token_overlap(row_blob, act_product) >= 0.4:
             return row
     return None
 
@@ -367,7 +402,7 @@ def compare_planogram(
         actual = inventory[idx]
         act_qty = int(actual.get("quantity") or actual.get("facings") or 0)
         act_brand = actual.get("brand") or ""
-        act_product = actual.get("product_name") or actual.get("name") or ""
+        act_product = _display_product(actual)
 
         wrong_cat = False
         cat_name = (scan_context or {}).get("aislix_category") or expected.get("category")
@@ -459,7 +494,7 @@ def compare_planogram(
         if idx in used_actual:
             continue
         act_brand = actual.get("brand") or ""
-        act_product = actual.get("product_name") or actual.get("name") or ""
+        act_product = _display_product(actual)
         if _norm(act_brand) in {"", "unknown"} and _norm(act_product) in {"", "unknown", "unidentified sku"}:
             continue
         lines.append({

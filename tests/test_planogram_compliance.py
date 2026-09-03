@@ -422,3 +422,34 @@ def test_lays_planogram_merges_split_inventory_name_variants():
     assert magic_lines[0]["issue_type"] == ISSUE_CORRECT
     assert magic_lines[0]["actual_qty"] == 13
 
+
+def test_make_inventory_variant_field_matches_lays_planogram():
+    """Make.com returns generic product_name + flavor in variant — must not merge all Lay's SKUs."""
+    expected = [
+        {"brand": "Lays", "product_name": "Magic Masala", "expected_qty": 19, "sub_category": "chips"},
+        {"brand": "Lays", "product_name": "Tomato tango", "expected_qty": 6, "sub_category": "chips"},
+        {"brand": "Lays", "product_name": "American cream and onion", "expected_qty": 19, "sub_category": "chips"},
+    ]
+    inventory = [
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "Magic Masala", "quantity": 12},
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "Magic Masala", "quantity": 12},
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "American Style Cream and Onion", "quantity": 12},
+    ]
+    result = compare_planogram(
+        expected,
+        inventory,
+        scan_context={"sub_category": "chips", "aislix_category": "Packaged Food & Snacks", "location": "A-1-L"},
+    )
+    assert result["summary"]["expected_products"] == 3
+    assert result["summary"]["missing_products"] == 1  # Tomato tango not detected
+    assert result["planogram_sku_match_percent"] == 66.67
+    magic = next(ln for ln in result["lines"] if "magic" in _norm(ln.get("expected_product") or ""))
+    cream = next(ln for ln in result["lines"] if "cream" in _norm(ln.get("expected_product") or ""))
+    tomato = next(ln for ln in result["lines"] if "tomato" in _norm(ln.get("expected_product") or ""))
+    assert magic["issue_type"] == ISSUE_QTY_MISMATCH
+    assert magic["actual_qty"] == 24
+    assert "Magic Masala" in (magic.get("actual_product") or "")
+    assert cream["issue_type"] == ISSUE_QTY_MISMATCH
+    assert cream["actual_qty"] == 12
+    assert tomato["issue_type"] == ISSUE_MISSING
+

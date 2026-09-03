@@ -1,6 +1,6 @@
 # Make.com OpenAI — Final Prompt (copy/paste)
 
-**Make wiring:** User message → paste block below. Map `{{1.metadata}}` to webhook `metadata` field. Image: `11. image: data`.
+**Make wiring:** User message → paste block below. Text prompt: `{{11.metadata}}`. Image: `11.image:data` + `11.image:name` (webhook module **11**, not 1).
 
 **Settings:** Response format = JSON Object | Temperature = **0.3** | Max tokens = **4096** | Image detail = **High**
 
@@ -16,7 +16,7 @@ AUDIT CONTEXT (COMPLIANCE — NOT A DETECTION FILTER)
 =========================
 
 Audit context from webhook (JSON):
-{{1.metadata}}
+{{11.metadata}}
 
 The audit sub-category (e.g. toothpaste, chips) tells the retailer WHAT they are auditing for compliance.
 It does NOT limit what you detect.
