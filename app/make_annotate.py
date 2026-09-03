@@ -18,8 +18,12 @@ def make_use_openai_bbox_for_annotate() -> bool:
     return os.getenv("MAKE_USE_OPENAI_BBOX", "false").lower() in {"1", "true", "yes"}
 
 
-def make_planogram_band_annotate_enabled() -> bool:
-    return os.getenv("MAKE_PLANOGRAM_BAND_ANNOTATE", "true").lower() in {"1", "true", "yes"}
+def make_sku_band_annotate_enabled() -> bool:
+    return os.getenv("MAKE_SKU_BAND_ANNOTATE", "true").lower() in {"1", "true", "yes"}
+
+
+def make_per_box_annotate_enabled() -> bool:
+    return os.getenv("MAKE_ANNOTATE_PER_BOX", "false").lower() in {"1", "true", "yes"}
 
 
 def _annotate_env_float(name: str, default: float) -> float:
@@ -32,75 +36,13 @@ def _annotate_env_float(name: str, default: float) -> float:
         return default
 
 
-def _filter_product_zone_boxes(boxes: list[dict], img_h: int) -> list[dict]:
-    """Drop detections in ceiling/header zone before labeling."""
-    min_y1 = _annotate_env_float("MAKE_ANNOTATE_MIN_Y1_RATIO", 0.15)
-    min_center_y = _annotate_env_float("MAKE_ANNOTATE_MIN_CENTER_Y_RATIO", 0.17)
-    max_height_ratio = _annotate_env_float("MAKE_ANNOTATE_MAX_BOX_HEIGHT_RATIO", 0.35)
-    kept: list[dict] = []
-    for box in boxes:
-        y1 = int(box["y1"])
-        y2 = int(box["y2"])
-        if y2 <= y1:
-            continue
-        cy = (y1 + y2) / 2.0
-        height_ratio = (y2 - y1) / max(img_h, 1)
-        if y1 < img_h * min_y1 or cy < img_h * min_center_y:
-            continue
-        if height_ratio > max_height_ratio:
-            continue
-        kept.append(box)
-    return kept
-
-
-def _percentile(values: list[int], ratio: float) -> int:
-    if not values:
-        return 0
-    ordered = sorted(values)
-    idx = min(len(ordered) - 1, max(0, int(round((len(ordered) - 1) * ratio))))
-    return int(ordered[idx])
-
-
-def _product_zone_from_boxes(
-    boxes: list[dict],
-    img_h: int,
-    img_w: int,
-) -> tuple[int, int, int, int]:
-    if not boxes:
-        margin_x = int(img_w * 0.05)
-        return margin_x, int(img_h * 0.15), img_w - margin_x, int(img_h * 0.95)
+def _default_product_zone(img_h: int, img_w: int) -> tuple[int, int, int, int]:
     return (
-        _percentile([int(b["x1"]) for b in boxes], 0.05),
-        _percentile([int(b["y1"]) for b in boxes], 0.05),
-        _percentile([int(b["x2"]) for b in boxes], 0.95),
-        _percentile([int(b["y2"]) for b in boxes], 0.95),
+        int(img_w * 0.04),
+        int(img_h * _annotate_env_float("MAKE_ANNOTATE_ZONE_TOP_RATIO", 0.12)),
+        int(img_w * 0.96),
+        int(img_h * _annotate_env_float("MAKE_ANNOTATE_ZONE_BOTTOM_RATIO", 0.96)),
     )
-
-
-def _cluster_boxes_into_rows(boxes: list[dict], *, row_tolerance: float = 0.08) -> list[list[dict]]:
-    if not boxes:
-        return []
-    heights = [max(1, int(b["y2"]) - int(b["y1"])) for b in boxes]
-    median_h = sorted(heights)[len(heights) // 2]
-    tol = max(median_h * 0.45, int(boxes[0]["y2"]) * row_tolerance)
-
-    sorted_boxes = sorted(boxes, key=lambda b: (int(b["y1"]) + int(b["y2"])) / 2.0)
-    rows: list[list[dict]] = []
-    for box in sorted_boxes:
-        cy = (int(box["y1"]) + int(box["y2"])) / 2.0
-        placed = False
-        for row in rows:
-            row_cy = sum((int(b["y1"]) + int(b["y2"])) / 2.0 for b in row) / len(row)
-            if abs(cy - row_cy) <= tol:
-                row.append(box)
-                placed = True
-                break
-        if not placed:
-            rows.append([box])
-    for row in rows:
-        row.sort(key=lambda b: int(b["x1"]))
-    rows.sort(key=lambda row: sum((int(b["y1"]) + int(b["y2"])) / 2.0 for b in row) / len(row))
-    return rows
 
 
 def _inventory_sku_key(row: dict) -> tuple[str, str, str]:
@@ -108,14 +50,6 @@ def _inventory_sku_key(row: dict) -> tuple[str, str, str]:
         (row.get("brand") or "").strip().lower(),
         (row.get("product_name") or row.get("product") or "").strip().lower(),
         (row.get("variant") or "").strip().lower(),
-    )
-
-
-def _planogram_item_key(item: dict) -> tuple[str, str, str]:
-    return (
-        (item.get("brand") or "").strip().lower(),
-        (item.get("product_name") or item.get("product") or "").strip().lower(),
-        (item.get("variant") or "").strip().lower(),
     )
 
 
@@ -137,6 +71,8 @@ def _unique_inventory_for_assignment(inventory: list[dict]) -> list[dict]:
     seen: set[tuple[str, str, str]] = set()
     unique: list[dict] = []
     for row in inventory:
+        if row.get("counted_in_totals") is False:
+            continue
         key = _inventory_sku_key(row)
         if key in seen:
             continue
@@ -151,7 +87,14 @@ def _inventory_in_planogram_order(
 ) -> list[dict]:
     unique = _unique_inventory_for_assignment(inventory)
     if not planogram_items:
-        return unique
+        return sorted(
+            unique,
+            key=lambda row: (
+                -(int(row.get("quantity") or row.get("facings") or 0)),
+                row.get("brand") or "",
+                row.get("variant") or row.get("product_name") or "",
+            ),
+        )
 
     ordered: list[dict] = []
     used: set[tuple[str, str, str]] = set()
@@ -180,12 +123,264 @@ def _weight_for_inventory_row(
     if planogram_items:
         for item in planogram_items:
             if _inventory_matches_planogram(row, item):
-                return max(1, int(item.get("expected_qty") or 1))
+                return max(1, int(item.get("expected_qty") or 0))
     return max(1, int(row.get("quantity") or row.get("facings") or 1))
 
 
+def _proportional_band_heights(zone_h: int, weights: list[int]) -> list[int]:
+    n = len(weights)
+    if n <= 0 or zone_h <= 0:
+        return []
+    if n == 1:
+        return [zone_h]
+
+    total = sum(max(1, w) for w in weights)
+    heights: list[int] = []
+    assigned = 0
+    for i, weight in enumerate(weights):
+        if i == n - 1:
+            heights.append(max(1, zone_h - assigned))
+            continue
+        remaining = zone_h - assigned
+        remaining_skus = n - i
+        share = max(1, round(remaining * max(1, weight) / total))
+        share = min(share, max(1, remaining - (remaining_skus - 1)))
+        heights.append(share)
+        assigned += share
+    return heights
+
+
+def _facing_to_zone(facing: dict[str, Any]) -> tuple[int, int, int, int]:
+    return int(facing["x1"]), int(facing["y1"]), int(facing["x2"]), int(facing["y2"])
+
+
+def _band_layout_from_openai_facings(
+    inv_rows: list[dict],
+    openai_facings: list[dict],
+    default_zone: tuple[int, int, int, int],
+) -> list[tuple[int, int, int, int]] | None:
+    """Use GPT bbox vertical spans when we have one box per inventory SKU."""
+    if len(openai_facings) != len(inv_rows):
+        return None
+
+    keyed: dict[tuple[str, str, str], dict] = {}
+    for facing in openai_facings:
+        key = _inventory_sku_key(facing)
+        if key not in keyed:
+            keyed[key] = facing
+
+    layouts: list[tuple[int, int, int, int]] = []
+    for row in inv_rows:
+        facing = keyed.get(_inventory_sku_key(row))
+        if not facing:
+            return None
+        layouts.append(_facing_to_zone(facing))
+
+    layouts.sort(key=lambda z: (z[1] + z[3]) / 2.0)
+    return layouts
+
+
+def build_sku_band_facings(
+    image: np.ndarray,
+    inventory: list[dict],
+    *,
+    planogram_items: list[dict] | None = None,
+    openai_facings: list[dict] | None = None,
+) -> list[dict]:
+    """One horizontal band per inventory SKU — labels/qty come from GPT inventory directly."""
+    img_h, img_w = int(image.shape[0]), int(image.shape[1])
+    default_zone = _default_product_zone(img_h, img_w)
+    x1, y1, x2, y2 = default_zone
+
+    plano_rows = planogram_items
+    if planogram_items:
+        from app.planogram_compliance import _aggregate_planogram_by_product
+
+        plano_rows = _aggregate_planogram_by_product(planogram_items)
+
+    inv_rows = _inventory_in_planogram_order(inventory, plano_rows)
+    if not inv_rows:
+        return []
+
+    layouts = _band_layout_from_openai_facings(inv_rows, openai_facings or [], default_zone)
+    weights = [_weight_for_inventory_row(row, plano_rows, idx=i) for i, row in enumerate(inv_rows)]
+
+    bands: list[dict] = []
+    if layouts:
+        for inv, (bx1, by1, bx2, by2) in zip(inv_rows, layouts):
+            qty = int(inv.get("quantity") or inv.get("facings") or 0)
+            bands.append(
+                {
+                    "x1": max(x1, bx1),
+                    "y1": by1,
+                    "x2": min(x2, bx2),
+                    "y2": by2,
+                    "brand": inv.get("brand") or "Product",
+                    "product_name": inv.get("product_name") or inv.get("product") or "Detected",
+                    "variant": inv.get("variant") or "",
+                    "confidence": float(inv.get("confidence") or 0.0),
+                    "annotation_qty": qty,
+                    "pack_text": " ".join(
+                        filter(
+                            None,
+                            [inv.get("brand"), inv.get("product_name") or inv.get("product"), inv.get("variant")],
+                        )
+                    ).strip(),
+                    "recognition_source": "make.com+sku_band",
+                }
+            )
+        return normalize_classified_labels(bands)
+
+    zone_h = max(y2 - y1, 1)
+    heights = _proportional_band_heights(zone_h, weights)
+    y_cursor = y1
+    for idx, inv in enumerate(inv_rows):
+        band_h = heights[idx] if idx < len(heights) else max(1, y2 - y_cursor)
+        band_y2 = y2 if idx == len(inv_rows) - 1 else min(y2, y_cursor + band_h)
+        qty = int(inv.get("quantity") or inv.get("facings") or 0)
+        bands.append(
+            {
+                "x1": x1,
+                "y1": y_cursor,
+                "x2": x2,
+                "y2": max(y_cursor + 1, band_y2),
+                "brand": inv.get("brand") or "Product",
+                "product_name": inv.get("product_name") or inv.get("product") or "Detected",
+                "variant": inv.get("variant") or "",
+                "confidence": float(inv.get("confidence") or 0.0),
+                "annotation_qty": qty,
+                "pack_text": " ".join(
+                    filter(
+                        None,
+                        [inv.get("brand"), inv.get("product_name") or inv.get("product"), inv.get("variant")],
+                    )
+                ).strip(),
+                "recognition_source": "make.com+sku_band",
+            }
+        )
+        y_cursor = band_y2
+
+    return normalize_classified_labels(bands)
+
+
+def build_make_annotated_facings(
+    image: np.ndarray,
+    inventory: list[dict],
+    *,
+    metadata: dict[str, Any],
+    scan_context: dict[str, Any],
+    planogram_items: list[dict] | None = None,
+    openai_facings: list[dict] | None = None,
+) -> tuple[list[dict], str]:
+    """Build facings used ONLY for annotated image rendering."""
+    unique_skus = len(_unique_inventory_for_assignment(inventory))
+    max_sku_bands = int(os.getenv("MAKE_SKU_BAND_MAX", "30"))
+
+    if make_sku_band_annotate_enabled() and 1 <= unique_skus <= max_sku_bands:
+        relabeled_openai = openai_facings or []
+        if relabeled_openai and planogram_items:
+            from app.make_scan import relabel_facings_by_vertical_order
+
+            relabeled_openai = relabel_facings_by_vertical_order(
+                relabeled_openai,
+                inventory,
+                planogram_items=planogram_items,
+            )
+        bands = build_sku_band_facings(
+            image,
+            inventory,
+            planogram_items=planogram_items,
+            openai_facings=relabeled_openai,
+        )
+        if bands:
+            mode = "make.com+planogram_band" if planogram_items else "make.com+sku_band"
+            return bands, mode
+
+    if (
+        openai_facings
+        and make_use_openai_bbox_for_annotate()
+        and len(openai_facings) >= unique_skus
+    ):
+        from app.make_scan import openai_bbox_facings_trusted, relabel_facings_by_vertical_order
+
+        if openai_bbox_facings_trusted(openai_facings, inventory, image.shape):
+            relabeled = relabel_facings_by_vertical_order(
+                openai_facings,
+                inventory,
+                planogram_items=planogram_items,
+            )
+            return normalize_classified_labels(relabeled), "make.com+openai_bbox"
+
+    if make_per_box_annotate_enabled() and make_local_annotate_enabled():
+        try:
+            local = build_local_detection_facings(
+                image,
+                metadata,
+                scan_context,
+                inventory,
+                planogram_items=planogram_items,
+            )
+            if local:
+                return local, "make.com+local_yolo"
+        except Exception as exc:
+            print(f"Make local annotate skipped: {exc}")
+
+    bands = build_sku_band_facings(image, inventory, planogram_items=planogram_items)
+    if bands:
+        return bands, "make.com+sku_band"
+    return [], "make.com"
+
+
+# --- Legacy per-box YOLO path (opt-in via MAKE_ANNOTATE_PER_BOX=true) ---
+
+
+def _filter_product_zone_boxes(boxes: list[dict], img_h: int) -> list[dict]:
+    min_y1 = _annotate_env_float("MAKE_ANNOTATE_MIN_Y1_RATIO", 0.15)
+    min_center_y = _annotate_env_float("MAKE_ANNOTATE_MIN_CENTER_Y_RATIO", 0.17)
+    max_height_ratio = _annotate_env_float("MAKE_ANNOTATE_MAX_BOX_HEIGHT_RATIO", 0.35)
+    kept: list[dict] = []
+    for box in boxes:
+        y1 = int(box["y1"])
+        y2 = int(box["y2"])
+        if y2 <= y1:
+            continue
+        cy = (y1 + y2) / 2.0
+        height_ratio = (y2 - y1) / max(img_h, 1)
+        if y1 < img_h * min_y1 or cy < img_h * min_center_y:
+            continue
+        if height_ratio > max_height_ratio:
+            continue
+        kept.append(box)
+    return kept
+
+
+def _cluster_boxes_into_rows(boxes: list[dict], *, row_tolerance: float = 0.08) -> list[list[dict]]:
+    if not boxes:
+        return []
+    heights = [max(1, int(b["y2"]) - int(b["y1"])) for b in boxes]
+    median_h = sorted(heights)[len(heights) // 2]
+    tol = max(median_h * 0.45, int(boxes[0]["y2"]) * row_tolerance)
+
+    sorted_boxes = sorted(boxes, key=lambda b: (int(b["y1"]) + int(b["y2"])) / 2.0)
+    rows: list[list[dict]] = []
+    for box in sorted_boxes:
+        cy = (int(box["y1"]) + int(box["y2"])) / 2.0
+        placed = False
+        for row in rows:
+            row_cy = sum((int(b["y1"]) + int(b["y2"])) / 2.0 for b in row) / len(row)
+            if abs(cy - row_cy) <= tol:
+                row.append(box)
+                placed = True
+                break
+        if not placed:
+            rows.append([box])
+    for row in rows:
+        row.sort(key=lambda b: int(b["x1"]))
+    rows.sort(key=lambda row: sum((int(b["y1"]) + int(b["y2"])) / 2.0 for b in row) / len(row))
+    return rows
+
+
 def _proportional_row_counts(n_rows: int, weights: list[int]) -> list[int]:
-    """Split shelf row clusters across SKUs (e.g. 6 chip rows → 3+1+2 by planogram qty)."""
     n_skus = len(weights)
     if n_rows <= 0 or n_skus <= 0:
         return []
@@ -205,7 +400,7 @@ def _proportional_row_counts(n_rows: int, weights: list[int]) -> list[int]:
         remaining_rows = n_rows - assigned
         remaining_skus = n_skus - i
         share = max(1, round(remaining_rows * max(1, weight) / total))
-        share = min(share, remaining_rows - (remaining_skus - 1))
+        share = min(share, max(1, remaining_rows - (remaining_skus - 1)))
         counts.append(share)
         assigned += share
     return counts
@@ -216,20 +411,18 @@ def _label_boxes_with_inventory(boxes: list[dict], inv: dict) -> list[dict]:
     product_name = inv.get("product_name") or inv.get("product") or "Detected"
     variant = inv.get("variant") or ""
     confidence = float(inv.get("confidence") or 0.0)
-    labeled: list[dict] = []
-    for box in boxes:
-        labeled.append(
-            {
-                **box,
-                "brand": brand,
-                "product_name": product_name,
-                "variant": variant,
-                "confidence": confidence,
-                "pack_text": f"{brand} {product_name} {variant}".strip(),
-                "recognition_source": "make.com+local_detect",
-            }
-        )
-    return labeled
+    return [
+        {
+            **box,
+            "brand": brand,
+            "product_name": product_name,
+            "variant": variant,
+            "confidence": confidence,
+            "pack_text": f"{brand} {product_name} {variant}".strip(),
+            "recognition_source": "make.com+local_detect",
+        }
+        for box in boxes
+    ]
 
 
 def _assign_inventory_to_boxes(
@@ -239,7 +432,6 @@ def _assign_inventory_to_boxes(
     planogram_items: list[dict] | None = None,
     img_h: int | None = None,
 ) -> list[dict]:
-    """Assign GPT inventory labels to YOLO boxes using shelf-row bands."""
     if not boxes:
         return []
     if not inventory:
@@ -264,7 +456,6 @@ def _assign_inventory_to_boxes(
     inv_rows = _inventory_in_planogram_order(inventory, planogram_items)
     n_rows = len(rows)
     n_skus = len(inv_rows)
-
     if n_skus == 0:
         return []
 
@@ -299,112 +490,6 @@ def _detect_product_boxes(
     return [{"x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2)} for x1, y1, x2, y2 in boxes]
 
 
-def build_planogram_sku_band_facings(
-    image: np.ndarray,
-    inventory: list[dict],
-    *,
-    planogram_items: list[dict],
-    metadata: dict[str, Any],
-    scan_context: dict[str, Any],
-) -> list[dict]:
-    """One annotated band per planogram SKU with inventory qty — matches dashboard counts."""
-    img_h, img_w = int(image.shape[0]), int(image.shape[1])
-    raw_boxes = _detect_product_boxes(image, metadata, scan_context)
-    filtered = _filter_product_zone_boxes(raw_boxes, img_h)
-    x1, y1, x2, y2 = _product_zone_from_boxes(filtered, img_h, img_w)
-
-    inv_rows = _inventory_in_planogram_order(inventory, planogram_items)
-    if not inv_rows:
-        return []
-
-    weights = [_weight_for_inventory_row(row, planogram_items, idx=i) for i, row in enumerate(inv_rows)]
-    zone_h = max(y2 - y1, 1)
-    total_w = sum(max(1, w) for w in weights)
-    bands: list[dict] = []
-    y_cursor = y1
-
-    for idx, inv in enumerate(inv_rows):
-        if idx == len(inv_rows) - 1:
-            band_y2 = y2
-        else:
-            remaining = len(inv_rows) - idx
-            share = max(1, round(zone_h * max(1, weights[idx]) / total_w))
-            share = min(share, max(1, (y2 - y_cursor) - (remaining - 1)))
-            band_y2 = min(y2, y_cursor + share)
-        qty = int(inv.get("quantity") or inv.get("facings") or 0)
-        bands.append(
-            {
-                "x1": x1,
-                "y1": y_cursor,
-                "x2": x2,
-                "y2": max(y_cursor + 1, band_y2),
-                "brand": inv.get("brand") or "Product",
-                "product_name": inv.get("product_name") or inv.get("product") or "Detected",
-                "variant": inv.get("variant") or "",
-                "confidence": float(inv.get("confidence") or 0.0),
-                "annotation_qty": qty,
-                "pack_text": f"{inv.get('brand')} {inv.get('product_name') or inv.get('product')} {inv.get('variant')}".strip(),
-                "recognition_source": "make.com+planogram_band",
-            }
-        )
-        y_cursor = band_y2
-
-    return normalize_classified_labels(bands)
-
-
-def build_make_annotated_facings(
-    image: np.ndarray,
-    inventory: list[dict],
-    *,
-    metadata: dict[str, Any],
-    scan_context: dict[str, Any],
-    planogram_items: list[dict] | None = None,
-    openai_facings: list[dict] | None = None,
-) -> tuple[list[dict], str]:
-    """Build facings used ONLY for annotated image rendering."""
-    if planogram_items and make_planogram_band_annotate_enabled():
-        bands = build_planogram_sku_band_facings(
-            image,
-            inventory,
-            planogram_items=planogram_items,
-            metadata=metadata,
-            scan_context=scan_context,
-        )
-        if bands:
-            return bands, "make.com+planogram_band"
-
-    if (
-        openai_facings
-        and make_use_openai_bbox_for_annotate()
-        and len(openai_facings) >= len(_unique_inventory_for_assignment(inventory))
-    ):
-        from app.make_scan import openai_bbox_facings_trusted, relabel_facings_by_vertical_order
-
-        if openai_bbox_facings_trusted(openai_facings, inventory, image.shape):
-            relabeled = relabel_facings_by_vertical_order(
-                openai_facings,
-                inventory,
-                planogram_items=planogram_items,
-            )
-            return normalize_classified_labels(relabeled), "make.com+openai_bbox"
-
-    if make_local_annotate_enabled():
-        try:
-            local = build_local_detection_facings(
-                image,
-                metadata,
-                scan_context,
-                inventory,
-                planogram_items=planogram_items,
-            )
-            if local:
-                return local, "make.com+local_yolo"
-        except Exception as exc:
-            print(f"Make local annotate skipped: {exc}")
-
-    return [], "make.com"
-
-
 def build_local_detection_facings(
     image: np.ndarray,
     metadata: dict[str, Any],
@@ -413,8 +498,6 @@ def build_local_detection_facings(
     *,
     planogram_items: list[dict] | None = None,
 ) -> list[dict]:
-    from app.pipeline import _detect_boxes_for_scan
-
     img_h = int(image.shape[0])
     facings = _detect_product_boxes(image, metadata, scan_context)
     assigned = _assign_inventory_to_boxes(
@@ -424,3 +507,7 @@ def build_local_detection_facings(
         img_h=img_h,
     )
     return normalize_classified_labels(assigned)
+
+
+# Backward-compatible alias
+build_planogram_sku_band_facings = build_sku_band_facings

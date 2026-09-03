@@ -252,6 +252,7 @@ def test_relabel_facings_by_vertical_order_fixes_swapped_labels():
 
 def test_finalize_make_scan_uses_openai_bbox_for_annotated_image(tiny_image, monkeypatch):
     monkeypatch.setenv("MAKE_USE_OPENAI_BBOX", "true")
+    monkeypatch.setenv("MAKE_SKU_BAND_ANNOTATE", "false")
     monkeypatch.setenv("MAKE_PLANOGRAM_BAND_ANNOTATE", "false")
     parsed = parse_make_response(
         {
