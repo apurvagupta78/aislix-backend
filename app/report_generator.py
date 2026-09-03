@@ -81,11 +81,16 @@ def _annotation_label(item: dict, img_w: int | None = None) -> str:
         prefix = "WRONG: "
         budget = max_len - len(prefix)
         return f"{prefix}{brand[:max(budget, 8)]}"
+    qty = item.get("annotation_qty")
+    qty_suffix = f" ({int(qty)})" if qty not in (None, "", 0) else ""
     if short_product and not skip_product:
         if box_w < 80 or near_edge:
-            return short_product[:max_len]
-        label = f"{brand} - {short_product}"
+            label = f"{short_product}{qty_suffix}"
+            return label[:max_len]
+        label = f"{brand} - {short_product}{qty_suffix}"
         return label[:max_len]
+    if qty_suffix:
+        return f"{brand}{qty_suffix}"[:max_len]
     return brand[:max_len]
 
 

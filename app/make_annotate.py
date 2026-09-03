@@ -14,6 +14,14 @@ def make_local_annotate_enabled() -> bool:
     return os.getenv("MAKE_LOCAL_ANNOTATE", "true").lower() in {"1", "true", "yes"}
 
 
+def make_use_openai_bbox_for_annotate() -> bool:
+    return os.getenv("MAKE_USE_OPENAI_BBOX", "false").lower() in {"1", "true", "yes"}
+
+
+def make_planogram_band_annotate_enabled() -> bool:
+    return os.getenv("MAKE_PLANOGRAM_BAND_ANNOTATE", "true").lower() in {"1", "true", "yes"}
+
+
 def _annotate_env_float(name: str, default: float) -> float:
     raw = os.getenv(name, "").strip()
     if not raw:
@@ -26,8 +34,9 @@ def _annotate_env_float(name: str, default: float) -> float:
 
 def _filter_product_zone_boxes(boxes: list[dict], img_h: int) -> list[dict]:
     """Drop detections in ceiling/header zone before labeling."""
-    min_y1 = _annotate_env_float("MAKE_ANNOTATE_MIN_Y1_RATIO", 0.12)
-    min_center_y = _annotate_env_float("MAKE_ANNOTATE_MIN_CENTER_Y_RATIO", 0.14)
+    min_y1 = _annotate_env_float("MAKE_ANNOTATE_MIN_Y1_RATIO", 0.15)
+    min_center_y = _annotate_env_float("MAKE_ANNOTATE_MIN_CENTER_Y_RATIO", 0.17)
+    max_height_ratio = _annotate_env_float("MAKE_ANNOTATE_MAX_BOX_HEIGHT_RATIO", 0.35)
     kept: list[dict] = []
     for box in boxes:
         y1 = int(box["y1"])
@@ -35,10 +44,37 @@ def _filter_product_zone_boxes(boxes: list[dict], img_h: int) -> list[dict]:
         if y2 <= y1:
             continue
         cy = (y1 + y2) / 2.0
+        height_ratio = (y2 - y1) / max(img_h, 1)
         if y1 < img_h * min_y1 or cy < img_h * min_center_y:
+            continue
+        if height_ratio > max_height_ratio:
             continue
         kept.append(box)
     return kept
+
+
+def _percentile(values: list[int], ratio: float) -> int:
+    if not values:
+        return 0
+    ordered = sorted(values)
+    idx = min(len(ordered) - 1, max(0, int(round((len(ordered) - 1) * ratio))))
+    return int(ordered[idx])
+
+
+def _product_zone_from_boxes(
+    boxes: list[dict],
+    img_h: int,
+    img_w: int,
+) -> tuple[int, int, int, int]:
+    if not boxes:
+        margin_x = int(img_w * 0.05)
+        return margin_x, int(img_h * 0.15), img_w - margin_x, int(img_h * 0.95)
+    return (
+        _percentile([int(b["x1"]) for b in boxes], 0.05),
+        _percentile([int(b["y1"]) for b in boxes], 0.05),
+        _percentile([int(b["x2"]) for b in boxes], 0.95),
+        _percentile([int(b["y2"]) for b in boxes], 0.95),
+    )
 
 
 def _cluster_boxes_into_rows(boxes: list[dict], *, row_tolerance: float = 0.08) -> list[list[dict]]:
@@ -252,6 +288,123 @@ def _assign_inventory_to_boxes(
     return labeled
 
 
+def _detect_product_boxes(
+    image: np.ndarray,
+    metadata: dict[str, Any],
+    scan_context: dict[str, Any],
+) -> list[dict]:
+    from app.pipeline import _detect_boxes_for_scan
+
+    boxes, _shelf_mode, _gap_stats = _detect_boxes_for_scan(image, metadata, scan_context)
+    return [{"x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2)} for x1, y1, x2, y2 in boxes]
+
+
+def build_planogram_sku_band_facings(
+    image: np.ndarray,
+    inventory: list[dict],
+    *,
+    planogram_items: list[dict],
+    metadata: dict[str, Any],
+    scan_context: dict[str, Any],
+) -> list[dict]:
+    """One annotated band per planogram SKU with inventory qty — matches dashboard counts."""
+    img_h, img_w = int(image.shape[0]), int(image.shape[1])
+    raw_boxes = _detect_product_boxes(image, metadata, scan_context)
+    filtered = _filter_product_zone_boxes(raw_boxes, img_h)
+    x1, y1, x2, y2 = _product_zone_from_boxes(filtered, img_h, img_w)
+
+    inv_rows = _inventory_in_planogram_order(inventory, planogram_items)
+    if not inv_rows:
+        return []
+
+    weights = [_weight_for_inventory_row(row, planogram_items, idx=i) for i, row in enumerate(inv_rows)]
+    zone_h = max(y2 - y1, 1)
+    total_w = sum(max(1, w) for w in weights)
+    bands: list[dict] = []
+    y_cursor = y1
+
+    for idx, inv in enumerate(inv_rows):
+        if idx == len(inv_rows) - 1:
+            band_y2 = y2
+        else:
+            remaining = len(inv_rows) - idx
+            share = max(1, round(zone_h * max(1, weights[idx]) / total_w))
+            share = min(share, max(1, (y2 - y_cursor) - (remaining - 1)))
+            band_y2 = min(y2, y_cursor + share)
+        qty = int(inv.get("quantity") or inv.get("facings") or 0)
+        bands.append(
+            {
+                "x1": x1,
+                "y1": y_cursor,
+                "x2": x2,
+                "y2": max(y_cursor + 1, band_y2),
+                "brand": inv.get("brand") or "Product",
+                "product_name": inv.get("product_name") or inv.get("product") or "Detected",
+                "variant": inv.get("variant") or "",
+                "confidence": float(inv.get("confidence") or 0.0),
+                "annotation_qty": qty,
+                "pack_text": f"{inv.get('brand')} {inv.get('product_name') or inv.get('product')} {inv.get('variant')}".strip(),
+                "recognition_source": "make.com+planogram_band",
+            }
+        )
+        y_cursor = band_y2
+
+    return normalize_classified_labels(bands)
+
+
+def build_make_annotated_facings(
+    image: np.ndarray,
+    inventory: list[dict],
+    *,
+    metadata: dict[str, Any],
+    scan_context: dict[str, Any],
+    planogram_items: list[dict] | None = None,
+    openai_facings: list[dict] | None = None,
+) -> tuple[list[dict], str]:
+    """Build facings used ONLY for annotated image rendering."""
+    if planogram_items and make_planogram_band_annotate_enabled():
+        bands = build_planogram_sku_band_facings(
+            image,
+            inventory,
+            planogram_items=planogram_items,
+            metadata=metadata,
+            scan_context=scan_context,
+        )
+        if bands:
+            return bands, "make.com+planogram_band"
+
+    if (
+        openai_facings
+        and make_use_openai_bbox_for_annotate()
+        and len(openai_facings) >= len(_unique_inventory_for_assignment(inventory))
+    ):
+        from app.make_scan import openai_bbox_facings_trusted, relabel_facings_by_vertical_order
+
+        if openai_bbox_facings_trusted(openai_facings, inventory, image.shape):
+            relabeled = relabel_facings_by_vertical_order(
+                openai_facings,
+                inventory,
+                planogram_items=planogram_items,
+            )
+            return normalize_classified_labels(relabeled), "make.com+openai_bbox"
+
+    if make_local_annotate_enabled():
+        try:
+            local = build_local_detection_facings(
+                image,
+                metadata,
+                scan_context,
+                inventory,
+                planogram_items=planogram_items,
+            )
+            if local:
+                return local, "make.com+local_yolo"
+        except Exception as exc:
+            print(f"Make local annotate skipped: {exc}")
+
+    return [], "make.com"
+
+
 def build_local_detection_facings(
     image: np.ndarray,
     metadata: dict[str, Any],
@@ -263,10 +416,7 @@ def build_local_detection_facings(
     from app.pipeline import _detect_boxes_for_scan
 
     img_h = int(image.shape[0])
-    boxes, _shelf_mode, _gap_stats = _detect_boxes_for_scan(image, metadata, scan_context)
-    facings: list[dict] = []
-    for x1, y1, x2, y2 in boxes:
-        facings.append({"x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2)})
+    facings = _detect_product_boxes(image, metadata, scan_context)
     assigned = _assign_inventory_to_boxes(
         facings,
         inventory,

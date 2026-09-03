@@ -250,7 +250,9 @@ def test_relabel_facings_by_vertical_order_fixes_swapped_labels():
     assert relabeled[2]["variant"] == "American cream and onion"
 
 
-def test_finalize_make_scan_uses_openai_bbox_for_annotated_image(tiny_image):
+def test_finalize_make_scan_uses_openai_bbox_for_annotated_image(tiny_image, monkeypatch):
+    monkeypatch.setenv("MAKE_USE_OPENAI_BBOX", "true")
+    monkeypatch.setenv("MAKE_PLANOGRAM_BAND_ANNOTATE", "false")
     parsed = parse_make_response(
         {
             "products": [
@@ -320,7 +322,8 @@ def test_parse_make_response_unwraps_body_key():
     assert len(parsed["facings"]) == 1
 
 
-def test_finalize_make_scan_partial_inventory(tiny_image):
+def test_finalize_make_scan_partial_inventory(tiny_image, monkeypatch):
+    monkeypatch.setenv("MAKE_LOCAL_ANNOTATE", "false")
     parsed = parse_make_response(
         {
             "inventory": [
@@ -345,7 +348,8 @@ def test_finalize_make_scan_partial_inventory(tiny_image):
     assert result["pdf_base64"]
 
 
-def test_finalize_make_scan_with_facings(tiny_image):
+def test_finalize_make_scan_with_facings(tiny_image, monkeypatch):
+    monkeypatch.setenv("MAKE_LOCAL_ANNOTATE", "false")
     parsed = parse_make_response(
         {
             "facings": [
@@ -382,7 +386,8 @@ def test_finalize_make_scan_with_facings(tiny_image):
     assert result["inventory"][0]["quantity"] == 2
 
 
-def test_landing_scan_response_works_with_make_result(tiny_image):
+def test_landing_scan_response_works_with_make_result(tiny_image, monkeypatch):
+    monkeypatch.setenv("MAKE_LOCAL_ANNOTATE", "false")
     parsed = parse_make_response(
         {
             "inventory": [{"brand": "Dove", "product_name": "Shampoo", "quantity": 1, "confidence": 0.8}],

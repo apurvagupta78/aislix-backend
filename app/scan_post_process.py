@@ -129,43 +129,27 @@ def finalize_make_scan(
 
     scan_context = resolve_scan_context(metadata)
     raw = parsed["raw"]
-    facings = parsed.get("facings") or []
     inventory = parsed.get("inventory")
     make_annotated_b64 = parsed.get("annotated_image_base64")
+    planogram_items = metadata.get("planogram_items") or []
 
-    if not facings and parsed.get("product_rows"):
+    openai_facings_for_annotate: list[dict] = []
+    if parsed.get("product_rows"):
         from app.make_scan import build_facings_from_make_products
 
-        facings = build_facings_from_make_products(parsed["product_rows"], image.shape)
-
-    planogram_items = metadata.get("planogram_items") or []
-    if facings and not make_annotated_b64:
-        from app.make_scan import (
-            make_bbox_fallback_yolo_enabled,
-            openai_bbox_facings_trusted,
-            relabel_facings_by_vertical_order,
+        openai_facings_for_annotate = build_facings_from_make_products(
+            parsed["product_rows"],
+            image.shape,
         )
 
-        inventory_for_bbox = inventory or parsed.get("inventory") or []
-        if openai_bbox_facings_trusted(facings, inventory_for_bbox, image.shape):
-            facings = relabel_facings_by_vertical_order(
-                facings,
-                inventory_for_bbox,
-                planogram_items=planogram_items,
-            )
-        elif make_bbox_fallback_yolo_enabled():
-            facings = []
-
     classified: list[dict]
-    if facings:
-        classified = normalize_classified_labels([_normalize_facing_row(row) for row in facings])
-        if inventory:
-            inventory = _normalize_inventory_rows(inventory)
-        else:
-            inventory = aggregate_inventory(classified)
-    elif inventory:
+    if inventory:
         inventory = _normalize_inventory_rows(inventory)
         classified = normalize_classified_labels(_expand_inventory_to_classified(inventory))
+    elif parsed.get("facings"):
+        facings = parsed.get("facings") or []
+        classified = normalize_classified_labels([_normalize_facing_row(row) for row in facings])
+        inventory = aggregate_inventory(classified)
     else:
         raise ValueError("Make.com response did not include inventory or facings.")
 
@@ -224,31 +208,22 @@ def finalize_make_scan(
     if make_annotated_b64:
         annotated = None
         metrics["detection_mode"] = "make.com+openai_image"
-    elif _has_bbox_facings(classified):
-        annotated = generate_annotated_image(image, classified)
-        metrics["detection_mode"] = "make.com+openai_bbox"
     else:
-        from app.make_annotate import build_local_detection_facings, make_local_annotate_enabled
+        from app.make_annotate import build_make_annotated_facings
 
-        if make_local_annotate_enabled():
-            try:
-                local_facings = build_local_detection_facings(
-                    image,
-                    metadata,
-                    scan_context,
-                    inventory,
-                    planogram_items=planogram_items,
-                )
-                if local_facings:
-                    compliance_local = analyze_subcategory_compliance(local_facings, scan_context)
-                    annotated_source = compliance_local["classified"]
-                    annotated = generate_annotated_image(image, annotated_source)
-                    metrics["detection_mode"] = "make.com+local_yolo"
-                else:
-                    annotated = image.copy()
-            except Exception as exc:
-                print(f"Make local annotate skipped: {exc}")
-                annotated = image.copy()
+        annotate_facings, annotate_mode = build_make_annotated_facings(
+            image,
+            inventory,
+            metadata=metadata,
+            scan_context=scan_context,
+            planogram_items=planogram_items,
+            openai_facings=openai_facings_for_annotate,
+        )
+        if annotate_facings:
+            compliance_local = analyze_subcategory_compliance(annotate_facings, scan_context)
+            annotated_source = compliance_local["classified"]
+            annotated = generate_annotated_image(image, annotated_source)
+            metrics["detection_mode"] = annotate_mode
         else:
             annotated = image.copy()
 
