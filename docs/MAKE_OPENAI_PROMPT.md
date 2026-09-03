@@ -90,6 +90,16 @@ FORBIDDEN qty patterns:
 - Doubling qty because you see two shelf bands of the same color without counting each bag
 - Assuming 2-deep or 3-deep stocking on every facing without visible evidence
 - Counting Tomato Tango as 12 when only 6 front facings are visible in one row
+- Assigning Tomato Tango qty to blue Magic Masala rows (count red bags only in red row)
+- Assigning Cream & Onion qty to blue/red rows (count green bags only in green rows)
+- Returning qty 10 for Tomato Tango when only 6 red front facings are visible in one row
+- Returning qty 24+ for one chip row without counting each bag left-to-right
+
+Lay's sanity check before JSON:
+- Blue rows → Magic Masala only; sum row1 + row2 + row3 front facings
+- Red row → Tomato Tango only; count red bags in that row only
+- Green rows → Cream & Onion only; sum both green rows
+- If your qty differs from planogram expected_qty by >2, recount that color row once
 
 When planogram_expected_skus is in metadata:
 - Use it to know WHICH flavors to look for and to separate rows
@@ -334,6 +344,7 @@ ANNOTATED IMAGE & BBOX_2D (CRITICAL)
 
 The downstream system draws green boxes and labels on the shelf photo using your bbox_2d.
 Bad boxes produce floating labels in empty space — this is a hard failure.
+If bbox_2d are missing, wrong, or floating, the backend DISCARDS them and uses local detection instead.
 
 Rules for bbox_2d [x1, y1, x2, y2] normalized 0–1000:
 
@@ -341,15 +352,31 @@ Rules for bbox_2d [x1, y1, x2, y2] normalized 0–1000:
 2. **Never draw boxes in empty air** above the shelf, between ceiling and products, or in gaps with no products.
 3. **Tight fit** — box edges should touch the outermost visible units of that SKU group (left/right/top/bottom of the block).
 4. **One box per products[] row** — each inventory row gets exactly one bbox_2d enclosing that SKU's visible region on the shelf.
-5. **Do not merge different variants** into one giant box (e.g. do not one box for all Colgate variants — separate boxes per variant).
-6. **Do not split one variant** into multiple boxes unless they are physically separated on different shelves far apart.
-7. **Include variant in identification** — toothpaste must use variant (Triple Acción, Luminous White), not generic "Toothpaste" only.
-8. **Misplaced products** (water, dishwash on toothpaste shelf) get their own box on the actual product location.
+5. **One box per unique SKU (mandatory)** — if planogram has 3 flavors, return exactly 3 products[] rows with exactly 3 bbox_2d. Missing boxes cause the backend to discard GPT boxes and use local detection instead.
+6. **Do not merge different variants** into one giant box (e.g. do not one box for all Colgate variants — separate boxes per variant).
+7. **Do not split one variant** into multiple boxes unless they are physically separated on different shelves far apart.
+8. **Include variant in identification** — toothpaste must use variant (Triple Acción, Luminous White), not generic "Toothpaste" only.
+9. **Misplaced products** (water, dishwash on toothpaste shelf) get their own box on the actual product location.
 
 Examples:
 - Lay's Magic Masala rows 1–3: one vertical box covering all blue bags of that flavor
 - Colgate Triple Acción block: one box around that red-box grid only
 - Frau water bottles bottom-left: one box around the water cluster, product_category "water"
+
+Lay's 3-flavor rack (MUST be 3 separate boxes, top → bottom):
+- Magic Masala (blue, rows 1–3): bbox_2d like [120, 180, 880, 520] — ONLY blue bags
+- Tomato Tango (red, row 4): bbox_2d like [120, 530, 880, 650] — ONLY red bags
+- American Style Cream and Onion (green, rows 5–6): bbox_2d like [120, 660, 880, 920] — ONLY green bags
+
+NEVER put "Tomato Tango" label/bbox on blue rows.
+NEVER put "Cream & Onion" label/bbox on blue or red rows.
+NEVER one box spanning rows 3+4 (different flavors).
+
+Toothpaste shelf (each variant = own box at THAT shelf height):
+- Triple Acción block: [80, 200, 420, 380] (example — adjust to actual red grid)
+- Luminous White block: separate box on its shelf band only
+- Frau water bottles: box on bottom-left bottles only, e.g. [40, 820, 220, 980]
+- NEVER bbox with y1 < 80 unless products literally start at top edge (no ceiling boxes)
 
 FORBIDDEN bbox patterns:
 - Box floating in empty space above shelf (no products inside)
@@ -433,6 +460,9 @@ Before returning the JSON:
 20. Verify variant field is filled whenever flavor/type is readable on packaging.
 21. Verify no bbox area > 45% of image and no ceiling boxes with y1 < 80 unless product is at top edge.
 22. Verify each bbox height matches ONE shelf band OR one multi-row chip flavor (not whole shelf).
+23. If planogram_expected_skus present: verify len(products[]) == len(planogram_expected_skus) AND same count of bbox_2d.
+24. Verify each bbox_2d y-range overlaps the correct packaging color/variant (blue box = Magic Masala only, etc.).
+25. Verify no bbox top edge (y1) is in ceiling/empty space above products.
 
 Only after ALL checks pass, generate the JSON.
 

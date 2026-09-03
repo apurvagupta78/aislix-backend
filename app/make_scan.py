@@ -296,6 +296,12 @@ def _validate_product_bbox(
     if area_ratio > max_area:
         return None
 
+    min_y1 = _bbox_env_float("MAKE_BBOX_MIN_Y1_RATIO", 0.08)
+    min_center_y = _bbox_env_float("MAKE_BBOX_MIN_CENTER_Y_RATIO", 0.10)
+    cy = (y1 + y2) / 2.0
+    if y1 < img_h * min_y1 or cy < img_h * min_center_y:
+        return None
+
     # Box entirely in ceiling / header band with no products.
     if y1 < img_h * ceiling_y1 and y2 < img_h * ceiling_y2:
         return None
@@ -394,6 +400,148 @@ def build_facings_from_make_products(
             }
         )
     return facings
+
+
+def _inventory_sku_key(row: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        (row.get("brand") or "").strip().lower(),
+        (row.get("product_name") or row.get("product") or "").strip().lower(),
+        (row.get("variant") or "").strip().lower(),
+    )
+
+
+def _unique_inventory_rows(inventory: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str, str]] = set()
+    unique: list[dict[str, Any]] = []
+    for row in inventory:
+        if row.get("counted_in_totals") is False:
+            continue
+        key = _inventory_sku_key(row)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(row)
+    return unique
+
+
+def _planogram_sort_index(row: dict[str, Any], planogram_items: list[dict[str, Any]]) -> int:
+    row_brand = (row.get("brand") or "").strip().lower()
+    row_product = (row.get("product_name") or row.get("product") or "").strip().lower()
+    row_variant = (row.get("variant") or "").strip().lower()
+    for idx, item in enumerate(planogram_items):
+        item_brand = (item.get("brand") or "").strip().lower()
+        item_product = (item.get("product_name") or item.get("product") or "").strip().lower()
+        item_variant = (item.get("variant") or "").strip().lower()
+        if row_brand == item_brand and row_variant and row_variant == item_variant:
+            return idx
+        if row_brand == item_brand and row_product and item_product and row_product == item_product:
+            if not row_variant or not item_variant or row_variant == item_variant:
+                return idx
+    return 999
+
+
+def _inventory_vertical_sort_key(
+    row: dict[str, Any],
+    *,
+    planogram_items: list[dict[str, Any]] | None = None,
+) -> tuple[int, int, str]:
+    band_order = {"top": 0, "upper": 0, "middle": 1, "mid": 1, "center": 1, "bottom": 2, "lower": 2, "floor": 2}
+    position = (row.get("shelf_position") or row.get("location") or "").lower()
+    band = 3
+    for token, order in band_order.items():
+        if token in position:
+            band = order
+            break
+    plano_idx = _planogram_sort_index(row, planogram_items or [])
+    return (band, plano_idx, (row.get("variant") or row.get("product_name") or ""))
+
+
+def relabel_facings_by_vertical_order(
+    facings: list[dict[str, Any]],
+    inventory: list[dict[str, Any]],
+    *,
+    planogram_items: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """When GPT bbox count matches unique SKUs, assign labels top-to-bottom by shelf order."""
+    unique_inv = _unique_inventory_rows(inventory)
+    if len(facings) != len(unique_inv) or len(facings) < 2:
+        return facings
+
+    sorted_facings = sorted(facings, key=lambda f: (int(f["y1"]) + int(f["y2"])) / 2.0)
+    sorted_inv = sorted(
+        unique_inv,
+        key=lambda row: _inventory_vertical_sort_key(row, planogram_items=planogram_items),
+    )
+
+    relabeled: list[dict[str, Any]] = []
+    for facing, inv in zip(sorted_facings, sorted_inv):
+        relabeled.append(
+            {
+                **facing,
+                "brand": inv.get("brand") or facing.get("brand") or "Product",
+                "product_name": inv.get("product_name") or inv.get("product") or facing.get("product_name") or "Detected",
+                "variant": inv.get("variant") or facing.get("variant") or "",
+                "confidence": float(inv.get("confidence") or facing.get("confidence") or 0.0),
+                "pack_text": " ".join(
+                    filter(
+                        None,
+                        [
+                            inv.get("brand"),
+                            inv.get("product_name") or inv.get("product"),
+                            inv.get("variant"),
+                        ],
+                    )
+                ).strip(),
+                "recognition_source": "make.com+openai_bbox_relabel",
+            }
+        )
+    return relabeled
+
+
+def make_bbox_fallback_yolo_enabled() -> bool:
+    return os.getenv("MAKE_BBOX_FALLBACK_YOLO", "true").lower() in {"1", "true", "yes"}
+
+
+def openai_bbox_facings_trusted(
+    facings: list[dict[str, Any]],
+    inventory: list[dict[str, Any]],
+    image_shape: tuple[int, ...],
+) -> bool:
+    """Return False when GPT boxes are too few, misaligned, or floating — triggers YOLO overlay."""
+    if not facings:
+        return False
+
+    img_h, img_w = int(image_shape[0]), int(image_shape[1])
+    unique_skus = len(_unique_inventory_rows(inventory))
+    if unique_skus >= 2 and len(facings) < unique_skus:
+        return False
+    min_coverage = _bbox_env_float("MAKE_BBOX_MIN_SKU_COVERAGE", 0.75)
+    if unique_skus >= 2 and len(facings) < max(1, int(unique_skus * min_coverage + 0.999)):
+        return False
+
+    min_y1 = _bbox_env_float("MAKE_BBOX_MIN_Y1_RATIO", 0.08)
+    min_center_y = _bbox_env_float("MAKE_BBOX_MIN_CENTER_Y_RATIO", 0.10)
+    max_area = _bbox_env_float("MAKE_BBOX_MAX_AREA_RATIO", 0.45)
+    img_area = max(img_w * img_h, 1)
+
+    bad = 0
+    for facing in facings:
+        x1, y1, x2, y2 = int(facing["x1"]), int(facing["y1"]), int(facing["x2"]), int(facing["y2"])
+        if x2 <= x1 or y2 <= y1:
+            bad += 1
+            continue
+        cy = (y1 + y2) / 2.0
+        if y1 < img_h * min_y1 or cy < img_h * min_center_y:
+            bad += 1
+            continue
+        area_ratio = ((x2 - x1) * (y2 - y1)) / img_area
+        if area_ratio > max_area:
+            bad += 1
+
+    max_bad_ratio = _bbox_env_float("MAKE_BBOX_MAX_BAD_RATIO", 0.0)
+    if bad > 0 and (max_bad_ratio <= 0 or bad / len(facings) > max_bad_ratio):
+        return False
+    return True
 
 
 def _raw_product_rows(data: dict[str, Any]) -> list[dict[str, Any]]:

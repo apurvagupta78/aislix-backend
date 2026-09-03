@@ -15,7 +15,9 @@ from app.make_scan import (
     build_make_json_payload,
     build_make_multipart,
     call_make_webhook,
+    openai_bbox_facings_trusted,
     parse_make_response,
+    relabel_facings_by_vertical_order,
     use_make_provider,
     _parse_product_bbox,
 )
@@ -202,6 +204,50 @@ def test_clamps_bbox_to_image_bounds():
     assert x1 >= 0 and y1 >= 0
     assert x2 < 800 and y2 < 1000
     assert x2 > x1 and y2 > y1
+
+
+def test_rejects_bbox_with_top_edge_in_ceiling_zone():
+    bbox = _parse_product_bbox({"bbox_2d": [100, 30, 500, 180]}, 800, 1000)
+    assert bbox is None
+
+
+def test_openai_bbox_not_trusted_when_too_few_boxes_for_skus():
+    inventory = [
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "Magic Masala", "quantity": 18},
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "Tomato tango", "quantity": 10},
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "American cream and onion", "quantity": 10},
+    ]
+    facings = build_facings_from_make_products(
+        [
+            {"brand": "Lays", "variant": "Magic Masala", "bbox_2d": [120, 200, 880, 550]},
+            {"brand": "Lays", "variant": "Tomato tango", "bbox_2d": [120, 560, 880, 720]},
+        ],
+        (1000, 800, 3),
+    )
+    assert len(facings) == 2
+    assert openai_bbox_facings_trusted(facings, inventory, (1000, 800, 3)) is False
+
+
+def test_relabel_facings_by_vertical_order_fixes_swapped_labels():
+    facings = [
+        {"x1": 10, "y1": 200, "x2": 100, "y2": 300, "brand": "Lays", "product_name": "Chips", "variant": "Tomato tango"},
+        {"x1": 10, "y1": 50, "x2": 100, "y2": 150, "brand": "Lays", "product_name": "Chips", "variant": "American cream and onion"},
+        {"x1": 10, "y1": 350, "x2": 100, "y2": 450, "brand": "Lays", "product_name": "Chips", "variant": "Magic Masala"},
+    ]
+    inventory = [
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "Magic Masala", "quantity": 18},
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "Tomato tango", "quantity": 10},
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "American cream and onion", "quantity": 10},
+    ]
+    planogram = [
+        {"brand": "Lays", "variant": "Magic Masala"},
+        {"brand": "Lays", "variant": "Tomato tango"},
+        {"brand": "Lays", "variant": "American cream and onion"},
+    ]
+    relabeled = relabel_facings_by_vertical_order(facings, inventory, planogram_items=planogram)
+    assert relabeled[0]["variant"] == "Magic Masala"
+    assert relabeled[1]["variant"] == "Tomato tango"
+    assert relabeled[2]["variant"] == "American cream and onion"
 
 
 def test_finalize_make_scan_uses_openai_bbox_for_annotated_image(tiny_image):

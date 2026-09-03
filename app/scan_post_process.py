@@ -138,6 +138,24 @@ def finalize_make_scan(
 
         facings = build_facings_from_make_products(parsed["product_rows"], image.shape)
 
+    planogram_items = metadata.get("planogram_items") or []
+    if facings and not make_annotated_b64:
+        from app.make_scan import (
+            make_bbox_fallback_yolo_enabled,
+            openai_bbox_facings_trusted,
+            relabel_facings_by_vertical_order,
+        )
+
+        inventory_for_bbox = inventory or parsed.get("inventory") or []
+        if openai_bbox_facings_trusted(facings, inventory_for_bbox, image.shape):
+            facings = relabel_facings_by_vertical_order(
+                facings,
+                inventory_for_bbox,
+                planogram_items=planogram_items,
+            )
+        elif make_bbox_fallback_yolo_enabled():
+            facings = []
+
     classified: list[dict]
     if facings:
         classified = normalize_classified_labels([_normalize_facing_row(row) for row in facings])
@@ -158,7 +176,6 @@ def finalize_make_scan(
     misplaced_facings = compliance["misplaced_facings"]
     inventory = apply_compliance_to_inventory(inventory, subcategory_mismatches)
 
-    planogram_items = metadata.get("planogram_items") or []
     planogram_compliance = None
     if planogram_items:
         from app.planogram_compliance import compare_planogram
@@ -215,7 +232,13 @@ def finalize_make_scan(
 
         if make_local_annotate_enabled():
             try:
-                local_facings = build_local_detection_facings(image, metadata, scan_context, inventory)
+                local_facings = build_local_detection_facings(
+                    image,
+                    metadata,
+                    scan_context,
+                    inventory,
+                    planogram_items=planogram_items,
+                )
                 if local_facings:
                     compliance_local = analyze_subcategory_compliance(local_facings, scan_context)
                     annotated_source = compliance_local["classified"]

@@ -51,7 +51,12 @@ def _shelf_band_from_position(position: str) -> str:
     return ""
 
 
-def _assign_inventory_to_boxes(boxes: list[dict], inventory: list[dict]) -> list[dict]:
+def _assign_inventory_to_boxes(
+    boxes: list[dict],
+    inventory: list[dict],
+    *,
+    planogram_items: list[dict] | None = None,
+) -> list[dict]:
     """Best-effort label assignment: row bands + left-to-right qty slots."""
     if not boxes:
         return []
@@ -69,13 +74,9 @@ def _assign_inventory_to_boxes(boxes: list[dict], inventory: list[dict]) -> list
         ]
 
     rows = _cluster_boxes_into_rows(boxes)
-    inv_rows = list(inventory)
-    band_order = {"top": 0, "middle": 1, "bottom": 2, "": 3}
+    inv_rows = _unique_inventory_for_assignment(inventory)
     inv_rows.sort(
-        key=lambda row: (
-            band_order.get(_shelf_band_from_position(row.get("shelf_position") or row.get("location") or ""), 3),
-            -(int(row.get("quantity") or row.get("facings") or 1)),
-        )
+        key=lambda row: _inventory_vertical_sort_key(row, planogram_items=planogram_items),
     )
 
     labeled: list[dict] = []
@@ -105,11 +106,60 @@ def _assign_inventory_to_boxes(boxes: list[dict], inventory: list[dict]) -> list
     return labeled
 
 
+def _unique_inventory_for_assignment(inventory: list[dict]) -> list[dict]:
+    seen: set[tuple[str, str, str]] = set()
+    unique: list[dict] = []
+    for row in inventory:
+        key = (
+            (row.get("brand") or "").strip().lower(),
+            (row.get("product_name") or row.get("product") or "").strip().lower(),
+            (row.get("variant") or "").strip().lower(),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(row)
+    return unique or list(inventory)
+
+
+def _inventory_vertical_sort_key(
+    row: dict,
+    *,
+    planogram_items: list[dict] | None = None,
+) -> tuple[int, int, str]:
+    band_order = {"top": 0, "upper": 0, "middle": 1, "mid": 1, "center": 1, "bottom": 2, "lower": 2, "floor": 2}
+    position = (row.get("shelf_position") or row.get("location") or "").lower()
+    band = 3
+    for token, order in band_order.items():
+        if token in position:
+            band = order
+            break
+    plano_idx = 999
+    if planogram_items:
+        row_brand = (row.get("brand") or "").strip().lower()
+        row_variant = (row.get("variant") or "").strip().lower()
+        row_product = (row.get("product_name") or row.get("product") or "").strip().lower()
+        for idx, item in enumerate(planogram_items):
+            if (item.get("brand") or "").strip().lower() != row_brand:
+                continue
+            item_variant = (item.get("variant") or "").strip().lower()
+            item_product = (item.get("product_name") or item.get("product") or "").strip().lower()
+            if row_variant and item_variant and row_variant == item_variant:
+                plano_idx = idx
+                break
+            if row_product and item_product and row_product == item_product:
+                plano_idx = idx
+                break
+    return (band, plano_idx, (row.get("variant") or row.get("product_name") or ""))
+
+
 def build_local_detection_facings(
     image: np.ndarray,
     metadata: dict[str, Any],
     scan_context: dict[str, Any],
     inventory: list[dict],
+    *,
+    planogram_items: list[dict] | None = None,
 ) -> list[dict]:
     from app.pipeline import _detect_boxes_for_scan
 
@@ -117,5 +167,5 @@ def build_local_detection_facings(
     facings: list[dict] = []
     for x1, y1, x2, y2 in boxes:
         facings.append({"x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2)})
-    assigned = _assign_inventory_to_boxes(facings, inventory)
+    assigned = _assign_inventory_to_boxes(facings, inventory, planogram_items=planogram_items)
     return normalize_classified_labels(assigned)
