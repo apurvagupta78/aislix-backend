@@ -86,20 +86,53 @@ def _unique_inventory_for_assignment(inventory: list[dict]) -> list[dict]:
     return unique or list(inventory)
 
 
+def _inventory_key_from_product_row(row: dict) -> tuple[str, str, str]:
+    return (
+        (row.get("brand") or "").strip().lower(),
+        (row.get("product_name") or row.get("product") or "").strip().lower(),
+        (row.get("variant") or "").strip().lower(),
+    )
+
+
+def _inventory_in_visual_order(
+    inventory: list[dict],
+    product_rows: list[dict] | None,
+) -> list[dict]:
+    """Preserve GPT products[] order — typically top-to-bottom shelf scan order."""
+    unique = _unique_inventory_for_assignment(inventory)
+    if not product_rows:
+        return unique
+
+    inv_by_key = {_inventory_sku_key(row): row for row in unique}
+    ordered: list[dict] = []
+    seen: set[tuple[str, str, str]] = set()
+    for prow in product_rows:
+        key = _inventory_key_from_product_row(prow)
+        if not key[0] and not key[1]:
+            continue
+        inv = inv_by_key.get(key)
+        if inv is None:
+            inv = inv_by_key.get(_inventory_sku_key(prow))
+        if inv is None or key in seen:
+            continue
+        ordered.append(inv)
+        seen.add(_inventory_sku_key(inv))
+    for row in unique:
+        key = _inventory_sku_key(row)
+        if key not in seen:
+            ordered.append(row)
+    return ordered or unique
+
+
 def _inventory_in_planogram_order(
     inventory: list[dict],
     planogram_items: list[dict] | None,
+    *,
+    product_rows: list[dict] | None = None,
 ) -> list[dict]:
     unique = _unique_inventory_for_assignment(inventory)
     if not planogram_items:
-        return sorted(
-            unique,
-            key=lambda row: (
-                -(int(row.get("quantity") or row.get("facings") or 0)),
-                row.get("brand") or "",
-                row.get("variant") or row.get("product_name") or "",
-            ),
-        )
+        return _inventory_in_visual_order(inventory, product_rows)
 
     ordered: list[dict] = []
     used: set[tuple[str, str, str]] = set()
@@ -229,6 +262,207 @@ def _shelf_row_bounds_from_image(
     return bounds if len(bounds) >= 2 else []
 
 
+def _vertical_overlap_ratio(row_y1: int, row_y2: int, box_y1: int, box_y2: int) -> float:
+    inter = max(0, min(row_y2, box_y2) - max(row_y1, box_y1))
+    if inter <= 0:
+        return 0.0
+    row_h = max(row_y2 - row_y1, 1)
+    box_h = max(box_y2 - box_y1, 1)
+    return inter / min(row_h, box_h)
+
+
+def _usable_gpt_bbox_facings(
+    product_rows: list[dict],
+    image_shape: tuple[int, ...],
+) -> list[dict]:
+    from app.make_scan import build_facings_from_make_products
+
+    img_h = int(image_shape[0])
+    max_height = _annotate_env_float("MAKE_ANNOTATE_GPT_BBOX_MAX_HEIGHT_RATIO", 0.38)
+    facings = build_facings_from_make_products(product_rows, image_shape)
+    usable: list[dict] = []
+    for facing in facings:
+        height_ratio = (int(facing["y2"]) - int(facing["y1"])) / max(img_h, 1)
+        if height_ratio > max_height:
+            continue
+        usable.append(facing)
+    return usable
+
+
+def _inv_from_facing(facing: dict, inventory: list[dict]) -> dict:
+    inv_by_key = {_inventory_sku_key(row): row for row in _unique_inventory_for_assignment(inventory)}
+    return inv_by_key.get(_inventory_sku_key(facing), facing)
+
+
+def _make_band_facing(
+    inv: dict,
+    *,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    recognition_source: str,
+) -> dict:
+    qty = int(inv.get("quantity") or inv.get("facings") or 0)
+    return {
+        "x1": x1,
+        "y1": y1,
+        "x2": x2,
+        "y2": max(y1 + 1, y2),
+        "brand": inv.get("brand") or "Product",
+        "product_name": inv.get("product_name") or inv.get("product") or "Detected",
+        "variant": inv.get("variant") or "",
+        "confidence": float(inv.get("confidence") or 0.0),
+        "annotation_qty": qty,
+        "pack_text": " ".join(
+            filter(
+                None,
+                [inv.get("brand"), inv.get("product_name") or inv.get("product"), inv.get("variant")],
+            )
+        ).strip(),
+        "recognition_source": recognition_source,
+    }
+
+
+def _assign_rows_by_gpt_bbox_overlap(
+    row_bounds: list[dict],
+    product_rows: list[dict],
+    inventory: list[dict],
+    image_shape: tuple[int, ...],
+) -> list[tuple[dict, dict]]:
+    gpt_facings = _usable_gpt_bbox_facings(product_rows, image_shape)
+    visual_order = _inventory_in_visual_order(inventory, product_rows)
+    assignments: list[tuple[dict, dict]] = []
+
+    for idx, row in enumerate(row_bounds):
+        ry1, ry2 = int(row["y1"]), int(row["y2"])
+        row_cy = (ry1 + ry2) / 2.0
+        containing = [
+            facing
+            for facing in gpt_facings
+            if int(facing["y1"]) <= row_cy <= int(facing["y2"])
+        ]
+        if containing:
+            best_facing = max(
+                containing,
+                key=lambda facing: _vertical_overlap_ratio(
+                    ry1, ry2, int(facing["y1"]), int(facing["y2"])
+                ),
+            )
+            assignments.append((row, _inv_from_facing(best_facing, inventory)))
+            continue
+
+        overlapping = [
+            (
+                facing,
+                _vertical_overlap_ratio(ry1, ry2, int(facing["y1"]), int(facing["y2"])),
+            )
+            for facing in gpt_facings
+        ]
+        overlapping = [(f, score) for f, score in overlapping if score >= 0.15]
+        if overlapping:
+            best_facing = min(
+                overlapping,
+                key=lambda item: abs(
+                    row_cy - (int(item[0]["y1"]) + int(item[0]["y2"])) / 2.0
+                ),
+            )[0]
+            assignments.append((row, _inv_from_facing(best_facing, inventory)))
+            continue
+        nearest: dict | None = None
+        nearest_dist = float("inf")
+        for facing in gpt_facings:
+            fcy = (int(facing["y1"]) + int(facing["y2"])) / 2.0
+            dist = abs(row_cy - fcy)
+            if dist < nearest_dist:
+                nearest_dist = dist
+                nearest = facing
+        if nearest is not None:
+            assignments.append((row, _inv_from_facing(nearest, inventory)))
+            continue
+        if idx < len(visual_order):
+            assignments.append((row, visual_order[idx]))
+    return assignments
+
+
+def _merge_row_assignments(
+    assignments: list[tuple[dict, dict]],
+) -> list[tuple[list[dict], dict]]:
+    if not assignments:
+        return []
+    merged: list[tuple[list[dict], dict]] = []
+    current_rows = [assignments[0][0]]
+    current_inv = assignments[0][1]
+    current_key = _inventory_sku_key(current_inv)
+    for row, inv in assignments[1:]:
+        if _inventory_sku_key(inv) == current_key:
+            current_rows.append(row)
+            continue
+        merged.append((current_rows, current_inv))
+        current_rows = [row]
+        current_inv = inv
+        current_key = _inventory_sku_key(inv)
+    merged.append((current_rows, current_inv))
+    return merged
+
+
+def _bands_from_row_assignments(
+    assignments: list[tuple[list[dict], dict]],
+    *,
+    img_w: int,
+    recognition_source: str,
+) -> list[dict]:
+    bands: list[dict] = []
+    pad = max(2, int(img_w * 0.01))
+    for rows, inv in assignments:
+        if not rows:
+            continue
+        x1 = max(0, min(b["x1"] for b in rows) - pad)
+        x2 = min(img_w - 1, max(b["x2"] for b in rows) + pad)
+        y1 = min(b["y1"] for b in rows)
+        y2 = max(b["y2"] for b in rows)
+        bands.append(
+            _make_band_facing(
+                inv,
+                x1=x1,
+                y1=y1,
+                x2=x2,
+                y2=y2,
+                recognition_source=recognition_source,
+            )
+        )
+    return bands
+
+
+def _bands_from_shelf_rows_with_gpt_labels(
+    row_bounds: list[dict],
+    inventory: list[dict],
+    product_rows: list[dict],
+    image_shape: tuple[int, ...],
+    *,
+    img_w: int,
+    planogram_items: list[dict] | None,
+) -> list[dict]:
+    """Label each detected shelf row from GPT bbox overlap; merge rows per SKU when planogram."""
+    assignments = _assign_rows_by_gpt_bbox_overlap(row_bounds, product_rows, inventory, image_shape)
+    if not assignments:
+        return []
+
+    if planogram_items:
+        merged = _merge_row_assignments(assignments)
+        return _bands_from_row_assignments(
+            merged,
+            img_w=img_w,
+            recognition_source="make.com+shelf_row_gpt",
+        )
+
+    return _bands_from_row_assignments(
+        [( [row], inv) for row, inv in assignments],
+        img_w=img_w,
+        recognition_source="make.com+shelf_row_gpt",
+    )
+
+
 def _bands_from_shelf_rows(
     inv_rows: list[dict],
     row_bounds: list[dict],
@@ -286,6 +520,7 @@ def build_sku_band_facings(
     *,
     planogram_items: list[dict] | None = None,
     openai_facings: list[dict] | None = None,
+    product_rows: list[dict] | None = None,
     metadata: dict[str, Any] | None = None,
     scan_context: dict[str, Any] | None = None,
 ) -> list[dict]:
@@ -300,7 +535,7 @@ def build_sku_band_facings(
 
         plano_rows = _aggregate_planogram_by_product(planogram_items)
 
-    inv_rows = _inventory_in_planogram_order(inventory, plano_rows)
+    inv_rows = _inventory_in_planogram_order(inventory, plano_rows, product_rows=product_rows)
     if not inv_rows:
         return []
 
@@ -309,6 +544,17 @@ def build_sku_band_facings(
     if metadata is not None and scan_context is not None:
         row_bounds = _shelf_row_bounds_from_image(image, metadata, scan_context)
         if row_bounds:
+            if product_rows:
+                row_bands = _bands_from_shelf_rows_with_gpt_labels(
+                    row_bounds,
+                    inventory,
+                    product_rows,
+                    image.shape,
+                    img_w=img_w,
+                    planogram_items=plano_rows,
+                )
+                if row_bands:
+                    return normalize_classified_labels(row_bands)
             row_bands = _bands_from_shelf_rows(inv_rows, row_bounds, weights, img_w=img_w)
             if row_bands:
                 return normalize_classified_labels(row_bands)
@@ -385,6 +631,7 @@ def build_make_annotated_facings(
     scan_context: dict[str, Any],
     planogram_items: list[dict] | None = None,
     openai_facings: list[dict] | None = None,
+    product_rows: list[dict] | None = None,
 ) -> tuple[list[dict], str]:
     """Build facings used ONLY for annotated image rendering."""
     unique_skus = len(_unique_inventory_for_assignment(inventory))
@@ -397,12 +644,15 @@ def build_make_annotated_facings(
             inventory,
             planogram_items=planogram_items,
             openai_facings=gpt_layout_facings,
+            product_rows=product_rows,
             metadata=metadata,
             scan_context=scan_context,
         )
         if bands:
             src = bands[0].get("recognition_source") or ""
-            if "shelf_row_band" in src:
+            if "shelf_row_gpt" in src:
+                mode = "make.com+shelf_row_gpt"
+            elif "shelf_row_band" in src:
                 mode = "make.com+shelf_row_band"
             elif planogram_items:
                 mode = "make.com+planogram_band"
@@ -443,6 +693,7 @@ def build_make_annotated_facings(
         image,
         inventory,
         planogram_items=planogram_items,
+        product_rows=product_rows,
         metadata=metadata,
         scan_context=scan_context,
     )

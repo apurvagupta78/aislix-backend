@@ -218,6 +218,7 @@ def finalize_make_scan(
             scan_context=scan_context,
             planogram_items=planogram_items,
             openai_facings=openai_facings_for_annotate,
+            product_rows=parsed.get("product_rows"),
         )
         if annotate_facings:
             compliance_local = analyze_subcategory_compliance(annotate_facings, scan_context)
