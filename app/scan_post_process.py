@@ -209,7 +209,7 @@ def finalize_make_scan(
         annotated = None
         metrics["detection_mode"] = "make.com+openai_image"
     else:
-        from app.make_annotate import build_make_annotated_facings
+        from app.make_annotate import build_make_annotated_facings, make_annotate_draw_labels
 
         annotate_facings, annotate_mode = build_make_annotated_facings(
             image,
@@ -221,9 +221,17 @@ def finalize_make_scan(
             product_rows=parsed.get("product_rows"),
         )
         if annotate_facings:
-            compliance_local = analyze_subcategory_compliance(annotate_facings, scan_context)
-            annotated_source = compliance_local["classified"]
-            annotated = generate_annotated_image(image, annotated_source)
+            draw_labels = make_annotate_draw_labels()
+            if annotate_mode == "make.com+yolo_overlay":
+                annotated_source = annotate_facings
+            else:
+                compliance_local = analyze_subcategory_compliance(annotate_facings, scan_context)
+                annotated_source = compliance_local["classified"]
+            annotated = generate_annotated_image(
+                image,
+                annotated_source,
+                draw_labels=draw_labels,
+            )
             metrics["detection_mode"] = annotate_mode
         else:
             annotated = image.copy()

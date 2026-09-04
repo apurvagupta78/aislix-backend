@@ -94,14 +94,18 @@ def _annotation_label(item: dict, img_w: int | None = None) -> str:
     return brand[:max_len]
 
 
-def generate_annotated_image(image: np.ndarray, classified: list[dict]) -> np.ndarray:
+def generate_annotated_image(
+    image: np.ndarray,
+    classified: list[dict],
+    *,
+    draw_labels: bool = True,
+) -> np.ndarray:
     annotated = image.copy()
     img_h, img_w = annotated.shape[:2]
     base_scale = max(0.5, min(img_h, img_w) / 1600.0 * 0.6)
 
     for item in classified:
         x1, y1, x2, y2 = int(item["x1"]), int(item["y1"]), int(item["x2"]), int(item["y2"])
-        label = _annotation_label(item, img_w=img_w)
         box_h = max(y2 - y1, 1)
         font_scale = max(0.45, min(0.9, base_scale * (box_h / 70.0)))
         thickness = max(1, int(round(font_scale * 2.2)))
@@ -111,6 +115,10 @@ def generate_annotated_image(image: np.ndarray, classified: list[dict]) -> np.nd
         box_color = MISMATCH_BOX_COLOR if is_mismatch else OK_BOX_COLOR
         cv2.rectangle(annotated, (x1, y1), (x2, y2), box_color, line_w)
 
+        if not draw_labels:
+            continue
+
+        label = _annotation_label(item, img_w=img_w)
         (text_w, text_h), baseline = cv2.getTextSize(
             label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness
         )

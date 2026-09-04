@@ -31,6 +31,17 @@ def make_sku_band_use_gpt_layout() -> bool:
     return os.getenv("MAKE_SKU_BAND_USE_GPT_LAYOUT", "false").lower() in {"1", "true", "yes"}
 
 
+def make_yolo_overlay_only() -> bool:
+    """Draw local YOLO detection boxes on Make scans — no product text labels."""
+    return os.getenv("MAKE_YOLO_OVERLAY_ONLY", "true").lower() in {"1", "true", "yes"}
+
+
+def make_annotate_draw_labels() -> bool:
+    if make_yolo_overlay_only():
+        return os.getenv("MAKE_ANNOTATE_DRAW_LABELS", "false").lower() in {"1", "true", "yes"}
+    return os.getenv("MAKE_ANNOTATE_DRAW_LABELS", "true").lower() in {"1", "true", "yes"}
+
+
 def _annotate_env_float(name: str, default: float) -> float:
     raw = os.getenv(name, "").strip()
     if not raw:
@@ -623,6 +634,38 @@ def build_sku_band_facings(
     return normalize_classified_labels(bands)
 
 
+def build_yolo_overlay_facings(
+    image: np.ndarray,
+    metadata: dict[str, Any],
+    scan_context: dict[str, Any],
+) -> list[dict]:
+    """Local YOLO product boxes for display only — inventory/qty stay on Make/GPT."""
+    if not make_local_annotate_enabled():
+        return []
+    img_h = int(image.shape[0])
+    try:
+        boxes = _detect_product_boxes(image, metadata, scan_context)
+    except Exception:
+        return []
+    boxes = _filter_product_zone_boxes(boxes, img_h)
+    if not boxes:
+        return []
+    return [
+        {
+            "x1": int(box["x1"]),
+            "y1": int(box["y1"]),
+            "x2": int(box["x2"]),
+            "y2": int(box["y2"]),
+            "brand": "",
+            "product_name": "",
+            "variant": "",
+            "confidence": 0.0,
+            "recognition_source": "make.com+yolo_overlay",
+        }
+        for box in boxes
+    ]
+
+
 def build_make_annotated_facings(
     image: np.ndarray,
     inventory: list[dict],
@@ -634,6 +677,14 @@ def build_make_annotated_facings(
     product_rows: list[dict] | None = None,
 ) -> tuple[list[dict], str]:
     """Build facings used ONLY for annotated image rendering."""
+    if make_yolo_overlay_only() and make_local_annotate_enabled():
+        try:
+            overlay = build_yolo_overlay_facings(image, metadata, scan_context)
+            if overlay:
+                return overlay, "make.com+yolo_overlay"
+        except Exception as exc:
+            print(f"Make YOLO overlay skipped: {exc}")
+
     unique_skus = len(_unique_inventory_for_assignment(inventory))
     max_sku_bands = int(os.getenv("MAKE_SKU_BAND_MAX", "30"))
 

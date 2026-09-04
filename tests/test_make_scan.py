@@ -250,7 +250,34 @@ def test_relabel_facings_by_vertical_order_fixes_swapped_labels():
     assert relabeled[2]["variant"] == "American cream and onion"
 
 
+def test_finalize_make_scan_uses_yolo_overlay_by_default(tiny_image, monkeypatch):
+    monkeypatch.setenv("MAKE_YOLO_OVERLAY_ONLY", "true")
+    monkeypatch.setenv("MAKE_LOCAL_ANNOTATE", "true")
+    parsed = parse_make_response(
+        {
+            "products": [
+                {"brand": "Lays", "product": "Potato Chips", "variant": "Magic Masala", "qty": 6, "confidence": 0.99}
+            ],
+            "executive_summary": "Chip rack.",
+        }
+    )
+    fake_boxes = [{"x1": 10, "y1": 40, "x2": 50, "y2": 65}, {"x1": 60, "y1": 40, "x2": 100, "y2": 65}]
+
+    with patch("app.make_annotate._detect_product_boxes", return_value=fake_boxes):
+        result = finalize_make_scan(
+            tiny_image,
+            scan_id="yolo-overlay-test",
+            metadata={"category": "Packaged Food & Snacks", "sub_category": "chips", "export_facings": True},
+            parsed=parsed,
+            processing_ms=900,
+        )
+
+    assert result["metrics"]["detection_mode"] == "make.com+yolo_overlay"
+    assert result["annotated_image_base64"]
+
+
 def test_finalize_make_scan_uses_openai_bbox_for_annotated_image(tiny_image, monkeypatch):
+    monkeypatch.setenv("MAKE_YOLO_OVERLAY_ONLY", "false")
     monkeypatch.setenv("MAKE_USE_OPENAI_BBOX", "true")
     monkeypatch.setenv("MAKE_SKU_BAND_ANNOTATE", "false")
     monkeypatch.setenv("MAKE_PLANOGRAM_BAND_ANNOTATE", "false")

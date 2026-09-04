@@ -19,6 +19,24 @@ from app.report_generator import (
 )
 
 
+def test_generate_annotated_image_boxes_only():
+    image = np.zeros((200, 300, 3), dtype=np.uint8)
+    classified = [
+        {
+            "x1": 20,
+            "y1": 30,
+            "x2": 80,
+            "y2": 90,
+            "brand": "Lays",
+            "product_name": "Potato Chips",
+            "variant": "Magic Masala",
+        }
+    ]
+    annotated = generate_annotated_image(image, classified, draw_labels=False)
+    assert annotated.shape == image.shape
+    assert not np.array_equal(annotated, image)
+
+
 def test_annotation_uses_short_flavor_on_small_boxes():
     label = _annotation_label(
         {
