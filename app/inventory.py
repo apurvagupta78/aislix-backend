@@ -144,6 +144,24 @@ def inventory_counted_rows(inventory: list[dict]) -> list[dict]:
     return [row for row in inventory if row.get("counted_in_totals", True)]
 
 
+def fix_gpt_brand_hallucinations(rows: list[dict]) -> list[dict]:
+    """Correct common GPT vision misreads when anchor brands are present on the same shelf."""
+    if not rows:
+        return rows
+    brands_present = {(row.get("brand") or "").strip().lower() for row in rows}
+    out: list[dict] = []
+    for row in rows:
+        item = dict(row)
+        brand_l = (item.get("brand") or "").strip().lower()
+        if brand_l == "dento" and "doctor" in brands_present:
+            item["brand"] = "Doctor"
+            pack = (item.get("pack_text") or "").strip()
+            if pack:
+                item["pack_text"] = re.sub(r"\bdento\b", "Doctor", pack, flags=re.IGNORECASE)
+        out.append(item)
+    return out
+
+
 def merge_inventory_rows(rows: list[dict]) -> list[dict]:
     """Merge Make.com inventory rows for the same SKU (sum quantities)."""
     buckets: dict[tuple, dict] = {}

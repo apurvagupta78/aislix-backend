@@ -43,6 +43,7 @@ General rules:
 - Set brand ONLY from readable logo/text on the package — never from box color alone.
 - Red toothpaste packaging is often Odol, Closeup, or Colgate — NOT Dabur Red unless "DABUR" is visible.
 - "Doctor" is a real regional toothpaste brand — never label it as Dabur.
+- "Dento" is NOT a brand — it is usually a misread of Doctor.
 - Do NOT default to India-market brands (Dabur, Pepsodent, Himalaya) on international shelves.
 - If brand text is unreadable, use "Unknown" — do not invent a familiar brand.
 

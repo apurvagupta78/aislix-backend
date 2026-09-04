@@ -26,6 +26,15 @@ from app.scan_context import (
 
 MIN_COMPLIANCE_CONFIDENCE = 0.5
 
+MOUTHWASH_PRODUCT_KEYWORDS = (
+    "mouthwash",
+    "mouth wash",
+    "oral rinse",
+    "plax",
+    "listerine",
+    "colgate plax",
+)
+
 
 def _normalize_key(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower().strip())
@@ -268,6 +277,9 @@ def _evaluate_compliance(
     selected = effective_sub_category(scan_context) or scan_context.get("sub_category") or ""
     selected_all = selected_sub_category_ids(scan_context) or ([selected] if selected else [])
 
+    if _mouthwash_mismatch_on_toothpaste_audit(item, scan_context):
+        return False, "mouthwash", "Mouthwash"
+
     if multi_sub_category_audit(scan_context):
         detected = infer_detected_subcategory(item, scan_context)
         cat_name = scan_context.get("aislix_category")
@@ -356,11 +368,36 @@ def _subcategory_label(scan_context: dict, sub_id: str) -> str:
     return resolve_subcategory_label(category, sub_id) or sub_id.replace("_", " ").title()
 
 
+def _is_mouthwash_product(haystack: str, pack_text: str = "") -> bool:
+    combined = _normalize_key(f"{haystack} {pack_text}")
+    if not any(kw in combined for kw in MOUTHWASH_PRODUCT_KEYWORDS):
+        return False
+    if "toothpaste" in combined and not any(
+        kw in combined for kw in ("mouthwash", "mouth wash", "plax", "listerine")
+    ):
+        return False
+    return True
+
+
+def _mouthwash_mismatch_on_toothpaste_audit(item: dict, scan_context: dict) -> bool:
+    selected = effective_sub_category(scan_context) or scan_context.get("sub_category") or ""
+    if selected != "toothpaste":
+        return False
+    haystack = _haystack(item)
+    pack_text = (item.get("pack_text") or "").strip()
+    product_l = _normalize_key(item.get("product_name") or "")
+    if _is_mouthwash_product(haystack, pack_text):
+        return True
+    return product_l == "mouthwash"
+
+
 def _unknown_brand_has_foreign_product_text(item: dict, scan_context: dict) -> bool:
     """True when readable label text clearly belongs outside the audit sub-category."""
     haystack = _haystack(item)
     pack_text = (item.get("pack_text") or "").strip()
     selected = effective_sub_category(scan_context) or scan_context.get("sub_category") or ""
+    if _mouthwash_mismatch_on_toothpaste_audit(item, scan_context):
+        return True
     if _subcategory_product_guard(selected, haystack, pack_text):
         return False
     return foreign_aisle_conflict(haystack, scan_context, pack_text=pack_text) is not None

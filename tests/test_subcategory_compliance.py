@@ -318,6 +318,28 @@ def test_unknown_toothpaste_text_skips_compliance():
     assert classified[0]["subcategory_match"] is True
 
 
+def test_mouthwash_mismatch_on_toothpaste_audit():
+    ctx = _toothpaste_context()
+    classified = [
+        _facing(
+            "Colgate",
+            "Plax Mouthwash",
+            variant="Fresh Mint",
+            pack_text="Colgate Plax Mouthwash Fresh Mint",
+        ),
+        _facing(
+            "Unknown",
+            "Mouthwash",
+            variant="Green",
+            pack_text="Unknown Mouthwash Green",
+        ),
+    ]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 2
+    assert all(item["subcategory_match"] is False for item in classified)
+    assert classified[1]["detected_sub_category_label"] == "Mouthwash"
+
+
 def test_axe_deodorant_not_mismatch_on_mixed_pc_shelf():
     ctx = {
         "aislix_category": "Personal Care",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.inventory import aggregate_inventory, merge_inventory_rows, normalize_classified_labels
+from app.inventory import aggregate_inventory, fix_gpt_brand_hallucinations, merge_inventory_rows, normalize_classified_labels
 
 
 def test_merges_crax_rings_casing_variants():
@@ -103,3 +103,15 @@ def test_merge_inventory_rows_sums_duplicate_skus():
     assert colgate["quantity"] == 37
     assert colgate["facings"] == 37
     assert colgate["confidence"] == 0.99
+
+
+def test_fix_gpt_brand_hallucinations_dento_to_doctor():
+    rows = [
+        {"brand": "Doctor", "product_name": "Toothpaste", "variant": "Original", "quantity": 8},
+        {"brand": "Dento", "product_name": "Toothpaste", "variant": "Original", "quantity": 4},
+    ]
+    fixed = fix_gpt_brand_hallucinations(rows)
+    assert all(r["brand"] == "Doctor" for r in fixed)
+    merged = merge_inventory_rows(fixed)
+    assert len(merged) == 1
+    assert merged[0]["quantity"] == 12

@@ -429,6 +429,42 @@ def test_finalize_make_scan_merges_duplicate_inventory_rows(tiny_image, monkeypa
     assert result["metrics"]["unique_skus"] == 1
 
 
+def test_finalize_make_scan_fixes_dento_when_doctor_present(tiny_image, monkeypatch):
+    monkeypatch.setenv("MAKE_LOCAL_ANNOTATE", "false")
+    parsed = parse_make_response(
+        {
+            "inventory": [
+                {
+                    "brand": "Doctor",
+                    "product_name": "Toothpaste",
+                    "variant": "Original",
+                    "quantity": 8,
+                    "confidence": 0.99,
+                },
+                {
+                    "brand": "Dento",
+                    "product_name": "Toothpaste",
+                    "variant": "Original",
+                    "quantity": 4,
+                    "confidence": 0.99,
+                },
+            ],
+            "executive_summary": "Doctor shelf.",
+        }
+    )
+    result = finalize_make_scan(
+        tiny_image,
+        scan_id="dento-fix",
+        metadata={"category": "Personal Care", "sub_category": "toothpaste"},
+        parsed=parsed,
+        processing_ms=700,
+    )
+    doctor_rows = [r for r in result["inventory"] if r["brand"] == "Doctor"]
+    assert len(doctor_rows) == 1
+    assert doctor_rows[0]["quantity"] == 12
+    assert not any(r["brand"] == "Dento" for r in result["inventory"])
+
+
 def test_finalize_make_scan_with_facings(tiny_image, monkeypatch):
     monkeypatch.setenv("MAKE_LOCAL_ANNOTATE", "false")
     parsed = parse_make_response(
