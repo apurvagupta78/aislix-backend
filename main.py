@@ -364,11 +364,51 @@ def _client_ip(request: Request) -> str | None:
     return None
 
 
+def _public_base_url(request: Request) -> str:
+    """HTTPS-aware public URL behind Railway / reverse proxies."""
+    from app.landing_leads import public_base_url_from_headers
+
+    return public_base_url_from_headers(
+        dict(request.headers),
+        fallback_scheme=request.url.scheme,
+        fallback_host=request.url.netloc,
+    )
+
+
+def _form_field_str(form: dict, key: str) -> str | None:
+    val = form.get(key)
+    if val is None:
+        return None
+    if hasattr(val, "read"):
+        return None
+    text = str(val).strip()
+    return text or None
+
+
+async def _parse_landing_scan_payload(request: Request) -> dict:
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" in content_type:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="JSON body must be an object.")
+        return body
+    if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+        form = await request.form()
+        return dict(form)
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Expected multipart/form-data, application/x-www-form-urlencoded, "
+            "or application/json with sample_id or file."
+        ),
+    )
+
+
 @app.get("/landing/samples")
 def landing_samples(request: Request):
     from app.landing_leads import list_samples
 
-    base = str(request.base_url).rstrip("/")
+    base = _public_base_url(request)
     samples = list_samples()
     for sample in samples:
         sample["preview_url"] = f"{base}/landing/samples/{sample['sample_id']}/image"
@@ -400,6 +440,7 @@ def landing_get_session(session_token: str):
 async def landing_scan(request: Request):
     """Anonymous shelf scan for /retail-intelligence — no signup required."""
     from app.landing_leads import (
+        DEFAULT_SAMPLE_ID,
         ENABLED,
         MAX_BYTES,
         check_rate_limit,
@@ -426,22 +467,22 @@ async def landing_scan(request: Request):
             detail=f"Daily demo scan limit reached ({limit} per day). Sign up for full access.",
         )
 
-    content_type = request.headers.get("content-type", "")
-    if "multipart/form-data" not in content_type:
-        raise HTTPException(status_code=400, detail="Expected multipart/form-data.")
-
-    form = await request.form()
-    utm = parse_utm(form)
-    session_token = (form.get("landing_session_id") or form.get("session_token") or "").strip() or None
-    sample_id = (form.get("sample_id") or "").strip() or None
-    category = (form.get("category") or "").strip() or None
-    location = (form.get("location") or "").strip() or None
-    shelf_label = (form.get("shelf_label") or "").strip() or None
+    payload = await _parse_landing_scan_payload(request)
+    utm = parse_utm(payload)
+    session_token = (
+        _form_field_str(payload, "landing_session_id")
+        or _form_field_str(payload, "session_token")
+    )
+    sample_id = _form_field_str(payload, "sample_id")
+    category = _form_field_str(payload, "category")
+    location = _form_field_str(payload, "location")
+    shelf_label = _form_field_str(payload, "shelf_label")
     referrer = request.headers.get("referer") or request.headers.get("referrer")
     user_agent = request.headers.get("user-agent")
 
     image_bytes: bytes | None = None
     sample_defaults: dict[str, str] = {}
+    upload = payload.get("file")
     if sample_id:
         try:
             image_bytes, sample_defaults = resolve_sample_image(sample_id)
@@ -450,13 +491,7 @@ async def landing_scan(request: Request):
         category = category or sample_defaults.get("category")
         location = location or sample_defaults.get("location")
         shelf_label = shelf_label or sample_defaults.get("shelf_label")
-    else:
-        upload = form.get("file")
-        if upload is None:
-            raise HTTPException(
-                status_code=400,
-                detail='Provide "file" (image upload) or "sample_id" (e.g. lays-a1l).',
-            )
+    elif upload is not None and hasattr(upload, "read"):
         image_bytes = await upload.read()
         if not image_bytes:
             raise HTTPException(status_code=400, detail="Empty file upload.")
@@ -465,6 +500,15 @@ async def landing_scan(request: Request):
                 status_code=413,
                 detail=f"Image too large (max {MAX_BYTES // (1024 * 1024)} MB).",
             )
+    else:
+        sample_id = DEFAULT_SAMPLE_ID
+        try:
+            image_bytes, sample_defaults = resolve_sample_image(sample_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        category = category or sample_defaults.get("category")
+        location = location or sample_defaults.get("location")
+        shelf_label = shelf_label or sample_defaults.get("shelf_label")
 
     token = create_pending_session(
         session_token=session_token,

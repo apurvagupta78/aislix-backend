@@ -103,6 +103,18 @@ def test_toothpaste_sample_defaults():
     assert "planogram_items" not in meta
 
 
+def test_public_base_url_from_headers_https():
+    from app.landing_leads import public_base_url_from_headers
+
+    url = public_base_url_from_headers(
+        {
+            "x-forwarded-proto": "https",
+            "host": "aislix-backend-production.up.railway.app",
+        }
+    )
+    assert url == "https://aislix-backend-production.up.railway.app"
+
+
 def test_slim_scan_result_strips_heavy_fields():
     full = {
         "scan_id": "abc123",

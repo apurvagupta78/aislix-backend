@@ -17,6 +17,71 @@ List all samples: `GET /landing/samples` — default sample has `"is_default": t
 
 ---
 
+## URGENT FIX — "Failed to fetch" + wrong dummy inventory (paste first if live)
+
+Symptoms on homepage demo:
+- Red banner **"Failed to fetch"** but table still shows 8 products / 91% shelf health
+- That table is **hardcoded dummy data** from HomeLiveDemoDashboard — NOT real API results
+
+Backend live scan returns **~154 products / 18 SKUs** for `toothpaste-a1l` when called correctly.
+
+### A. Remove dummy fallback on error
+
+DELETE or disable any static demo rows like:
+- Colgate Strong Teeth Qty 1, MaxFresh Qty 1, Pepsodent Qty 1
+- Metrics 8 / 8 / 91%
+
+On scan error:
+- Show sticky error alert with real message (from `response.json().detail` or catch text)
+- Keep **metrics + table empty** or show "Scan failed — try again"
+- NEVER render dummy inventory when `fetch` fails
+
+### B. Correct API call (src/lib/landing-scan-api.ts)
+
+```typescript
+const API = import.meta.env.VITE_AISLIX_API_URL?.replace(/\/$/, "");
+if (!API) throw new Error("VITE_AISLIX_API_URL is not configured");
+
+export async function runLandingSample(sampleId = "toothpaste-a1l") {
+  const form = new FormData();
+  form.append("sample_id", sampleId);
+  if (sessionId) form.append("landing_session_id", sessionId);
+
+  const res = await fetch(`${API}/landing/scan`, {
+    method: "POST",
+    body: form,
+    // do NOT set Content-Type — browser sets multipart boundary
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = body?.detail ?? res.statusText;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return body;
+}
+```
+
+Also supported (simpler): `POST /landing/scan` with JSON `{ "sample_id": "toothpaste-a1l" }`.
+
+Timeout: allow **120 seconds** (large shelves + Make.com). Do not abort at 30s.
+
+### C. Default shelf image
+
+On mount set preview to API image (NOT a local stock photo):
+`${API}/landing/samples/toothpaste-a1l/image`
+
+After scan completes, replace with `annotated_image_base64` from response if present.
+
+### D. QA after fix
+
+✓ No "Failed to fetch" on Try Sample Shelf  
+✓ Products detected ≈ **150+** (not 8) for toothpaste sample  
+✓ Unique SKUs ≈ **14–18** (not 8)  
+✓ On error: no fake inventory rows  
+
+---
+
 ```
 HOMEPAGE + LANDING DEMO — DEFAULT SHELF IMAGE + SCAN PROGRESS UX
 

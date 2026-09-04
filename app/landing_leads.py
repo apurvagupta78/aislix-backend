@@ -62,6 +62,19 @@ DEFAULT_SAMPLE_ID = "toothpaste-a1l"
 _rate_cache: dict[str, tuple[int, str]] = {}
 
 
+def public_base_url_from_headers(
+    headers: dict[str, str],
+    *,
+    fallback_scheme: str = "http",
+    fallback_host: str = "localhost",
+) -> str:
+    """HTTPS-aware public URL behind Railway / reverse proxies."""
+    forwarded_proto = (headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+    scheme = forwarded_proto or fallback_scheme
+    host = headers.get("x-forwarded-host") or headers.get("host") or fallback_host
+    return f"{scheme}://{host}".rstrip("/")
+
+
 def new_session_token() -> str:
     return uuid.uuid4().hex
 
