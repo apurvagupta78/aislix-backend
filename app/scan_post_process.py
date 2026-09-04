@@ -145,6 +145,18 @@ def finalize_make_scan(
     classified: list[dict]
     if inventory:
         inventory = _normalize_inventory_rows(inventory)
+        if planogram_items:
+            from app.make_annotate import apply_planogram_yolo_qty
+
+            inventory, yolo_qty_applied = apply_planogram_yolo_qty(
+                image,
+                metadata,
+                scan_context,
+                inventory,
+                planogram_items,
+            )
+            if yolo_qty_applied:
+                scan_context["planogram_yolo_qty"] = True
         classified = normalize_classified_labels(_expand_inventory_to_classified(inventory))
     elif parsed.get("facings"):
         facings = parsed.get("facings") or []
@@ -191,6 +203,8 @@ def finalize_make_scan(
         metrics["planogram_sku_match_percent"] = planogram_compliance.get("planogram_sku_match_percent")
         metrics["planogram_qty_compliance_percent"] = planogram_compliance.get("planogram_qty_compliance_percent")
         metrics["planogram_summary"] = planogram_compliance.get("summary")
+    if scan_context.get("planogram_yolo_qty"):
+        metrics["planogram_yolo_qty"] = True
 
     shares = brand_share(inventory_counted_rows(inventory))
     categories = category_breakdown(inventory_counted_rows(inventory))

@@ -42,6 +42,11 @@ def make_annotate_draw_labels() -> bool:
     return os.getenv("MAKE_ANNOTATE_DRAW_LABELS", "true").lower() in {"1", "true", "yes"}
 
 
+def make_planogram_yolo_qty_enabled() -> bool:
+    """Use YOLO per-row facing counts for planogram inventory qty when GPT under-counts rows."""
+    return os.getenv("MAKE_PLANOGRAM_YOLO_QTY", "true").lower() in {"1", "true", "yes"}
+
+
 def _annotate_env_float(name: str, default: float) -> float:
     raw = os.getenv(name, "").strip()
     if not raw:
@@ -69,15 +74,31 @@ def _inventory_sku_key(row: dict) -> tuple[str, str, str]:
     )
 
 
+def _variants_match(row_variant: str, item_variant: str) -> bool:
+    rv = (row_variant or "").strip().lower()
+    iv = (item_variant or "").strip().lower()
+    if not rv or not iv:
+        return True
+    if rv == iv:
+        return True
+    if rv in iv or iv in rv:
+        return True
+    ta = set(rv.replace("-", " ").replace("&", " and ").split())
+    tb = set(iv.replace("-", " ").replace("&", " and ").split())
+    if not ta or not tb:
+        return False
+    return len(ta & tb) / max(len(ta), len(tb)) >= 0.5
+
+
 def _inventory_matches_planogram(row: dict, item: dict) -> bool:
     row_brand = (row.get("brand") or "").strip().lower()
     item_brand = (item.get("brand") or "").strip().lower()
     if row_brand != item_brand:
         return False
-    row_variant = (row.get("variant") or "").strip().lower()
-    item_variant = (item.get("variant") or "").strip().lower()
+    row_variant = (row.get("variant") or "").strip()
+    item_variant = (item.get("variant") or "").strip()
     if row_variant and item_variant:
-        return row_variant == item_variant
+        return _variants_match(row_variant, item_variant)
     row_product = (row.get("product_name") or row.get("product") or "").strip().lower()
     item_product = (item.get("product_name") or item.get("product") or "").strip().lower()
     return bool(row_product and item_product and row_product == item_product)
@@ -933,3 +954,81 @@ def build_local_detection_facings(
 
 # Backward-compatible alias
 build_planogram_sku_band_facings = build_sku_band_facings
+
+
+def _yolo_row_facing_counts(
+    image: np.ndarray,
+    metadata: dict[str, Any],
+    scan_context: dict[str, Any],
+) -> list[int]:
+    """Count YOLO detections per physical shelf row, top to bottom."""
+    if not make_local_annotate_enabled():
+        return []
+    img_h = int(image.shape[0])
+    try:
+        boxes = _detect_product_boxes(image, metadata, scan_context)
+    except Exception:
+        return []
+    boxes = _filter_product_zone_boxes(boxes, img_h)
+    if not boxes:
+        return []
+    rows = _cluster_boxes_into_rows(boxes)
+    return [len(row) for row in rows]
+
+
+def apply_planogram_yolo_qty(
+    image: np.ndarray,
+    metadata: dict[str, Any],
+    scan_context: dict[str, Any],
+    inventory: list[dict],
+    planogram_items: list[dict],
+) -> tuple[list[dict], bool]:
+    """
+    Override inventory qty from YOLO row facing counts grouped by planogram weights.
+    GPT keeps brand/variant identification; qty comes from counted boxes per shelf row.
+    """
+    if not make_planogram_yolo_qty_enabled() or not planogram_items:
+        return inventory, False
+
+    from app.planogram_compliance import _aggregate_planogram_by_product
+
+    plano_rows = _aggregate_planogram_by_product(planogram_items)
+    if len(plano_rows) < 2:
+        return inventory, False
+
+    per_row_counts = _yolo_row_facing_counts(image, metadata, scan_context)
+    n_rows = len(per_row_counts)
+    if n_rows < len(plano_rows):
+        return inventory, False
+
+    weights = [max(1, int(p.get("expected_qty") or 1)) for p in plano_rows]
+    sku_row_spans = _proportional_row_counts(n_rows, weights)
+
+    row_idx = 0
+    plano_yolo_qty: list[tuple[dict, int]] = []
+    for plano, span in zip(plano_rows, sku_row_spans):
+        if span <= 0:
+            plano_yolo_qty.append((plano, 0))
+            continue
+        qty = sum(per_row_counts[row_idx : row_idx + span])
+        plano_yolo_qty.append((plano, qty))
+        row_idx += span
+
+    updated: list[dict] = []
+    changed = False
+    for item in inventory:
+        row = dict(item)
+        for plano, yolo_qty in plano_yolo_qty:
+            if yolo_qty <= 0:
+                continue
+            if _inventory_matches_planogram(row, plano):
+                prev = int(row.get("quantity") or row.get("facings") or 0)
+                if prev != yolo_qty:
+                    changed = True
+                row["quantity"] = yolo_qty
+                row["facings"] = yolo_qty
+                row["qty_source"] = "yolo_row_count"
+                row["stock_status"] = "in_stock" if yolo_qty > 2 else "low_stock"
+                break
+        updated.append(row)
+    return updated, changed

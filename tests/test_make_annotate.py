@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import numpy as np
 
 from app.make_annotate import (
@@ -230,6 +232,41 @@ def test_bands_from_shelf_rows_lays_planogram_three_bands():
     assert bands[1]["y1"] == 420
     assert bands[2]["variant"] == "American cream and onion"
     assert bands[2]["y1"] == 510
+
+
+def test_apply_planogram_yolo_qty_lays_rack():
+    from app.make_annotate import apply_planogram_yolo_qty
+
+    image = np.zeros((800, 900, 3), dtype=np.uint8)
+    planogram = [
+        {"brand": "Lays", "product_name": "Magic Masala", "variant": "Magic Masala", "expected_qty": 19},
+        {"brand": "Lays", "product_name": "Tomato tango", "variant": "Tomato tango", "expected_qty": 6},
+        {"brand": "Lays", "product_name": "American cream and onion", "variant": "American cream and onion", "expected_qty": 12},
+    ]
+    inventory = [
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "Magic Masala", "quantity": 12},
+        {"brand": "Lays", "product_name": "Potato Chips", "variant": "Tomato Tango", "quantity": 6},
+        {
+            "brand": "Lays",
+            "product_name": "Potato Chips",
+            "variant": "American Style Cream and Onion",
+            "quantity": 6,
+        },
+    ]
+    with patch("app.make_annotate._yolo_row_facing_counts", return_value=[7, 6, 6, 6, 6, 6]):
+        updated, changed = apply_planogram_yolo_qty(
+            image,
+            {"category": "Packaged Food & Snacks", "sub_category": "chips"},
+            {},
+            inventory,
+            planogram,
+        )
+
+    assert changed is True
+    assert updated[0]["quantity"] == 19
+    assert updated[1]["quantity"] == 6
+    assert updated[2]["quantity"] == 12
+    assert updated[2]["qty_source"] == "yolo_row_count"
 
 
 def test_build_sku_band_facings_toothpaste_many_skus():
