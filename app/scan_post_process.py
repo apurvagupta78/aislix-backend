@@ -148,7 +148,7 @@ def finalize_make_scan(
         if planogram_items:
             from app.make_annotate import apply_planogram_yolo_qty
 
-            inventory, yolo_qty_applied = apply_planogram_yolo_qty(
+            inventory, yolo_qty_applied, yolo_qty_meta = apply_planogram_yolo_qty(
                 image,
                 metadata,
                 scan_context,
@@ -157,6 +157,14 @@ def finalize_make_scan(
             )
             if yolo_qty_applied:
                 scan_context["planogram_yolo_qty"] = True
+            if yolo_qty_meta.get("yolo_row_counts"):
+                scan_context["yolo_row_counts"] = yolo_qty_meta["yolo_row_counts"]
+            if yolo_qty_meta.get("yolo_ideal_row_spans"):
+                scan_context["yolo_ideal_row_spans"] = yolo_qty_meta["yolo_ideal_row_spans"]
+            if yolo_qty_meta.get("yolo_row_spans"):
+                scan_context["yolo_row_spans"] = yolo_qty_meta["yolo_row_spans"]
+            if yolo_qty_meta.get("yolo_row_imputed"):
+                scan_context["yolo_row_imputed"] = True
         classified = normalize_classified_labels(_expand_inventory_to_classified(inventory))
     elif parsed.get("facings"):
         facings = parsed.get("facings") or []
@@ -205,6 +213,14 @@ def finalize_make_scan(
         metrics["planogram_summary"] = planogram_compliance.get("summary")
     if scan_context.get("planogram_yolo_qty"):
         metrics["planogram_yolo_qty"] = True
+    if scan_context.get("yolo_row_counts"):
+        metrics["yolo_row_counts"] = scan_context["yolo_row_counts"]
+    if scan_context.get("yolo_ideal_row_spans"):
+        metrics["yolo_ideal_row_spans"] = scan_context["yolo_ideal_row_spans"]
+    if scan_context.get("yolo_row_spans"):
+        metrics["yolo_row_spans"] = scan_context["yolo_row_spans"]
+    if scan_context.get("yolo_row_imputed"):
+        metrics["yolo_row_imputed"] = True
 
     shares = brand_share(inventory_counted_rows(inventory))
     categories = category_breakdown(inventory_counted_rows(inventory))

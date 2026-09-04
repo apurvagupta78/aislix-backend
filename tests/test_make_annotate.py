@@ -9,7 +9,11 @@ import numpy as np
 from app.make_annotate import (
     _assign_inventory_to_boxes,
     _bands_from_shelf_rows,
+    _compress_row_spans_from_bottom,
     _filter_product_zone_boxes,
+    _ideal_row_spans,
+    _impute_missing_row_qty,
+    _planogram_row_spans,
     _proportional_row_counts,
     build_sku_band_facings,
 )
@@ -18,6 +22,26 @@ from app.make_annotate import (
 def test_proportional_row_counts_lays_rack():
     counts = _proportional_row_counts(6, [19, 6, 12])
     assert counts == [3, 1, 2]
+
+
+def test_ideal_row_spans_lays_rack():
+    assert _ideal_row_spans([19, 6, 12]) == [3, 1, 2]
+
+
+def test_compress_row_spans_from_bottom():
+    assert _compress_row_spans_from_bottom([3, 1, 2], 5) == [3, 1, 1]
+
+
+def test_impute_missing_row_qty_cream_row():
+    qty, imputed = _impute_missing_row_qty(6, ideal_span=2, actual_span=1, row_counts=[6], expected_qty=12)
+    assert imputed is True
+    assert qty == 12
+
+
+def test_planogram_row_spans_five_detected_rows():
+    ideal, spans = _planogram_row_spans(5, [19, 6, 12])
+    assert ideal == [3, 1, 2]
+    assert spans == [3, 1, 1]
 
 
 def test_filter_product_zone_boxes_drops_ceiling():
@@ -254,7 +278,7 @@ def test_apply_planogram_yolo_qty_lays_rack():
         },
     ]
     with patch("app.make_annotate._yolo_row_facing_counts", return_value=[7, 6, 6, 6, 6, 6]):
-        updated, changed = apply_planogram_yolo_qty(
+        updated, changed, meta = apply_planogram_yolo_qty(
             image,
             {"category": "Packaged Food & Snacks", "sub_category": "chips"},
             {},
@@ -267,6 +291,7 @@ def test_apply_planogram_yolo_qty_lays_rack():
     assert updated[1]["quantity"] == 6
     assert updated[2]["quantity"] == 12
     assert updated[2]["qty_source"] == "yolo_row_count"
+    assert meta["yolo_row_counts"] == [7, 6, 6, 6, 6, 6]
 
 
 def test_apply_planogram_yolo_qty_lays_csv_planogram_shape():
@@ -290,7 +315,7 @@ def test_apply_planogram_yolo_qty_lays_csv_planogram_shape():
         },
     ]
     with patch("app.make_annotate._yolo_row_facing_counts", return_value=[7, 6, 6, 6, 6, 6]):
-        updated, changed = apply_planogram_yolo_qty(
+        updated, changed, meta = apply_planogram_yolo_qty(
             image,
             {"category": "Packaged Food & Snacks", "sub_category": "chips"},
             {},
@@ -304,6 +329,48 @@ def test_apply_planogram_yolo_qty_lays_csv_planogram_shape():
     assert by_variant["Tomato Tango"] == 6
     assert by_variant["American Style Cream and Onion"] == 12
     assert all(row.get("qty_source") == "yolo_row_count" for row in updated)
+    assert meta["yolo_row_spans"] == [3, 1, 2]
+
+
+def test_apply_planogram_yolo_qty_imputes_missing_bottom_cream_row():
+    """When YOLO detects 5 rows instead of 6, impute the missing bottom cream row."""
+    from app.make_annotate import apply_planogram_yolo_qty
+
+    image = np.zeros((800, 900, 3), dtype=np.uint8)
+    planogram = [
+        {"brand": "Lays", "product_name": "Magic Masala", "variant": "", "expected_qty": 19},
+        {"brand": "Lays", "product_name": "Tomato tango", "variant": "", "expected_qty": 6},
+        {"brand": "Lays", "product_name": "American cream and onion", "variant": "", "expected_qty": 12},
+    ]
+    inventory = [
+        {"brand": "Lay's", "product_name": "Potato Chips", "variant": "Magic Masala", "quantity": 12},
+        {"brand": "Lay's", "product_name": "Potato Chips", "variant": "Tomato Tango", "quantity": 6},
+        {
+            "brand": "Lay's",
+            "product_name": "Potato Chips",
+            "variant": "American Style Cream and Onion",
+            "quantity": 6,
+        },
+    ]
+    with patch("app.make_annotate._yolo_row_facing_counts", return_value=[7, 6, 6, 6, 6]):
+        updated, changed, meta = apply_planogram_yolo_qty(
+            image,
+            {"category": "Packaged Food & Snacks", "sub_category": "chips"},
+            {},
+            inventory,
+            planogram,
+        )
+
+    assert changed is True
+    by_variant = {row["variant"]: row for row in updated}
+    assert by_variant["Magic Masala"]["quantity"] == 19
+    assert by_variant["Tomato Tango"]["quantity"] == 6
+    assert by_variant["American Style Cream and Onion"]["quantity"] == 12
+    assert by_variant["American Style Cream and Onion"]["qty_source"] == "yolo_row_count+imputed"
+    assert meta["yolo_row_counts"] == [7, 6, 6, 6, 6]
+    assert meta["yolo_ideal_row_spans"] == [3, 1, 2]
+    assert meta["yolo_row_spans"] == [3, 1, 1]
+    assert meta["yolo_row_imputed"] is True
 
 
 def test_build_sku_band_facings_toothpaste_many_skus():

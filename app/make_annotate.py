@@ -842,6 +842,64 @@ def _proportional_row_counts(n_rows: int, weights: list[int]) -> list[int]:
     return counts
 
 
+def _ideal_row_spans(weights: list[int]) -> list[int]:
+    """Full-rack row spans inferred from planogram qty weights (e.g. Lay's 19/6/12 → 3+1+2 rows)."""
+    if not weights:
+        return []
+    typical_row = min(max(1, w) for w in weights)
+    total = sum(max(1, w) for w in weights)
+    ideal_rows = max(len(weights), round(total / typical_row))
+    return _proportional_row_counts(ideal_rows, weights)
+
+
+def _compress_row_spans_from_bottom(ideal_spans: list[int], n_rows: int) -> list[int]:
+    """When YOLO detects fewer rows than the planogram layout, drop spans from bottom SKUs first."""
+    actual = list(ideal_spans)
+    while sum(actual) > n_rows:
+        reduced = False
+        for i in range(len(actual) - 1, -1, -1):
+            if actual[i] > 1:
+                actual[i] -= 1
+                reduced = True
+                break
+        if not reduced:
+            break
+    return actual
+
+
+def _impute_missing_row_qty(
+    qty: int,
+    ideal_span: int,
+    actual_span: int,
+    row_counts: list[int],
+    expected_qty: int,
+) -> tuple[int, bool]:
+    """Fill in facings for undetected duplicate shelf rows (common on bottom multi-row SKUs)."""
+    if ideal_span <= actual_span or actual_span <= 0 or qty >= expected_qty:
+        return qty, False
+    missing_rows = ideal_span - actual_span
+    if missing_rows <= 0 or not row_counts:
+        return qty, False
+    avg_row = sum(row_counts) / len(row_counts)
+    if avg_row <= 0:
+        return qty, False
+    imputed = qty + round(avg_row * missing_rows)
+    if imputed <= qty:
+        return qty, False
+    return imputed, True
+
+
+def _planogram_row_spans(n_rows: int, weights: list[int]) -> tuple[list[int], list[int]]:
+    """Return (ideal_spans, spans_to_use) for the detected row count."""
+    ideal_spans = _ideal_row_spans(weights)
+    ideal_rows = sum(ideal_spans)
+    if n_rows >= ideal_rows:
+        spans = ideal_spans if n_rows == ideal_rows else _proportional_row_counts(n_rows, weights)
+    else:
+        spans = _compress_row_spans_from_bottom(ideal_spans, n_rows)
+    return ideal_spans, spans
+
+
 def _label_boxes_with_inventory(boxes: list[dict], inv: dict) -> list[dict]:
     brand = inv.get("brand") or "Product"
     product_name = inv.get("product_name") or inv.get("product") or "Detected"
@@ -975,47 +1033,64 @@ def apply_planogram_yolo_qty(
     scan_context: dict[str, Any],
     inventory: list[dict],
     planogram_items: list[dict],
-) -> tuple[list[dict], bool]:
+) -> tuple[list[dict], bool, dict[str, Any]]:
     """
     Override inventory qty from YOLO row facing counts grouped by planogram weights.
     GPT keeps brand/variant identification; qty comes from counted boxes per shelf row.
     """
+    meta: dict[str, Any] = {}
     if not make_planogram_yolo_qty_enabled() or not planogram_items:
-        return inventory, False
+        return inventory, False, meta
 
     from app.planogram_compliance import _aggregate_planogram_by_product, _find_best_match
 
     plano_rows = _aggregate_planogram_by_product(planogram_items)
     if len(plano_rows) < 2:
-        return inventory, False
+        return inventory, False, meta
 
     per_row_counts = _yolo_row_facing_counts(image, metadata, scan_context)
     n_rows = len(per_row_counts)
+    meta["yolo_row_counts"] = per_row_counts
     if n_rows < len(plano_rows):
-        return inventory, False
+        return inventory, False, meta
 
     weights = [max(1, int(p.get("expected_qty") or 1)) for p in plano_rows]
-    sku_row_spans = _proportional_row_counts(n_rows, weights)
+    ideal_spans, sku_row_spans = _planogram_row_spans(n_rows, weights)
+    meta["yolo_ideal_row_spans"] = ideal_spans
+    meta["yolo_row_spans"] = sku_row_spans
+    imputed_any = False
 
     row_idx = 0
-    plano_yolo_qty: list[tuple[dict, int]] = []
-    for plano, span in zip(plano_rows, sku_row_spans):
+    plano_yolo_qty: list[tuple[dict, int, bool]] = []
+    for plano, ideal_span, span in zip(plano_rows, ideal_spans, sku_row_spans):
         if span <= 0:
-            plano_yolo_qty.append((plano, 0))
+            plano_yolo_qty.append((plano, 0, False))
             continue
-        qty = sum(per_row_counts[row_idx : row_idx + span])
-        plano_yolo_qty.append((plano, qty))
+        row_slice = per_row_counts[row_idx : row_idx + span]
+        qty = sum(row_slice)
+        expected_qty = int(plano.get("expected_qty") or 0)
+        imputed = False
+        if n_rows < sum(ideal_spans) and ideal_span > span:
+            qty, imputed = _impute_missing_row_qty(qty, ideal_span, span, row_slice, expected_qty)
+            imputed_any = imputed_any or imputed
+        plano_yolo_qty.append((plano, qty, imputed))
         row_idx += span
+
+    if imputed_any:
+        meta["yolo_row_imputed"] = True
 
     used_indices: set[int] = set()
     qty_by_idx: dict[int, int] = {}
-    for plano, yolo_qty in plano_yolo_qty:
+    imputed_indices: set[int] = set()
+    for plano, yolo_qty, imputed in plano_yolo_qty:
         if yolo_qty <= 0:
             continue
         idx, _score = _find_best_match(plano, inventory, used_indices)
         if idx is not None:
             used_indices.add(idx)
             qty_by_idx[idx] = yolo_qty
+            if imputed:
+                imputed_indices.add(idx)
 
     updated: list[dict] = []
     changed = False
@@ -1028,7 +1103,9 @@ def apply_planogram_yolo_qty(
                 changed = True
             row["quantity"] = yolo_qty
             row["facings"] = yolo_qty
-            row["qty_source"] = "yolo_row_count"
+            row["qty_source"] = (
+                "yolo_row_count+imputed" if idx in imputed_indices else "yolo_row_count"
+            )
             row["stock_status"] = "in_stock" if yolo_qty > 2 else "low_stock"
         updated.append(row)
-    return updated, changed
+    return updated, changed, meta
