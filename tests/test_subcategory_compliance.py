@@ -260,6 +260,40 @@ def test_lays_staples_category_not_mismatch_on_chips_audit():
     assert result["misplaced_facings"] == 0
 
 
+def _toothpaste_context() -> dict:
+    return {
+        "aislix_category": "Personal Care",
+        "sub_category": "toothpaste",
+        "sub_category_label": "Toothpaste",
+        "catalog_categories": ["personal care"],
+        "brand_hints": {"colgate", "oral-b", "sensodyne", "closeup", "pepsodent"},
+    }
+
+
+def test_unlisted_toothpaste_brands_compliant_on_toothpaste_audit():
+    """Regional toothpaste brands not in brand_hints must pass when product text says toothpaste."""
+    ctx = _toothpaste_context()
+    classified = [
+        _facing("Odol", "Toothpaste (Original)", variant="Original"),
+        _facing("Doctor", "Toothpaste (Herbal)", variant="Herbal"),
+        _facing("Kolynos", "Toothpaste (Original)", variant="Original"),
+    ]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 0
+    assert all(item["subcategory_match"] is True for item in classified)
+
+
+def test_water_still_mismatch_on_toothpaste_audit():
+    ctx = _toothpaste_context()
+    classified = [
+        _facing("Frau", "Water (500ml)", variant="500ml", category="Beverages"),
+        _facing("Frau", "Water (5L)", variant="5L", category="Beverages"),
+    ]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 2
+    assert all(item["subcategory_match"] is False for item in classified)
+
+
 def test_axe_deodorant_not_mismatch_on_mixed_pc_shelf():
     ctx = {
         "aislix_category": "Personal Care",

@@ -221,7 +221,7 @@ SUB_CATEGORY_BRAND_HINTS: dict[str, dict[str, set[str]]] = {
         },
         "toothpaste": {
             "colgate", "pepsodent", "sensodyne", "closeup", "dabur", "himalaya", "oral-b",
-            "oral b", "meswak",
+            "oral b", "meswak", "odol", "doctor", "kolynos",
         },
         "deodorant": {"axe", "denim", "park avenue", "fogg", "nivea", "dove", "rexona"},
         "skincare": {"nivea", "ponds", "pond's", "mamaearth", "garnier", "himalaya", "joy", "simple"},

@@ -293,6 +293,9 @@ def _evaluate_compliance(
         item.get("category") or "",
         context=scan_context,
     ):
+        # Unlisted brands (e.g. Odol, Doctor) still belong when label text matches the audit.
+        if _subcategory_product_guard(selected, haystack, pack_text):
+            return True, selected, selected_label
         foreign = _infer_foreign_aisle(haystack, aislix_key, scan_context, pack_text)
         if foreign:
             return False, foreign[0], foreign[1]
