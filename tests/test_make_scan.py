@@ -56,6 +56,24 @@ def test_build_make_multipart_uses_image_field(tiny_image):
     assert "audit_instructions" in json.loads(data["metadata"])
 
 
+def test_build_make_multipart_includes_shelf_brand_guide(tiny_image):
+    guide = "Expected: Doctor, Odol. Do NOT output Dabur unless visible."
+    _, data = build_make_multipart(
+        "abc123",
+        tiny_image,
+        {
+            "category": "Personal Care",
+            "sub_category": "toothpaste",
+            "shelf_brand_guide": guide,
+        },
+    )
+    meta = json.loads(data["metadata"])
+    assert meta["shelf_brand_guide"] == guide
+    assert "BRAND ACCURACY" in meta["audit_instructions"]
+    assert "Doctor" in meta["audit_instructions"]
+    assert "Dabur" in meta["audit_instructions"]
+
+
 def test_parse_make_response_partial_inventory():
     parsed = parse_make_response(
         {

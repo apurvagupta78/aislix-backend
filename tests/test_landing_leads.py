@@ -101,6 +101,9 @@ def test_toothpaste_sample_defaults():
     )
     assert meta["sub_category"] == "toothpaste"
     assert "planogram_items" not in meta
+    assert "shelf_brand_guide" in meta
+    assert "Doctor" in meta["shelf_brand_guide"]
+    assert "Dabur" in meta["shelf_brand_guide"]
 
 
 def test_public_base_url_from_headers_https():

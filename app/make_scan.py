@@ -131,6 +131,14 @@ def build_make_multipart(
             "row for EACH expected SKU with matching product_name/variant; do not merge flavors."
         )
 
+    brand_guide = metadata.get("shelf_brand_guide")
+    if brand_guide:
+        payload_metadata["shelf_brand_guide"] = brand_guide
+        payload_metadata["audit_instructions"] += (
+            " BRAND ACCURACY: read logos/text on packaging only — do not guess from color or "
+            "training priors. " + brand_guide
+        )
+
     data: dict[str, str] = {
         "scan_id": scan_id,
         "metadata": json.dumps(payload_metadata),

@@ -48,12 +48,19 @@ SAMPLE_DEFAULTS: dict[str, dict[str, str]] = {
         "shelf_label": "A-1-L",
     },
     "toothpaste-a1l": {
-        "label": "Oral care shelf — Colgate, Oral-B, Sensodyne, regional toothpaste brands",
+        "label": "Oral care shelf — Colgate, Oral-B, Odol, Doctor, Sensodyne, Closeup, Kolynos",
         "category": "Personal Care",
         "sub_category": "toothpaste",
         "sub_category_label": "Toothpaste",
         "location": "A-1-L",
         "shelf_label": "A-1-L",
+        "shelf_brand_guide": (
+            "Latin American / international toothpaste shelf. Expected brands: Colgate, Oral-B, "
+            "Odol, Doctor, Sensodyne, Closeup, Kolynos. Red boxes may be Odol or Closeup — not "
+            "Dabur Red. 'Doctor' is a regional toothpaste brand — never substitute Dabur. Do NOT "
+            "output Dabur, Pepsodent, or Himalaya unless the brand name is clearly readable on "
+            "packaging."
+        ),
     },
 }
 
@@ -537,8 +544,12 @@ def landing_metadata(
     if sub_label:
         meta["sub_category_label"] = sub_label
     if sample_id:
+        meta["sample_id"] = sample_id
         planogram_items = load_sample_planogram(sample_id)
         if planogram_items:
             meta["planogram_items"] = planogram_items
             meta["planogram_items_full"] = planogram_items
+    guide = defaults.get("shelf_brand_guide")
+    if guide:
+        meta["shelf_brand_guide"] = guide
     return meta

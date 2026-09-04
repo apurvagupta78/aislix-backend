@@ -34,6 +34,19 @@ toothpaste | mouthwash | water | dishwash | chips | soap | shampoo | unknown | e
 Do NOT omit mismatched categories. Do NOT filter to audit sub-category only.
 
 =========================
+BRAND ACCURACY (READ PACKAGING — NO GUESSING)
+=========================
+
+When shelf_brand_guide is in metadata, follow it exactly.
+
+General rules:
+- Set brand ONLY from readable logo/text on the package — never from box color alone.
+- Red toothpaste packaging is often Odol, Closeup, or Colgate — NOT Dabur Red unless "DABUR" is visible.
+- "Doctor" is a real regional toothpaste brand — never label it as Dabur.
+- Do NOT default to India-market brands (Dabur, Pepsodent, Himalaya) on international shelves.
+- If brand text is unreadable, use "Unknown" — do not invent a familiar brand.
+
+=========================
 PLANOGRAM (WHEN planogram_expected_skus IS IN METADATA)
 =========================
 
