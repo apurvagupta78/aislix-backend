@@ -269,6 +269,43 @@ def test_apply_planogram_yolo_qty_lays_rack():
     assert updated[2]["qty_source"] == "yolo_row_count"
 
 
+def test_apply_planogram_yolo_qty_lays_csv_planogram_shape():
+    """Planogram CSV puts flavor in product_name with empty variant; GPT puts flavor in variant."""
+    from app.make_annotate import apply_planogram_yolo_qty
+
+    image = np.zeros((800, 900, 3), dtype=np.uint8)
+    planogram = [
+        {"brand": "Lays", "product_name": "Magic Masala", "variant": "", "expected_qty": 19},
+        {"brand": "Lays", "product_name": "Tomato tango", "variant": "", "expected_qty": 6},
+        {"brand": "Lays", "product_name": "American cream and onion", "variant": "", "expected_qty": 12},
+    ]
+    inventory = [
+        {"brand": "Lay's", "product_name": "Potato Chips", "variant": "Magic Masala", "quantity": 12},
+        {"brand": "Lay's", "product_name": "Potato Chips", "variant": "Tomato Tango", "quantity": 6},
+        {
+            "brand": "Lay's",
+            "product_name": "Potato Chips",
+            "variant": "American Style Cream and Onion",
+            "quantity": 6,
+        },
+    ]
+    with patch("app.make_annotate._yolo_row_facing_counts", return_value=[7, 6, 6, 6, 6, 6]):
+        updated, changed = apply_planogram_yolo_qty(
+            image,
+            {"category": "Packaged Food & Snacks", "sub_category": "chips"},
+            {},
+            inventory,
+            planogram,
+        )
+
+    assert changed is True
+    by_variant = {row["variant"]: row["quantity"] for row in updated}
+    assert by_variant["Magic Masala"] == 19
+    assert by_variant["Tomato Tango"] == 6
+    assert by_variant["American Style Cream and Onion"] == 12
+    assert all(row.get("qty_source") == "yolo_row_count" for row in updated)
+
+
 def test_build_sku_band_facings_toothpaste_many_skus():
     image = np.zeros((1200, 800, 3), dtype=np.uint8)
     inventory = [

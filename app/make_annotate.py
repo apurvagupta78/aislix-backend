@@ -90,18 +90,11 @@ def _variants_match(row_variant: str, item_variant: str) -> bool:
     return len(ta & tb) / max(len(ta), len(tb)) >= 0.5
 
 
-def _inventory_matches_planogram(row: dict, item: dict) -> bool:
-    row_brand = (row.get("brand") or "").strip().lower()
-    item_brand = (item.get("brand") or "").strip().lower()
-    if row_brand != item_brand:
-        return False
-    row_variant = (row.get("variant") or "").strip()
-    item_variant = (item.get("variant") or "").strip()
-    if row_variant and item_variant:
-        return _variants_match(row_variant, item_variant)
-    row_product = (row.get("product_name") or row.get("product") or "").strip().lower()
-    item_product = (item.get("product_name") or item.get("product") or "").strip().lower()
-    return bool(row_product and item_product and row_product == item_product)
+def _inventory_matches_planogram(inventory_row: dict, planogram_row: dict) -> bool:
+    """Match inventory to planogram using the same fuzzy rules as compliance scoring."""
+    from app.planogram_compliance import _match_score
+
+    return _match_score(planogram_row, inventory_row) >= 0.45
 
 
 def _unique_inventory_for_assignment(inventory: list[dict]) -> list[dict]:
@@ -990,7 +983,7 @@ def apply_planogram_yolo_qty(
     if not make_planogram_yolo_qty_enabled() or not planogram_items:
         return inventory, False
 
-    from app.planogram_compliance import _aggregate_planogram_by_product
+    from app.planogram_compliance import _aggregate_planogram_by_product, _find_best_match
 
     plano_rows = _aggregate_planogram_by_product(planogram_items)
     if len(plano_rows) < 2:
@@ -1014,21 +1007,28 @@ def apply_planogram_yolo_qty(
         plano_yolo_qty.append((plano, qty))
         row_idx += span
 
+    used_indices: set[int] = set()
+    qty_by_idx: dict[int, int] = {}
+    for plano, yolo_qty in plano_yolo_qty:
+        if yolo_qty <= 0:
+            continue
+        idx, _score = _find_best_match(plano, inventory, used_indices)
+        if idx is not None:
+            used_indices.add(idx)
+            qty_by_idx[idx] = yolo_qty
+
     updated: list[dict] = []
     changed = False
-    for item in inventory:
+    for idx, item in enumerate(inventory):
         row = dict(item)
-        for plano, yolo_qty in plano_yolo_qty:
-            if yolo_qty <= 0:
-                continue
-            if _inventory_matches_planogram(row, plano):
-                prev = int(row.get("quantity") or row.get("facings") or 0)
-                if prev != yolo_qty:
-                    changed = True
-                row["quantity"] = yolo_qty
-                row["facings"] = yolo_qty
-                row["qty_source"] = "yolo_row_count"
-                row["stock_status"] = "in_stock" if yolo_qty > 2 else "low_stock"
-                break
+        if idx in qty_by_idx:
+            yolo_qty = qty_by_idx[idx]
+            prev = int(row.get("quantity") or row.get("facings") or 0)
+            if prev != yolo_qty:
+                changed = True
+            row["quantity"] = yolo_qty
+            row["facings"] = yolo_qty
+            row["qty_source"] = "yolo_row_count"
+            row["stock_status"] = "in_stock" if yolo_qty > 2 else "low_stock"
         updated.append(row)
     return updated, changed
