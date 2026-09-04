@@ -144,6 +144,38 @@ def inventory_counted_rows(inventory: list[dict]) -> list[dict]:
     return [row for row in inventory if row.get("counted_in_totals", True)]
 
 
+def merge_inventory_rows(rows: list[dict]) -> list[dict]:
+    """Merge Make.com inventory rows for the same SKU (sum quantities)."""
+    buckets: dict[tuple, dict] = {}
+    for row in rows:
+        brand = (row.get("brand") or "Unknown").strip()
+        product = (row.get("product_name") or "Unknown").strip()
+        variant = (row.get("variant") or "").strip()
+        brand_key = _normalize_brand_key(brand, product)
+        product_key = _normalize_product_key(product)
+        variant_key = _normalize_variant_key(variant)
+        key = (brand_key, product_key, variant_key)
+        qty = max(0, int(row.get("quantity") or row.get("facings") or 0))
+        conf = float(row.get("confidence") or 0.0)
+        if key not in buckets:
+            merged = dict(row)
+            merged["brand"] = _display_brand_name(brand, brand_key)
+            merged["product_name"] = _display_product_name(product)
+            merged["variant"] = _display_variant(variant)
+            merged["quantity"] = qty
+            merged["facings"] = qty
+            merged["confidence"] = conf
+            buckets[key] = merged
+            continue
+        bucket = buckets[key]
+        bucket["quantity"] += qty
+        bucket["facings"] = bucket["quantity"]
+        bucket["confidence"] = max(float(bucket.get("confidence") or 0.0), conf)
+    merged_rows = list(buckets.values())
+    merged_rows.sort(key=lambda row: -int(row.get("quantity") or 0))
+    return merged_rows
+
+
 def aggregate_inventory(classified: list[dict]) -> list[dict]:
     buckets: dict[tuple, dict] = defaultdict(lambda: {"quantity": 0, "confidences": []})
 

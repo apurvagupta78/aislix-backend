@@ -13,6 +13,7 @@ from app.inventory import (
     aggregate_inventory,
     inventory_counted_rows,
     inventory_to_api_products,
+    merge_inventory_rows,
     normalize_classified_labels,
 )
 from app.metrics import (
@@ -165,6 +166,7 @@ def finalize_make_scan(
                 scan_context["yolo_row_spans"] = yolo_qty_meta["yolo_row_spans"]
             if yolo_qty_meta.get("yolo_row_imputed"):
                 scan_context["yolo_row_imputed"] = True
+        inventory = merge_inventory_rows(inventory)
         classified = normalize_classified_labels(_expand_inventory_to_classified(inventory))
     elif parsed.get("facings"):
         facings = parsed.get("facings") or []

@@ -356,6 +356,16 @@ def _subcategory_label(scan_context: dict, sub_id: str) -> str:
     return resolve_subcategory_label(category, sub_id) or sub_id.replace("_", " ").title()
 
 
+def _unknown_brand_has_foreign_product_text(item: dict, scan_context: dict) -> bool:
+    """True when readable label text clearly belongs outside the audit sub-category."""
+    haystack = _haystack(item)
+    pack_text = (item.get("pack_text") or "").strip()
+    selected = effective_sub_category(scan_context) or scan_context.get("sub_category") or ""
+    if _subcategory_product_guard(selected, haystack, pack_text):
+        return False
+    return foreign_aisle_conflict(haystack, scan_context, pack_text=pack_text) is not None
+
+
 def _planogram_label_trusted_for_audit(item: dict, scan_context: dict) -> bool:
     """Closed-vocabulary planogram labels are on-assignment — skip cross-aisle mismatch."""
     if not item.get("planogram_guided"):
@@ -410,8 +420,9 @@ def analyze_subcategory_compliance(
     for item in classified:
         brand_l = (item.get("brand") or "").strip().lower()
         if brand_l in {"", "unknown"}:
-            item["subcategory_match"] = True
-            continue
+            if not _unknown_brand_has_foreign_product_text(item, scan_context):
+                item["subcategory_match"] = True
+                continue
         if float(item.get("confidence") or 0) < MIN_COMPLIANCE_CONFIDENCE:
             item["subcategory_match"] = True
             continue

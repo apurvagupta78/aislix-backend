@@ -394,6 +394,41 @@ def test_finalize_make_scan_partial_inventory(tiny_image, monkeypatch):
     assert result["pdf_base64"]
 
 
+def test_finalize_make_scan_merges_duplicate_inventory_rows(tiny_image, monkeypatch):
+    monkeypatch.setenv("MAKE_LOCAL_ANNOTATE", "false")
+    parsed = parse_make_response(
+        {
+            "inventory": [
+                {
+                    "brand": "Colgate",
+                    "product_name": "Toothpaste",
+                    "variant": "Triple Acción",
+                    "quantity": 21,
+                    "confidence": 0.99,
+                },
+                {
+                    "brand": "Colgate",
+                    "product_name": "Toothpaste",
+                    "variant": "Triple Acción",
+                    "quantity": 16,
+                    "confidence": 0.95,
+                },
+            ],
+            "executive_summary": "Colgate shelf.",
+        }
+    )
+    result = finalize_make_scan(
+        tiny_image,
+        scan_id="merge-test",
+        metadata={"category": "Personal Care", "sub_category": "toothpaste"},
+        parsed=parsed,
+        processing_ms=800,
+    )
+    assert len(result["inventory"]) == 1
+    assert result["inventory"][0]["quantity"] == 37
+    assert result["metrics"]["unique_skus"] == 1
+
+
 def test_finalize_make_scan_with_facings(tiny_image, monkeypatch):
     monkeypatch.setenv("MAKE_LOCAL_ANNOTATE", "false")
     parsed = parse_make_response(

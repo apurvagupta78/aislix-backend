@@ -294,6 +294,30 @@ def test_water_still_mismatch_on_toothpaste_audit():
     assert all(item["subcategory_match"] is False for item in classified)
 
 
+def test_unknown_dishwash_mismatch_on_toothpaste_audit():
+    ctx = _toothpaste_context()
+    classified = [
+        _facing(
+            "Unknown",
+            "Dishwashing Liquid",
+            variant="Green",
+            pack_text="Unknown Dishwashing Liquid Green dishwash",
+            product_category="dishwash",
+        ),
+    ]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 1
+    assert classified[0]["subcategory_match"] is False
+
+
+def test_unknown_toothpaste_text_skips_compliance():
+    ctx = _toothpaste_context()
+    classified = [_facing("Unknown", "Toothpaste", variant="")]
+    result = analyze_subcategory_compliance(classified, ctx)
+    assert result["misplaced_facings"] == 0
+    assert classified[0]["subcategory_match"] is True
+
+
 def test_axe_deodorant_not_mismatch_on_mixed_pc_shelf():
     ctx = {
         "aislix_category": "Personal Care",
