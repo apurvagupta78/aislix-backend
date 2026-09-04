@@ -23,6 +23,7 @@ ENABLED = os.getenv("LANDING_SCAN_ENABLED", "true").lower() in {"1", "true", "ye
 SAMPLE_IMAGES: dict[str, Path] = {
     "shampoo-a1z": BASE_DIR / "data" / "reference" / "shampoo_a1z.jpg",
     "lays-a1l": BASE_DIR / "data" / "reference" / "lays_rack_a1l.jpg",
+    "toothpaste-a1l": BASE_DIR / "data" / "reference" / "toothpaste_a1l.jpg",
 }
 
 SAMPLE_PLANOGRAMS: dict[str, Path] = {
@@ -46,9 +47,17 @@ SAMPLE_DEFAULTS: dict[str, dict[str, str]] = {
         "location": "A-1-L",
         "shelf_label": "A-1-L",
     },
+    "toothpaste-a1l": {
+        "label": "Oral care shelf — Colgate, Oral-B, Sensodyne, regional toothpaste brands",
+        "category": "Personal Care",
+        "sub_category": "toothpaste",
+        "sub_category_label": "Toothpaste",
+        "location": "A-1-L",
+        "shelf_label": "A-1-L",
+    },
 }
 
-DEFAULT_SAMPLE_ID = "shampoo-a1z"
+DEFAULT_SAMPLE_ID = "toothpaste-a1l"
 
 _rate_cache: dict[str, tuple[int, str]] = {}
 

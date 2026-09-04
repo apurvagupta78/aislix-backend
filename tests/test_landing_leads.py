@@ -72,7 +72,7 @@ def test_load_sample_planogram_lays():
 def test_shampoo_sample_defaults():
     from app.landing_leads import DEFAULT_SAMPLE_ID, SAMPLE_DEFAULTS
 
-    assert DEFAULT_SAMPLE_ID == "shampoo-a1z"
+    assert DEFAULT_SAMPLE_ID == "toothpaste-a1l"
     meta = landing_metadata(
         None,
         None,
@@ -82,6 +82,24 @@ def test_shampoo_sample_defaults():
     )
     assert meta["category"] == "Personal Care"
     assert meta["sub_category"] == "shampoo"
+
+
+def test_toothpaste_sample_defaults():
+    from app.landing_leads import DEFAULT_SAMPLE_ID, SAMPLE_DEFAULTS, resolve_sample_image
+
+    assert DEFAULT_SAMPLE_ID == "toothpaste-a1l"
+    data, defaults = resolve_sample_image("toothpaste-a1l")
+    assert len(data) > 1000
+    assert defaults["sub_category"] == "toothpaste"
+    assert defaults["category"] == "Personal Care"
+    meta = landing_metadata(
+        None,
+        None,
+        None,
+        sample_id="toothpaste-a1l",
+        sample_defaults=SAMPLE_DEFAULTS["toothpaste-a1l"],
+    )
+    assert meta["sub_category"] == "toothpaste"
     assert "planogram_items" not in meta
 
 
