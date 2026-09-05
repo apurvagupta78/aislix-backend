@@ -46,7 +46,7 @@ AS $$
   );
 $$;
 
-CREATE OR REPLACE FUNCTION public.org_has_platform_bypass(_org_id UUID)
+CREATE OR REPLACE FUNCTION public.org_has_platform_bypass(p_org_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 STABLE
@@ -69,7 +69,7 @@ BEGIN
       FROM public.organization_members om
       JOIN auth.users u ON u.id = om.user_id
       JOIN public.platform_access_grants g ON lower(trim(g.email)) = lower(trim(u.email))
-      WHERE om.org_id = _org_id
+      WHERE om.org_id = p_org_id
         AND g.is_active
         AND g.bypass_scan_limits
     );
@@ -84,7 +84,7 @@ BEGIN
       FROM public.profiles p
       JOIN auth.users u ON u.id = p.id
       JOIN public.platform_access_grants g ON lower(trim(g.email)) = lower(trim(u.email))
-      WHERE p.org_id = _org_id
+      WHERE p.org_id = p_org_id
         AND g.is_active
         AND g.bypass_scan_limits
     );
@@ -99,7 +99,7 @@ BEGIN
       FROM public.org_members om
       JOIN auth.users u ON u.id = om.user_id
       JOIN public.platform_access_grants g ON lower(trim(g.email)) = lower(trim(u.email))
-      WHERE om.org_id = _org_id
+      WHERE om.org_id = p_org_id
         AND g.is_active
         AND g.bypass_scan_limits
     );
@@ -109,7 +109,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.org_has_platform_store_bypass(_org_id UUID)
+CREATE OR REPLACE FUNCTION public.org_has_platform_store_bypass(p_org_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 STABLE
@@ -135,11 +135,11 @@ BEGIN
       FROM public.organization_members om
       JOIN auth.users u ON u.id = om.user_id
       JOIN public.platform_access_grants g ON lower(trim(g.email)) = lower(trim(u.email))
-      WHERE om.org_id = _org_id AND g.is_active AND g.bypass_store_limits
+      WHERE om.org_id = p_org_id AND g.is_active AND g.bypass_store_limits
     );
   END IF;
 
-  RETURN public.org_has_platform_bypass(_org_id);
+  RETURN public.org_has_platform_bypass(p_org_id);
 END;
 $$;
 
@@ -154,7 +154,7 @@ GRANT EXECUTE ON FUNCTION public.org_has_platform_store_bypass(UUID) TO authenti
 
 -- ============ Patch limit functions ============
 
-CREATE OR REPLACE FUNCTION public.can_org_start_scan(_org_id UUID)
+CREATE OR REPLACE FUNCTION public.can_org_start_scan(p_org_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 STABLE
@@ -167,17 +167,17 @@ DECLARE
   scans_used INT;
   free_status RECORD;
 BEGIN
-  IF public.org_has_platform_bypass(_org_id) THEN
+  IF public.org_has_platform_bypass(p_org_id) THEN
     RETURN TRUE;
   END IF;
 
-  PERFORM public.reset_subscription_period_if_due(_org_id);
+  PERFORM public.reset_subscription_period_if_due(p_org_id);
 
   SELECT sp.code, sp.scan_quota, s.scans_used
   INTO plan_code, scan_quota, scans_used
   FROM public.subscriptions s
   JOIN public.subscription_plans sp ON sp.id = s.plan_id
-  WHERE s.org_id = _org_id
+  WHERE s.org_id = p_org_id
     AND s.status IN ('active', 'trialing');
 
   IF NOT FOUND THEN
@@ -189,7 +189,7 @@ BEGIN
   END IF;
 
   IF plan_code = 'free' THEN
-    SELECT * INTO free_status FROM public.free_plan_scan_status(_org_id);
+    SELECT * INTO free_status FROM public.free_plan_scan_status(p_org_id);
     RETURN NOT free_status.blocked;
   END IF;
 
@@ -197,7 +197,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.can_org_add_store(_org_id UUID)
+CREATE OR REPLACE FUNCTION public.can_org_add_store(p_org_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 STABLE
@@ -208,7 +208,7 @@ DECLARE
   store_limit INT;
   store_count INT;
 BEGIN
-  IF public.org_has_platform_store_bypass(_org_id) THEN
+  IF public.org_has_platform_store_bypass(p_org_id) THEN
     RETURN TRUE;
   END IF;
 
@@ -216,7 +216,7 @@ BEGIN
   INTO store_limit
   FROM public.subscriptions s
   JOIN public.subscription_plans sp ON sp.id = s.plan_id
-  WHERE s.org_id = _org_id
+  WHERE s.org_id = p_org_id
     AND s.status IN ('active', 'trialing');
 
   IF NOT FOUND OR store_limit IS NULL THEN
@@ -226,14 +226,14 @@ BEGIN
   SELECT COUNT(*)
   INTO store_count
   FROM public.stores
-  WHERE org_id = _org_id
+  WHERE org_id = p_org_id
     AND status = 'active';
 
   RETURN store_count < store_limit;
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.get_org_usage_summary(_org_id UUID)
+CREATE OR REPLACE FUNCTION public.get_org_usage_summary(p_org_id UUID)
 RETURNS JSONB
 LANGUAGE plpgsql
 STABLE
@@ -250,19 +250,19 @@ DECLARE
   period_end TIMESTAMPTZ;
   free_status RECORD;
   result JSONB;
-  is_bypass BOOLEAN := public.org_has_platform_bypass(_org_id);
+  is_bypass BOOLEAN := public.org_has_platform_bypass(p_org_id);
 BEGIN
-  PERFORM public.reset_subscription_period_if_due(_org_id);
+  PERFORM public.reset_subscription_period_if_due(p_org_id);
 
   SELECT sp.code, sp.name, sp.scan_quota, sp.store_limit, s.scans_used, s.current_period_end
   INTO plan_code, plan_name, scan_quota, store_limit, scans_used, period_end
   FROM public.subscriptions s
   JOIN public.subscription_plans sp ON sp.id = s.plan_id
-  WHERE s.org_id = _org_id;
+  WHERE s.org_id = p_org_id;
 
   SELECT COUNT(*) INTO stores_used
   FROM public.stores
-  WHERE org_id = _org_id AND status = 'active';
+  WHERE org_id = p_org_id AND status = 'active';
 
   IF is_bypass THEN
     result := jsonb_build_object(
@@ -288,7 +288,7 @@ BEGIN
   END IF;
 
   IF plan_code = 'free' THEN
-    SELECT * INTO free_status FROM public.free_plan_scan_status(_org_id);
+    SELECT * INTO free_status FROM public.free_plan_scan_status(p_org_id);
     result := jsonb_build_object(
       'plan_code', plan_code,
       'plan_name', plan_name,
