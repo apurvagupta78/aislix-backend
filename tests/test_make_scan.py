@@ -141,6 +141,55 @@ def test_parse_make_response_json_string_body():
     assert parsed["inventory"][0]["quantity"] == 3
 
 
+def test_parse_make_response_markdown_fenced_json():
+    raw = """Here is the audit:
+
+```json
+{
+  "products": [
+    {"brand": "Sprite", "product": "Soft Drink", "qty": 4, "confidence": 0.95, "variant": "500ml"}
+  ],
+  "executive_summary": "Beverage shelf looks full."
+}
+```
+"""
+    parsed = parse_make_response(raw)
+    assert parsed["inventory"][0]["brand"] == "Sprite"
+    assert parsed["executive_summary"] == "Beverage shelf looks full."
+
+
+def test_parse_make_response_reasoning_prose_before_json():
+    raw = """
+Let me scan row by row from top to bottom before returning JSON.
+
+{"products":[{"brand":"Coca-Cola","product":"Soft Drink","qty":6,"confidence":0.94,"variant":""}],
+ "executive_summary":"Cola block on middle shelf."}
+"""
+    parsed = parse_make_response(raw)
+    assert parsed["inventory"][0]["brand"] == "Coca-Cola"
+
+
+def test_parse_make_response_openai_choices_wrapper():
+    raw = {
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "products": [
+                                {"brand": "Fanta", "product": "Soft Drink", "qty": 3, "confidence": 0.9, "variant": ""}
+                            ],
+                            "executive_summary": "Orange soda row.",
+                        }
+                    )
+                }
+            }
+        ]
+    }
+    parsed = parse_make_response(raw)
+    assert parsed["inventory"][0]["brand"] == "Fanta"
+
+
 def test_build_facings_from_openai_bbox():
     rows = [
         {

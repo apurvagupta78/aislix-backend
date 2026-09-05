@@ -173,13 +173,111 @@ def build_make_json_payload(
     return payload
 
 
+def _strip_markdown_json_fence(text: str) -> str:
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    lines = stripped.splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _extract_json_object(text: str) -> dict[str, Any] | None:
+    """Best-effort JSON object extraction from reasoning-model prose or fenced blocks."""
+    cleaned = _strip_markdown_json_fence(text)
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+        return parsed[0]
+
+    start = cleaned.find("{")
+    if start < 0:
+        return None
+
+    decoder = json.JSONDecoder()
+    for idx in range(start, len(cleaned)):
+        if cleaned[idx] != "{":
+            continue
+        try:
+            obj, _end = decoder.raw_decode(cleaned[idx:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict):
+            return obj
+    return None
+
+
+def _unwrap_openai_chat_completion(raw: dict[str, Any]) -> dict[str, Any] | str | None:
+    """OpenAI Chat Completions payload nested inside Make modules."""
+    choices = raw.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    first = choices[0]
+    if not isinstance(first, dict):
+        return None
+    message = first.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str) and content.strip():
+            return content
+        if isinstance(content, list):
+            text_parts: list[str] = []
+            for part in content:
+                if isinstance(part, dict):
+                    text = part.get("text") or part.get("content")
+                    if isinstance(text, str):
+                        text_parts.append(text)
+            if text_parts:
+                return "\n".join(text_parts)
+    text = first.get("text")
+    if isinstance(text, str) and text.strip():
+        return text
+    return None
+
+
 def _coerce_json_object(raw: Any) -> dict[str, Any]:
-    """Accept dict, JSON string, or nested OpenAI Message.Content payloads."""
+    """Accept dict, JSON string, OpenAI chat payloads, or nested Make/OpenAI text."""
+    if isinstance(raw, list) and len(raw) == 1:
+        raw = raw[0]
+
+    if isinstance(raw, dict):
+        openai_payload = _unwrap_openai_chat_completion(raw)
+        if isinstance(openai_payload, str):
+            extracted = _extract_json_object(openai_payload)
+            if extracted is not None:
+                return extracted
+        if openai_payload is None:
+            for key in ("output", "text", "answer", "completion", "result", "content", "message"):
+                nested = raw.get(key)
+                if isinstance(nested, str) and nested.strip():
+                    extracted = _extract_json_object(nested)
+                    if extracted is not None:
+                        return extracted
+                if isinstance(nested, dict):
+                    try:
+                        return _coerce_json_object(nested)
+                    except MakeScanError:
+                        continue
+
     if isinstance(raw, str):
+        extracted = _extract_json_object(raw)
+        if extracted is not None:
+            return extracted
         try:
             raw = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise MakeScanError("Make.com response was not valid JSON.") from exc
+            preview = raw.strip().replace("\n", " ")[:160]
+            raise MakeScanError(
+                "Make.com response was not valid JSON."
+                + (f" Preview: {preview}…" if preview else "")
+            ) from exc
     if not isinstance(raw, dict):
         raise MakeScanError("Make.com response must decode to a JSON object.")
     return raw
@@ -188,11 +286,14 @@ def _coerce_json_object(raw: Any) -> dict[str, Any]:
 def _unwrap_make_body(raw: dict[str, Any]) -> dict[str, Any]:
     product_keys = {"inventory", "metrics", "facings", "executive_summary", "products", "Products"}
 
-    for key in ("body", "data", "result", "response", "content", "message"):
+    for key in ("body", "data", "result", "response", "content", "message", "text", "output"):
         nested = raw.get(key)
         if isinstance(nested, dict) and product_keys.intersection(nested.keys()):
             return nested
         if isinstance(nested, str):
+            extracted = _extract_json_object(nested)
+            if extracted is not None and product_keys.intersection(extracted.keys()):
+                return extracted
             try:
                 parsed = json.loads(nested)
             except json.JSONDecodeError:

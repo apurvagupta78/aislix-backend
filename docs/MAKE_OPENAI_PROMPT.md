@@ -2,7 +2,14 @@
 
 **Make wiring:** User message → paste block below. Text prompt: `{{11.metadata}}`. Image: `11.image:data` + `11.image:name` (webhook module **11**, not 1).
 
-**Settings:** Response format = JSON Object | Temperature = **0.3** | Max tokens = **4096** | Image detail = **High**
+**Settings:** Response format = JSON Object | Temperature = **0.3** | Max tokens = **8192** | Image detail = **High**
+
+**Model: gpt-5.6-sol (reasoning)** — sol may emit prose or markdown before JSON. Backend now strips that automatically, but in Make you MUST still set:
+- **Response format → JSON Object** (not Text)
+- **Max output tokens → 8192+** (reasoning uses tokens before JSON; 4096 can truncate large shelves)
+- **Webhook response body** → pass the OpenAI module output through unchanged (do not wrap in extra quotes)
+
+If scans still fail, open Make execution history → last OpenAI module → check whether `content` is empty (increase max tokens) or non-JSON (enable JSON Object mode).
 
 ---
 
