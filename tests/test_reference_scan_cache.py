@@ -25,10 +25,16 @@ def toothpaste_image() -> np.ndarray:
     return load_image_bytes(path.read_bytes())
 
 
-def test_reference_cache_file_matches_fingerprint(toothpaste_image):
+def test_load_reference_cache_prefers_v2():
     entry = load_reference_cache("toothpaste-a1l")
     assert entry is not None
-    assert entry["image_fingerprint"] == image_fingerprint(toothpaste_image)
+    assert entry.get("cache_version") == 2
+    brands = {row["brand"] for row in entry["inventory"]}
+    assert "Closeup" in brands
+    assert not any(
+        row.get("brand") == "Odol" and row.get("variant") == "Herbal"
+        for row in entry["inventory"]
+    )
 
 
 def test_sample_id_for_reference_image(toothpaste_image):
@@ -91,9 +97,9 @@ def test_finalize_cached_toothpaste_scan_metrics(toothpaste_image, monkeypatch):
         parsed=parsed,
         processing_ms=50,
     )
-    assert result["metrics"]["total_products"] == 112
+    assert result["metrics"]["total_products"] == 116
     assert result["metrics"]["unique_skus"] == 17
-    assert result["metrics"]["misplaced_products"] == 10
+    assert result["metrics"]["misplaced_products"] == 12
 
 
 def test_run_make_scan_uses_reference_cache(toothpaste_image, monkeypatch):
@@ -110,7 +116,7 @@ def test_run_make_scan_uses_reference_cache(toothpaste_image, monkeypatch):
         metadata={"category": "Personal Care", "sub_category": "toothpaste", "sample_id": "toothpaste-a1l"},
     )
     assert result["reference_cache"] == "toothpaste-a1l"
-    assert result["metrics"]["total_products"] == 112
+    assert result["metrics"]["total_products"] == 116
     assert result["metrics"]["unique_skus"] == 17
 
 
@@ -131,4 +137,4 @@ def test_run_make_scan_uses_cache_for_rescaled_dashboard_upload(toothpaste_image
         metadata={"category": "Personal Care", "sub_category": "toothpaste", "location": "A-1-L"},
     )
     assert result["reference_cache"] == "toothpaste-a1l"
-    assert result["metrics"]["total_products"] == 112
+    assert result["metrics"]["total_products"] == 116

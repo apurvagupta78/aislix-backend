@@ -1,4 +1,9 @@
-"""Stable scan results for bundled reference shelf photos (demo vs dashboard parity)."""
+"""Stable scan results for bundled reference shelf photos (demo vs dashboard parity).
+
+This applies ONLY to known sample images under ``data/reference/`` (e.g.
+``toothpaste-a1l``, ``lays-a1l``, ``shampoo-a1z``). All other shelf uploads
+still run live Make.com / GPT vision — results may vary run-to-run.
+"""
 
 from __future__ import annotations
 
@@ -193,18 +198,29 @@ def enrich_reference_sample_metadata(
     return meta
 
 
-def _cache_path(sample_id: str) -> Path:
-    return CACHE_DIR / f"{sample_id}.v1.json"
+def _cache_paths(sample_id: str) -> list[Path]:
+    paths = sorted(CACHE_DIR.glob(f"{sample_id}.v*.json"))
+    if not paths:
+        legacy = CACHE_DIR / f"{sample_id}.json"
+        if legacy.is_file():
+            return [legacy]
+
+    def _version_key(path: Path) -> tuple[int, str]:
+        match = re.search(r"\.v(\d+)\.json$", path.name)
+        return (int(match.group(1)) if match else 0, path.name)
+
+    return sorted(paths, key=_version_key, reverse=True)
 
 
 def load_reference_cache(sample_id: str) -> dict[str, Any] | None:
-    path = _cache_path(sample_id)
-    if not path.is_file():
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
+    for path in _cache_paths(sample_id):
+        try:
+            entry = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(entry, dict):
+            return entry
+    return None
 
 
 def _fingerprint_matches(sample_id: str, image: np.ndarray, entry: dict[str, Any]) -> bool:
