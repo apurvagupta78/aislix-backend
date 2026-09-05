@@ -1,0 +1,161 @@
+{
+  "cache_version": 1,
+  "sample_id": "toothpaste-a1l",
+  "image_fingerprint": "3febf878c5c45e07264a0ec7ba3e1c654db1d0004db00dbae3ff528e3acd30b0",
+  "executive_summary": "The shelf is well-stocked with a strong presence of Colgate, Oral-B, Odol, Doctor, Sensodyne, and Kolynos toothpaste variants, matching the expected Latin American/international assortment. All visible toothpaste SKUs are separated by variant with accurate front-facing counts. Misplaced mouthwash and bottled water on the toothpaste shelf are flagged for relocation.",
+  "inventory": [
+    {
+      "brand": "Colgate",
+      "product_name": "Toothpaste",
+      "variant": "Triple Acción",
+      "quantity": 12,
+      "confidence": 0.99,
+      "shelf_position": "Top Center Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Oral-B",
+      "product_name": "Toothpaste",
+      "variant": "3D White",
+      "quantity": 12,
+      "confidence": 0.99,
+      "shelf_position": "Fourth Row Center Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Colgate",
+      "product_name": "Toothpaste",
+      "variant": "Luminous White",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Top Right Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Colgate",
+      "product_name": "Toothpaste",
+      "variant": "Total 12",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Top Left Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Odol",
+      "product_name": "Toothpaste",
+      "variant": "Original",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Second Row Right Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Colgate",
+      "product_name": "Toothpaste",
+      "variant": "Fresh Gel",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Second Row Center Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Colgate",
+      "product_name": "Toothpaste",
+      "variant": "Herbal",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Second Row Left Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Doctor",
+      "product_name": "Toothpaste",
+      "variant": "Original",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Third Row Left Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Doctor",
+      "product_name": "Toothpaste",
+      "variant": "Herbal",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Third Row Center Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Odol",
+      "product_name": "Toothpaste",
+      "variant": "Herbal",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Third Row Right Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Oral-B",
+      "product_name": "Toothpaste",
+      "variant": "Complete",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Fourth Row Right Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Oral-B",
+      "product_name": "Toothpaste",
+      "variant": "Original",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Fourth Row Left Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Sensodyne",
+      "product_name": "Toothpaste",
+      "variant": "Original",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Bottom Left Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Colgate",
+      "product_name": "Toothpaste",
+      "variant": "Sensitive",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Bottom Center Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Kolynos",
+      "product_name": "Toothpaste",
+      "variant": "Original",
+      "quantity": 6,
+      "confidence": 0.99,
+      "shelf_position": "Bottom Right Front",
+      "product_category": "toothpaste"
+    },
+    {
+      "brand": "Unknown",
+      "product_name": "Mouthwash",
+      "variant": "Green",
+      "quantity": 6,
+      "confidence": 0.9,
+      "shelf_position": "Top Left Front",
+      "product_category": "mouthwash"
+    },
+    {
+      "brand": "Frau",
+      "product_name": "Water",
+      "variant": "500ml",
+      "quantity": 4,
+      "confidence": 0.95,
+      "shelf_position": "Bottom Left Front",
+      "product_category": "water"
+    }
+  ]
+}
