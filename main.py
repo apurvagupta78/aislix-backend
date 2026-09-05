@@ -477,6 +477,8 @@ async def landing_scan(request: Request):
     category = _form_field_str(payload, "category")
     location = _form_field_str(payload, "location")
     shelf_label = _form_field_str(payload, "shelf_label")
+    sub_category = _form_field_str(payload, "sub_category")
+    sub_category_label = _form_field_str(payload, "sub_category_label")
     referrer = request.headers.get("referer") or request.headers.get("referrer")
     user_agent = request.headers.get("user-agent")
 
@@ -525,6 +527,8 @@ async def landing_scan(request: Request):
         shelf_label,
         sample_id=sample_id,
         sample_defaults=sample_defaults if sample_id else None,
+        sub_category=sub_category,
+        sub_category_label=sub_category_label,
     )
 
     try:

@@ -213,6 +213,8 @@ def landing_scan_response(
         "products": full.get("products") or [],
         "brand_share": full.get("brand_share") or [],
         "top_brands": full.get("top_brands") or (full.get("brand_share") or [])[:10],
+        "compliance_alerts": full.get("compliance_alerts") or [],
+        "subcategory_mismatches": full.get("subcategory_mismatches") or [],
         "executive_summary": full.get("executive_summary") or full.get("summary_text"),
         "annotated_image_base64": full.get("annotated_image_base64"),
         "annotated_image_mime": full.get("annotated_image_mime", "image/jpeg"),
@@ -540,6 +542,8 @@ def landing_metadata(
     *,
     sample_id: str | None = None,
     sample_defaults: dict[str, str] | None = None,
+    sub_category: str | None = None,
+    sub_category_label: str | None = None,
 ) -> dict[str, Any]:
     defaults = sample_defaults or {}
     meta: dict[str, Any] = {"export_facings": True}
@@ -552,12 +556,18 @@ def landing_metadata(
         meta["location"] = loc
     if label:
         meta["shelf_label"] = label
-    sub = defaults.get("sub_category")
-    sub_label = defaults.get("sub_category_label")
+    sub = sub_category or defaults.get("sub_category")
+    sub_label = sub_category_label or defaults.get("sub_category_label")
     if sub:
         meta["sub_category"] = sub
     if sub_label:
         meta["sub_category_label"] = sub_label
+    elif sub:
+        meta["sub_category_label"] = sub.replace("_", " ").title()
+    # Homepage uploads often send category only — default beverage sub-category for Make context.
+    if not meta.get("sub_category") and (meta.get("category") or "").strip().lower() == "beverages":
+        meta["sub_category"] = "soft_drinks"
+        meta["sub_category_label"] = "Soft drinks"
     if sample_id:
         meta["sample_id"] = sample_id
         planogram_items = load_sample_planogram(sample_id)
