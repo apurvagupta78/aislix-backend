@@ -29,7 +29,7 @@ from app.facing_filter import cluster_boxes_x_slots, filter_nested_facings, merg
 from app.shelf_layout import ShelfMode, detect_shelf_mode
 from app.inventory import aggregate_inventory, inventory_counted_rows, inventory_to_api_products, normalize_classified_labels
 from app.metrics import (
-    brand_share,
+    build_brand_share_payload,
     build_alerts,
     build_recommendations,
     category_breakdown,
@@ -395,7 +395,14 @@ def run_scan_from_image(
                 "planogram_qty_compliance_percent"
             )
             metrics["planogram_summary"] = planogram_compliance.get("summary")
-        shares = brand_share(inventory_counted_rows(inventory))
+        share_payload = build_brand_share_payload(
+            inventory,
+            audit_sub_category=scan_context.get("sub_category"),
+        )
+        shares = share_payload["brand_share"]
+        metrics["top_brands"] = share_payload["top_brands"]
+        metrics["brand_share_scope"] = share_payload["brand_share_scope"]
+        metrics["brand_share_denominator"] = share_payload["brand_share_denominator"]
         categories = category_breakdown(inventory_counted_rows(inventory))
         alerts = build_alerts(metrics, compliance_alerts=compliance_alerts)
         recommendations = build_recommendations(metrics, inventory, compliance_alerts=compliance_alerts)
@@ -447,7 +454,10 @@ def run_scan_from_image(
             "products": products,
             "inventory": inventory,
             "brand_share": shares,
-            "top_brands": shares[:10],
+            "top_brands": share_payload["top_brands"],
+            "brand_share_all": share_payload["brand_share_all"],
+            "brand_share_scope": share_payload["brand_share_scope"],
+            "brand_share_denominator": share_payload["brand_share_denominator"],
             "category_breakdown": categories,
             "alerts": alerts,
             "compliance_alerts": compliance_alerts,

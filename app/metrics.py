@@ -98,19 +98,56 @@ def compute_metrics(
     }
 
 
-def brand_share(inventory: list[dict]) -> list[dict]:
+def brand_share(
+    inventory: list[dict],
+    *,
+    exclude_category_mismatch: bool = False,
+) -> list[dict]:
+    """Share of shelf facings by brand (quantity-weighted)."""
     totals: dict[str, int] = {}
     grand = 0
     for row in inventory:
-        brand = row.get("brand") or "Unknown"
-        totals[brand] = totals.get(brand, 0) + row["quantity"]
-        grand += row["quantity"]
+        if exclude_category_mismatch and (row.get("compliance_status") or "").lower() == "category_mismatch":
+            continue
+        brand = (row.get("brand") or "Unknown").strip() or "Unknown"
+        qty = int(row.get("quantity") or row.get("facings") or 0)
+        if qty <= 0:
+            continue
+        totals[brand] = totals.get(brand, 0) + qty
+        grand += qty
     if not grand:
         return []
     return [
-        {"brand": brand, "share": round((qty / grand) * 100, 1)}
+        {
+            "brand": brand,
+            "quantity": qty,
+            "share": round((qty / grand) * 100, 1),
+        }
         for brand, qty in sorted(totals.items(), key=lambda item: item[1], reverse=True)
     ]
+
+
+def build_brand_share_payload(
+    inventory: list[dict],
+    *,
+    audit_sub_category: str | None = None,
+) -> dict:
+    """Canonical brand-share fields for dashboard + landing (same math, same scope)."""
+    from app.inventory import inventory_counted_rows
+
+    counted = inventory_counted_rows(inventory)
+    all_rows = brand_share(counted, exclude_category_mismatch=False)
+    audit_rows = brand_share(counted, exclude_category_mismatch=True)
+    use_audit = bool((audit_sub_category or "").strip())
+    primary = audit_rows if use_audit else all_rows
+    denominator = sum(row["quantity"] for row in primary)
+    return {
+        "brand_share": primary,
+        "top_brands": primary[:10],
+        "brand_share_all": all_rows,
+        "brand_share_scope": "in_audit" if use_audit else "all",
+        "brand_share_denominator": denominator,
+    }
 
 
 def category_breakdown(inventory: list[dict]) -> list[dict]:

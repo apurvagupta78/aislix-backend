@@ -241,6 +241,10 @@ def landing_scan_response(
         "products": full.get("products") or [],
         "brand_share": full.get("brand_share") or [],
         "top_brands": full.get("top_brands") or (full.get("brand_share") or [])[:10],
+        "brand_share_all": full.get("brand_share_all") or [],
+        "brand_share_scope": full.get("brand_share_scope") or full.get("metrics", {}).get("brand_share_scope"),
+        "brand_share_denominator": full.get("brand_share_denominator")
+        or full.get("metrics", {}).get("brand_share_denominator"),
         "compliance_alerts": full.get("compliance_alerts") or [],
         "subcategory_mismatches": full.get("subcategory_mismatches") or [],
         "executive_summary": full.get("executive_summary") or full.get("summary_text"),
