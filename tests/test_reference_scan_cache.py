@@ -38,10 +38,36 @@ def test_sample_id_for_reference_image(toothpaste_image):
 def test_lookup_reference_parsed_returns_inventory(toothpaste_image):
     parsed = lookup_reference_parsed(
         toothpaste_image,
+        {"category": "Personal Care", "sub_category": "toothpaste", "sample_id": "toothpaste-a1l"},
+    )
+    assert parsed is not None
+    assert parsed["reference_cache"] == "toothpaste-a1l"
+    assert len(parsed["inventory"]) == 17
+
+
+def test_visual_match_works_for_rescaled_upload(toothpaste_image):
+    import cv2
+
+    upscaled = cv2.resize(toothpaste_image, (1152, 2048), interpolation=cv2.INTER_CUBIC)
+    assert sample_id_for_image(upscaled) == "toothpaste-a1l"
+    parsed = lookup_reference_parsed(
+        upscaled,
         {"category": "Personal Care", "sub_category": "toothpaste"},
     )
     assert parsed is not None
     assert parsed["reference_cache"] == "toothpaste-a1l"
+
+
+def test_explicit_sample_id_uses_cache_without_exact_fingerprint(toothpaste_image, monkeypatch):
+    monkeypatch.setenv("REFERENCE_SCAN_CACHE_STRICT_FINGERPRINT", "false")
+    import cv2
+
+    upscaled = cv2.resize(toothpaste_image, (1152, 2048), interpolation=cv2.INTER_CUBIC)
+    parsed = lookup_reference_parsed(
+        upscaled,
+        {"sample_id": "toothpaste-a1l"},
+    )
+    assert parsed is not None
     assert len(parsed["inventory"]) == 17
 
 
@@ -81,8 +107,28 @@ def test_run_make_scan_uses_reference_cache(toothpaste_image, monkeypatch):
     result = run_make_scan_from_image(
         toothpaste_image,
         scan_id="cached-run",
-        metadata={"category": "Personal Care", "sub_category": "toothpaste"},
+        metadata={"category": "Personal Care", "sub_category": "toothpaste", "sample_id": "toothpaste-a1l"},
     )
     assert result["reference_cache"] == "toothpaste-a1l"
     assert result["metrics"]["total_products"] == 112
     assert result["metrics"]["unique_skus"] == 17
+
+
+def test_run_make_scan_uses_cache_for_rescaled_dashboard_upload(toothpaste_image, monkeypatch):
+    monkeypatch.setenv("MAKE_LOCAL_ANNOTATE", "false")
+    import cv2
+
+    from app.make_scan import run_make_scan_from_image
+
+    def fail_webhook(**kwargs):
+        raise AssertionError("Make webhook should not run for visually matched reference image")
+
+    monkeypatch.setattr("app.make_scan.call_make_webhook", fail_webhook)
+    upscaled = cv2.resize(toothpaste_image, (1152, 2048), interpolation=cv2.INTER_CUBIC)
+    result = run_make_scan_from_image(
+        upscaled,
+        scan_id="cached-rescaled",
+        metadata={"category": "Personal Care", "sub_category": "toothpaste", "location": "A-1-L"},
+    )
+    assert result["reference_cache"] == "toothpaste-a1l"
+    assert result["metrics"]["total_products"] == 112

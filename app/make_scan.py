@@ -657,9 +657,9 @@ def run_make_scan_from_image(
 
     started = time.time()
     scan_id = scan_id or uuid.uuid4().hex[:8]
-    metadata = enrich_reference_sample_metadata(image, metadata or {})
+    metadata = enrich_reference_sample_metadata(image, metadata or {}, image_url=image_url)
 
-    parsed = lookup_reference_parsed(image, metadata)
+    parsed = lookup_reference_parsed(image, metadata, image_url=image_url)
     if parsed is None:
         parsed = call_make_webhook(
             scan_id=scan_id,
