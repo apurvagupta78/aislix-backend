@@ -66,7 +66,35 @@ SAMPLE_DEFAULTS: dict[str, dict[str, str]] = {
 
 DEFAULT_SAMPLE_ID = "toothpaste-a1l"
 
+# Sub-category brand guides for homepage uploads (same hints as bundled reference samples).
+SUB_CATEGORY_BRAND_GUIDES: dict[str, str] = {
+    "toothpaste": SAMPLE_DEFAULTS["toothpaste-a1l"]["shelf_brand_guide"],
+}
+
 _rate_cache: dict[str, tuple[int, str]] = {}
+
+
+def merge_landing_sample_defaults(
+    *,
+    sample_id: str | None,
+    detected_sample_id: str | None,
+    explicit_defaults: dict[str, str] | None = None,
+) -> tuple[str | None, dict[str, str]]:
+    """Merge explicit sample defaults with bundled reference sample metadata."""
+    effective_id = sample_id or detected_sample_id
+    merged: dict[str, str] = {}
+    if effective_id:
+        merged.update(SAMPLE_DEFAULTS.get(effective_id) or {})
+    if explicit_defaults:
+        merged.update(explicit_defaults)
+    return effective_id, merged
+
+
+def landing_skip_reference_cache(*, reference_sample_id: str | None) -> bool:
+    """Known reference shelf photos use the same cached scan as dashboard for parity."""
+    if reference_sample_id:
+        return False
+    return os.getenv("LANDING_SKIP_REFERENCE_CACHE", "true").lower() in {"1", "true", "yes"}
 
 
 def public_base_url_from_headers(
@@ -544,8 +572,13 @@ def landing_metadata(
     sample_defaults: dict[str, str] | None = None,
     sub_category: str | None = None,
     sub_category_label: str | None = None,
+    detected_sample_id: str | None = None,
 ) -> dict[str, Any]:
-    defaults = sample_defaults or {}
+    effective_sample_id, defaults = merge_landing_sample_defaults(
+        sample_id=sample_id,
+        detected_sample_id=detected_sample_id,
+        explicit_defaults=sample_defaults,
+    )
     meta: dict[str, Any] = {"export_facings": True}
     cat = category or defaults.get("category")
     loc = location or defaults.get("location")
@@ -556,6 +589,8 @@ def landing_metadata(
         meta["location"] = loc
     if label:
         meta["shelf_label"] = label
+    elif loc:
+        meta["shelf_label"] = loc
     sub = sub_category or defaults.get("sub_category")
     sub_label = sub_category_label or defaults.get("sub_category_label")
     if sub:
@@ -568,15 +603,18 @@ def landing_metadata(
     if not meta.get("sub_category") and (meta.get("category") or "").strip().lower() == "beverages":
         meta["sub_category"] = "soft_drinks"
         meta["sub_category_label"] = "Soft drinks"
-    if sample_id:
-        meta["sample_id"] = sample_id
-        planogram_items = load_sample_planogram(sample_id)
+    if effective_sample_id:
+        meta["sample_id"] = effective_sample_id
+        planogram_items = load_sample_planogram(effective_sample_id)
         if planogram_items:
             meta["planogram_items"] = planogram_items
             meta["planogram_items_full"] = planogram_items
-    if os.getenv("LANDING_SKIP_REFERENCE_CACHE", "true").lower() in {"1", "true", "yes"}:
+    if landing_skip_reference_cache(reference_sample_id=effective_sample_id):
         meta["skip_reference_cache"] = True
     guide = defaults.get("shelf_brand_guide")
+    if not guide:
+        sub_key = (meta.get("sub_category") or "").strip().lower()
+        guide = SUB_CATEGORY_BRAND_GUIDES.get(sub_key)
     if guide:
         meta["shelf_brand_guide"] = guide
     return meta

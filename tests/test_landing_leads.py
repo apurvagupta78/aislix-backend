@@ -6,7 +6,9 @@ from app.landing_leads import (
     hash_ip,
     landing_metadata,
     landing_scan_response,
+    landing_skip_reference_cache,
     load_sample_planogram,
+    merge_landing_sample_defaults,
     new_session_token,
     parse_utm,
     sanitize_landing_inventory,
@@ -167,3 +169,51 @@ def test_sanitize_landing_inventory():
     )
     assert rows[0]["status_label"] == "Detected"
     assert rows[1]["status_label"] == "Needs review"
+
+
+def test_merge_landing_sample_defaults_detects_reference_upload():
+    effective_id, defaults = merge_landing_sample_defaults(
+        sample_id=None,
+        detected_sample_id="toothpaste-a1l",
+    )
+    assert effective_id == "toothpaste-a1l"
+    assert defaults["sub_category"] == "toothpaste"
+    assert "Doctor" in defaults["shelf_brand_guide"]
+
+
+def test_landing_metadata_uses_reference_cache_for_known_sample(monkeypatch):
+    monkeypatch.setenv("LANDING_SKIP_REFERENCE_CACHE", "true")
+    meta = landing_metadata(
+        None,
+        None,
+        None,
+        sample_id="toothpaste-a1l",
+        sample_defaults={"category": "Personal Care", "sub_category": "toothpaste"},
+    )
+    assert meta["sample_id"] == "toothpaste-a1l"
+    assert "skip_reference_cache" not in meta
+    assert "shelf_brand_guide" in meta
+
+
+def test_landing_metadata_skips_cache_for_unknown_upload(monkeypatch):
+    monkeypatch.setenv("LANDING_SKIP_REFERENCE_CACHE", "true")
+    meta = landing_metadata("Beverages", "A-1", "A-1")
+    assert meta.get("skip_reference_cache") is True
+
+
+def test_landing_metadata_sub_category_brand_guide_without_sample():
+    meta = landing_metadata(
+        "Personal Care",
+        "A-1-L",
+        "A-1-L",
+        sub_category="toothpaste",
+        sub_category_label="Toothpaste",
+    )
+    assert meta["sub_category"] == "toothpaste"
+    assert "Doctor" in meta["shelf_brand_guide"]
+    assert "Dabur" in meta["shelf_brand_guide"]
+
+
+def test_landing_skip_reference_cache():
+    assert landing_skip_reference_cache(reference_sample_id="toothpaste-a1l") is False
+    assert landing_skip_reference_cache(reference_sample_id=None) is True

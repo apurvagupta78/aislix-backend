@@ -454,7 +454,9 @@ async def landing_scan(request: Request):
         save_scan_success,
         upload_scan_image,
     )
-    from app.pipeline import run_scan_from_bytes
+    from app.detector import load_image_bytes
+    from app.pipeline import run_scan_from_image
+    from app.reference_scan_cache import sample_id_for_image
 
     if not ENABLED:
         raise HTTPException(status_code=503, detail="Landing scans are temporarily disabled.")
@@ -520,19 +522,28 @@ async def landing_scan(request: Request):
         user_agent=user_agent,
         sample_id=sample_id,
     )
-    sample_defaults = sample_defaults if sample_id else {}
+    from app.landing_leads import merge_landing_sample_defaults
+
+    image = load_image_bytes(image_bytes)
+    detected_sample_id = sample_id_for_image(image)
+    effective_sample_id, merged_defaults = merge_landing_sample_defaults(
+        sample_id=sample_id,
+        detected_sample_id=detected_sample_id,
+        explicit_defaults=sample_defaults or None,
+    )
     metadata = landing_metadata(
         category,
         location,
         shelf_label,
-        sample_id=sample_id,
-        sample_defaults=sample_defaults if sample_id else None,
+        sample_id=effective_sample_id,
+        sample_defaults=merged_defaults or None,
         sub_category=sub_category,
         sub_category_label=sub_category_label,
+        detected_sample_id=detected_sample_id,
     )
 
     try:
-        result = run_scan_from_bytes(image_bytes, metadata=metadata)
+        result = run_scan_from_image(image, metadata=metadata)
     except Exception as exc:
         save_scan_failure(token, str(exc))
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -542,13 +553,13 @@ async def landing_scan(request: Request):
     save_scan_success(
         token,
         scan_id=scan_id,
-        sample_id=sample_id,
+        sample_id=effective_sample_id,
         image_storage_path=storage_path,
-        category=category,
+        category=category or merged_defaults.get("category"),
         full_result=result,
     )
 
-    response = landing_scan_response(result, token, sample_id=sample_id)
+    response = landing_scan_response(result, token, sample_id=effective_sample_id)
     response["scans_used_today"] = used
     response["scans_daily_limit"] = limit
     return response
