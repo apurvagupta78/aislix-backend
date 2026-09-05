@@ -77,7 +77,7 @@ def _send_via_resend(
     <div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;color:#0f172a;">
       <h2 style="color:#0f172a;margin-bottom:8px;">Welcome to Aislix</h2>
       <p>{greeting}</p>
-      <p>Thanks for trying Aislix shelf intelligence. You're one step away from your free workspace with <strong>3 shelf scans</strong>.</p>
+      <p>Thanks for trying Aislix shelf intelligence. You're one step away from your free workspace with <strong>5 shelf scans every 24 hours</strong>.</p>
       <p style="margin:24px 0;">
         <a href="{signup_url}" style="background:#0f172a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block;">
           Create your free Aislix account →

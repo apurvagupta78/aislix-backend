@@ -155,7 +155,7 @@ export async function assertCanStartScan(orgId?: string): Promise<UsageSummary> 
     if (usage.plan_code === "free" && usage.cooldown_until) {
       const unlock = new Date(usage.cooldown_until);
       throw new ScanLimitError(
-        `You've used your 3 free scans. You can scan again after ${unlock.toLocaleString()}.`,
+        `You've used your 5 free scans. You can scan again after ${unlock.toLocaleString()}.`,
         usage.cooldown_until,
       );
     }
@@ -215,7 +215,7 @@ export function historyCutoffForPlan(planCode: PlanId, email?: string | null): D
 
 export function formatUsageLabel(usage: UsageSummary): string {
   if (usage.plan_code === "free") {
-    return `${usage.scans_used} / 3 scans used`;
+    return `${usage.scans_used} / 5 scans used`;
   }
   // Only Enterprise has unlimited monthly scans (scans_included === null).
   if (usage.scans_included === null) {
