@@ -246,6 +246,9 @@ def lookup_reference_parsed(
         return None
 
     meta = metadata or {}
+    if meta.get("skip_reference_cache"):
+        return None
+
     explicit_sample = meta.get("sample_id") or meta.get("reference_sample_id") or sample_id_from_url(
         image_url or meta.get("image_url")
     )

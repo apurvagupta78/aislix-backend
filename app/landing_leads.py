@@ -211,6 +211,8 @@ def landing_scan_response(
         "metrics": full.get("metrics") or full.get("summary"),
         "inventory": inventory,
         "products": full.get("products") or [],
+        "brand_share": full.get("brand_share") or [],
+        "top_brands": full.get("top_brands") or (full.get("brand_share") or [])[:10],
         "executive_summary": full.get("executive_summary") or full.get("summary_text"),
         "annotated_image_base64": full.get("annotated_image_base64"),
         "annotated_image_mime": full.get("annotated_image_mime", "image/jpeg"),
@@ -562,6 +564,8 @@ def landing_metadata(
         if planogram_items:
             meta["planogram_items"] = planogram_items
             meta["planogram_items_full"] = planogram_items
+    if os.getenv("LANDING_SKIP_REFERENCE_CACHE", "true").lower() in {"1", "true", "yes"}:
+        meta["skip_reference_cache"] = True
     guide = defaults.get("shelf_brand_guide")
     if guide:
         meta["shelf_brand_guide"] = guide
