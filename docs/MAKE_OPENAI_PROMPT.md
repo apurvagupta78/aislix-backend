@@ -13,6 +13,51 @@ If scans still fail, open Make execution history → last OpenAI module → chec
 
 ---
 
+## Make.com module wiring (CRITICAL — fixes "Accepted" / invalid JSON errors)
+
+Your scenario order:
+1. **Webhooks → Custom webhook** (trigger)
+2. **OpenAI → Create a Chat Completion** (vision + JSON)
+3. **Google Sheets → Add a Row** (optional logging)
+4. **Webhooks → Webhook response** (MUST return scan JSON to Aislix)
+
+### OpenAI module (module 2 in your screenshot)
+
+| Setting | Value |
+|---------|--------|
+| Model | gpt-5.6-sol |
+| Response format | **JSON Object** |
+| **Parse JSON Response** | **Yes** ← your screenshot shows **No** — change this |
+| Max Output Tokens | **8192** (not 4096) |
+| Image detail | High |
+| Temperature | 0.3 (ignored on gpt-5.6 — OK) |
+
+User message: metadata line + prompt block below.  
+Image: `{{1.image:data}}` + `{{1.image:name}}` (adjust `1` to your webhook module number).
+
+### Webhook response module (LAST module — this is the bug)
+
+**Problem today:** Aislix receives plain text `Accepted` instead of scan JSON. That means the Webhook response module is using Make's default body, not the OpenAI output.
+
+**Fix:**
+
+1. Open **Webhooks → Webhook response** (last module)
+2. **Status:** `200`
+3. **Body:** map the **OpenAI module output** — try in this order:
+   - `{{2}}` (entire OpenAI module output as JSON) — if OpenAI is module 2
+   - OR `{{2.result}}` when Parse JSON Response = Yes
+   - OR `{{2.choices[0].message.content}}` when Parse JSON Response = No
+4. **Content-Type header:** `application/json`
+5. **Do NOT** leave body empty or as default "Accepted"
+
+**Verify:** Run scenario once → Webhook response module output in history must contain `"products": [...]` — not the word `Accepted`.
+
+### Google Sheets module
+
+Can stay between OpenAI and Webhook response. Do not let Sheets be the last module — Aislix never receives Sheets output.
+
+---
+
 Copy everything inside the code fence below into your Make.com OpenAI module user message (after the metadata line).
 
 ```

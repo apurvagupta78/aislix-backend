@@ -270,10 +270,18 @@ def _coerce_json_object(raw: Any) -> dict[str, Any]:
         extracted = _extract_json_object(raw)
         if extracted is not None:
             return extracted
+        stripped = raw.strip()
+        if stripped.lower().startswith("accepted"):
+            raise MakeScanError(
+                "Make.com webhook returned 'Accepted' instead of scan JSON. "
+                "Open the Webhook response module (last step) and set Body to the OpenAI "
+                "module output (e.g. {{2.result}} or full module output). "
+                "Set Parse JSON Response = Yes on the OpenAI module when using JSON Object mode."
+            )
         try:
             raw = json.loads(raw)
         except json.JSONDecodeError as exc:
-            preview = raw.strip().replace("\n", " ")[:160]
+            preview = stripped.replace("\n", " ")[:160]
             raise MakeScanError(
                 "Make.com response was not valid JSON."
                 + (f" Preview: {preview}…" if preview else "")

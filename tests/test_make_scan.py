@@ -169,6 +169,11 @@ Let me scan row by row from top to bottom before returning JSON.
     assert parsed["inventory"][0]["brand"] == "Coca-Cola"
 
 
+def test_parse_make_response_rejects_accepted_webhook_body():
+    with pytest.raises(MakeScanError, match="Accepted"):
+        parse_make_response("Accepted")
+
+
 def test_parse_make_response_openai_choices_wrapper():
     raw = {
         "choices": [
