@@ -533,7 +533,7 @@ async def landing_scan(request: Request):
     from app.landing_leads import merge_landing_sample_defaults
 
     image = load_image_bytes(image_bytes)
-    detected_sample_id = None if is_user_upload else sample_id_for_image(image)
+    detected_sample_id = sample_id_for_image(image)
     effective_sample_id, merged_defaults = merge_landing_sample_defaults(
         sample_id=sample_id,
         detected_sample_id=detected_sample_id,

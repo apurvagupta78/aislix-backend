@@ -253,4 +253,18 @@ def test_landing_metadata_user_upload_uses_form_fields_only():
     assert meta["category"] == "Beverages"
     assert meta["sub_category"] == "soft_drinks"
     assert "sample_id" not in meta
+    assert meta.get("reference_sample_id") == "toothpaste-a1l"
     assert "shelf_brand_guide" not in meta
+
+
+def test_landing_metadata_user_upload_chips_gets_lays_brand_guide():
+    meta = landing_metadata(
+        "Packaged Food & Snacks",
+        "A-1-L",
+        "A-1-L",
+        sub_category="chips",
+        sub_category_label="Chips",
+        user_upload=True,
+    )
+    assert "BLUE bags" in meta["shelf_brand_guide"]
+    assert "Magic Masala" in meta["shelf_brand_guide"]

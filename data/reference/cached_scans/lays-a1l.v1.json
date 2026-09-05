@@ -1,0 +1,35 @@
+{
+  "cache_version": 1,
+  "sample_id": "lays-a1l",
+  "image_fingerprint": "5f85a2c40b9c54739e5eb65316951454f40559a234cf24268e0d73b98ce895e9",
+  "executive_summary": "The Lay's rack is well stocked with 36 visible front-facing bags across three variants. India's Magic Masala dominates the top three blue rows, Tomato Tango fills the red row, and American Style Cream & Onion covers both green bottom rows. Variant counts follow the standard 6-row Lay's color layout.",
+  "inventory": [
+    {
+      "brand": "Lay's",
+      "product_name": "Potato Chips",
+      "variant": "India's Magic Masala",
+      "quantity": 18,
+      "confidence": 0.95,
+      "shelf_position": "Top Left Front",
+      "product_category": "chips"
+    },
+    {
+      "brand": "Lay's",
+      "product_name": "Potato Chips",
+      "variant": "Tomato Tango",
+      "quantity": 6,
+      "confidence": 0.95,
+      "shelf_position": "Middle Left Front",
+      "product_category": "chips"
+    },
+    {
+      "brand": "Lay's",
+      "product_name": "Potato Chips",
+      "variant": "American Style Cream & Onion",
+      "quantity": 12,
+      "confidence": 0.95,
+      "shelf_position": "Bottom Left Front",
+      "product_category": "chips"
+    }
+  ]
+}

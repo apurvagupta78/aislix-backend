@@ -176,6 +176,15 @@ def enrich_reference_sample_metadata(
 
     meta = dict(metadata or {})
     if meta.get("user_upload"):
+        from app.landing_leads import SAMPLE_DEFAULTS, SUB_CATEGORY_BRAND_GUIDES
+
+        sub = (meta.get("sub_category") or "").strip().lower()
+        guide = SUB_CATEGORY_BRAND_GUIDES.get(sub)
+        matched = meta.get("reference_sample_id") or sample_id_for_image(image)
+        if matched:
+            guide = guide or (SAMPLE_DEFAULTS.get(matched) or {}).get("shelf_brand_guide")
+        if guide:
+            meta["shelf_brand_guide"] = guide
         return meta
 
     sample_id = resolve_reference_sample_id(image, meta, image_url=image_url)
@@ -250,8 +259,9 @@ def lookup_reference_parsed(
 
     meta = metadata or {}
     if meta.get("user_upload"):
-        return None
-    if meta.get("skip_reference_cache"):
+        if not meta.get("reference_sample_id"):
+            return None
+    elif meta.get("skip_reference_cache"):
         return None
 
     explicit_sample = meta.get("sample_id") or meta.get("reference_sample_id") or sample_id_from_url(

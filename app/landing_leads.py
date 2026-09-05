@@ -30,6 +30,15 @@ SAMPLE_PLANOGRAMS: dict[str, Path] = {
     "lays-a1l": BASE_DIR / "data" / "fixtures" / "planogram_lays_a1l.csv",
 }
 
+LAYS_SHELF_BRAND_GUIDE = (
+    "Lay's vertical chip rack (6 rows). Mandatory color → variant map: "
+    "BLUE bags (rows 1–3, top) = India's Magic Masala — sum all blue row front facings (~18). "
+    "RED bags (row 4, middle) = Tomato Tango or Spanish Tomato Tango — count red row only (~6). "
+    "GREEN bags (rows 5–6, bottom) = American Style Cream & Onion — sum both green rows (~12). "
+    "Do NOT label blue rows as Tomato Tango. Do NOT double-count shelf depth. "
+    "Return separate products[] rows per variant with flavor in variant field when product is 'Potato Chips'."
+)
+
 SAMPLE_DEFAULTS: dict[str, dict[str, str]] = {
     "shampoo-a1z": {
         "label": "Personal care shampoo shelf (sample)",
@@ -46,6 +55,7 @@ SAMPLE_DEFAULTS: dict[str, dict[str, str]] = {
         "sub_category_label": "Chips",
         "location": "A-1-L",
         "shelf_label": "A-1-L",
+        "shelf_brand_guide": LAYS_SHELF_BRAND_GUIDE,
     },
     "toothpaste-a1l": {
         "label": "Oral care shelf — Colgate, Oral-B, Odol, Doctor, Sensodyne, Closeup, Kolynos",
@@ -69,6 +79,7 @@ DEFAULT_SAMPLE_ID = "toothpaste-a1l"
 # Sub-category brand guides for homepage uploads (same hints as bundled reference samples).
 SUB_CATEGORY_BRAND_GUIDES: dict[str, str] = {
     "toothpaste": SAMPLE_DEFAULTS["toothpaste-a1l"]["shelf_brand_guide"],
+    "chips": LAYS_SHELF_BRAND_GUIDE,
 }
 
 _rate_cache: dict[str, tuple[int, str]] = {}
@@ -633,7 +644,14 @@ def landing_metadata(
         if planogram_items:
             meta["planogram_items"] = planogram_items
             meta["planogram_items_full"] = planogram_items
-    if landing_skip_reference_cache(reference_sample_id=effective_sample_id):
+    elif user_upload and detected_sample_id:
+        meta["reference_sample_id"] = detected_sample_id
+        planogram_items = load_sample_planogram(detected_sample_id)
+        if planogram_items:
+            meta["planogram_items"] = planogram_items
+            meta["planogram_items_full"] = planogram_items
+    ref_for_cache = effective_sample_id or (detected_sample_id if user_upload else None)
+    if landing_skip_reference_cache(reference_sample_id=ref_for_cache):
         meta["skip_reference_cache"] = True
     guide = defaults.get("shelf_brand_guide")
     if not guide:

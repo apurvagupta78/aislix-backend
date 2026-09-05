@@ -138,3 +138,62 @@ def test_run_make_scan_uses_cache_for_rescaled_dashboard_upload(toothpaste_image
     )
     assert result["reference_cache"] == "toothpaste-a1l"
     assert result["metrics"]["total_products"] == 116
+
+
+@pytest.fixture
+def lays_image() -> np.ndarray:
+    path = SAMPLE_IMAGES["lays-a1l"]
+    return load_image_bytes(path.read_bytes())
+
+
+def test_load_reference_cache_lays():
+    entry = load_reference_cache("lays-a1l")
+    assert entry is not None
+    variants = {row["variant"] for row in entry["inventory"]}
+    assert "India's Magic Masala" in variants
+    assert "Tomato Tango" in variants
+    assert sum(row["quantity"] for row in entry["inventory"]) == 36
+
+
+def test_lookup_lays_cache_on_user_upload(lays_image):
+    parsed = lookup_reference_parsed(
+        lays_image,
+        {
+            "user_upload": True,
+            "reference_sample_id": "lays-a1l",
+            "category": "Packaged Food & Snacks",
+            "sub_category": "chips",
+        },
+    )
+    assert parsed is not None
+    assert parsed["reference_cache"] == "lays-a1l"
+    by_variant = {row["variant"]: row["quantity"] for row in parsed["inventory"]}
+    assert by_variant["India's Magic Masala"] == 18
+    assert by_variant["Tomato Tango"] == 6
+    assert by_variant["American Style Cream & Onion"] == 12
+
+
+def test_run_make_scan_uses_lays_cache_for_user_upload(lays_image, monkeypatch):
+    monkeypatch.setenv("MAKE_LOCAL_ANNOTATE", "false")
+    from app.make_scan import run_make_scan_from_image
+
+    def fail_webhook(**kwargs):
+        raise AssertionError("Make webhook should not run for cached Lay's reference image")
+
+    monkeypatch.setattr("app.make_scan.call_make_webhook", fail_webhook)
+    result = run_make_scan_from_image(
+        lays_image,
+        scan_id="lays-user-upload",
+        metadata={
+            "user_upload": True,
+            "reference_sample_id": "lays-a1l",
+            "category": "Packaged Food & Snacks",
+            "sub_category": "chips",
+            "sub_category_label": "Chips",
+            "shelf_brand_guide": "BLUE = Magic Masala",
+        },
+    )
+    assert result["reference_cache"] == "lays-a1l"
+    variants = {row["variant"]: row["quantity"] for row in result["inventory"]}
+    assert variants["India's Magic Masala"] == 18
+    assert variants["Tomato Tango"] == 6
