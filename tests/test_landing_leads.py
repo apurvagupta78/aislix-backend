@@ -150,6 +150,7 @@ def test_landing_scan_response_shape():
     }
     out = landing_scan_response(full, "session-token-1", sample_id="lays-a1l")
     assert out["landing_session_id"] == "session-token-1"
+    assert out["scanned_at"]
     assert out["scan_mode"] == "sample_with_planogram"
     assert out["has_planogram"] is True
     assert out["sample_id"] == "lays-a1l"

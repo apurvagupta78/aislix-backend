@@ -192,11 +192,18 @@ def sanitize_landing_inventory(inventory: list[dict[str, Any]]) -> list[dict[str
     return rows
 
 
-def landing_scan_response(full: dict[str, Any], session_token: str, *, sample_id: str | None = None) -> dict[str, Any]:
+def landing_scan_response(
+    full: dict[str, Any],
+    session_token: str,
+    *,
+    sample_id: str | None = None,
+    scanned_at: str | None = None,
+) -> dict[str, Any]:
     inventory = sanitize_landing_inventory(full.get("inventory") or [])
     return {
         "landing_session_id": session_token,
         "scan_id": full.get("scan_id"),
+        "scanned_at": scanned_at or datetime.now(timezone.utc).isoformat(),
         "status": "completed",
         "scan_mode": "audit_only" if not sample_id else "sample_with_planogram",
         "has_planogram": bool(sample_id),
@@ -463,7 +470,13 @@ def get_session_public(session_token: str) -> dict[str, Any] | None:
             "lead_captured": bool(row.get("lead_email")),
             "signed_up": bool(row.get("signup_completed")),
         }
-    merged = landing_scan_response(result, session_token, sample_id=row.get("sample_id"))
+    scanned_at = row.get("updated_at") or row.get("created_at")
+    merged = landing_scan_response(
+        result,
+        session_token,
+        sample_id=row.get("sample_id"),
+        scanned_at=scanned_at,
+    )
     merged["status"] = "completed"
     merged["lead_captured"] = bool(row.get("lead_email"))
     merged["signed_up"] = bool(row.get("signup_completed"))
