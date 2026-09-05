@@ -486,6 +486,7 @@ async def landing_scan(request: Request):
 
     image_bytes: bytes | None = None
     sample_defaults: dict[str, str] = {}
+    is_user_upload = False
     upload = payload.get("file")
     if sample_id:
         try:
@@ -496,6 +497,7 @@ async def landing_scan(request: Request):
         location = location or sample_defaults.get("location")
         shelf_label = shelf_label or sample_defaults.get("shelf_label")
     elif upload is not None and hasattr(upload, "read"):
+        is_user_upload = True
         image_bytes = await upload.read()
         if not image_bytes:
             raise HTTPException(status_code=400, detail="Empty file upload.")
@@ -504,6 +506,12 @@ async def landing_scan(request: Request):
                 status_code=413,
                 detail=f"Image too large (max {MAX_BYTES // (1024 * 1024)} MB).",
             )
+        from app.landing_leads import validate_landing_upload_context
+
+        try:
+            validate_landing_upload_context(category=category, sub_category=sub_category)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     else:
         sample_id = DEFAULT_SAMPLE_ID
         try:
@@ -525,11 +533,12 @@ async def landing_scan(request: Request):
     from app.landing_leads import merge_landing_sample_defaults
 
     image = load_image_bytes(image_bytes)
-    detected_sample_id = sample_id_for_image(image)
+    detected_sample_id = None if is_user_upload else sample_id_for_image(image)
     effective_sample_id, merged_defaults = merge_landing_sample_defaults(
         sample_id=sample_id,
         detected_sample_id=detected_sample_id,
         explicit_defaults=sample_defaults or None,
+        user_upload=is_user_upload,
     )
     metadata = landing_metadata(
         category,
@@ -540,6 +549,7 @@ async def landing_scan(request: Request):
         sub_category=sub_category,
         sub_category_label=sub_category_label,
         detected_sample_id=detected_sample_id,
+        user_upload=is_user_upload,
     )
 
     try:

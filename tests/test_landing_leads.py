@@ -13,6 +13,7 @@ from app.landing_leads import (
     parse_utm,
     sanitize_landing_inventory,
     slim_scan_result,
+    validate_landing_upload_context,
 )
 
 
@@ -217,3 +218,39 @@ def test_landing_metadata_sub_category_brand_guide_without_sample():
 def test_landing_skip_reference_cache():
     assert landing_skip_reference_cache(reference_sample_id="toothpaste-a1l") is False
     assert landing_skip_reference_cache(reference_sample_id=None) is True
+
+
+def test_user_upload_does_not_inherit_detected_sample_defaults():
+    effective_id, defaults = merge_landing_sample_defaults(
+        sample_id=None,
+        detected_sample_id="toothpaste-a1l",
+        user_upload=True,
+    )
+    assert effective_id is None
+    assert defaults == {}
+
+
+def test_validate_landing_upload_context_requires_category_and_subcategory():
+    import pytest
+
+    with pytest.raises(ValueError, match="category"):
+        validate_landing_upload_context(category=None, sub_category="soft_drinks")
+    with pytest.raises(ValueError, match="sub-category"):
+        validate_landing_upload_context(category="Beverages", sub_category="")
+
+
+def test_landing_metadata_user_upload_uses_form_fields_only():
+    meta = landing_metadata(
+        "Beverages",
+        "A-1",
+        "A-1",
+        sub_category="soft_drinks",
+        sub_category_label="Soft drinks",
+        detected_sample_id="toothpaste-a1l",
+        user_upload=True,
+    )
+    assert meta["user_upload"] is True
+    assert meta["category"] == "Beverages"
+    assert meta["sub_category"] == "soft_drinks"
+    assert "sample_id" not in meta
+    assert "shelf_brand_guide" not in meta

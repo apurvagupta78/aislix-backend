@@ -175,6 +175,9 @@ def enrich_reference_sample_metadata(
     from app.landing_leads import SAMPLE_DEFAULTS
 
     meta = dict(metadata or {})
+    if meta.get("user_upload"):
+        return meta
+
     sample_id = resolve_reference_sample_id(image, meta, image_url=image_url)
     if not sample_id:
         return meta
@@ -246,6 +249,8 @@ def lookup_reference_parsed(
         return None
 
     meta = metadata or {}
+    if meta.get("user_upload"):
+        return None
     if meta.get("skip_reference_cache"):
         return None
 

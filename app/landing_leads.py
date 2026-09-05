@@ -79,8 +79,12 @@ def merge_landing_sample_defaults(
     sample_id: str | None,
     detected_sample_id: str | None,
     explicit_defaults: dict[str, str] | None = None,
+    user_upload: bool = False,
 ) -> tuple[str | None, dict[str, str]]:
     """Merge explicit sample defaults with bundled reference sample metadata."""
+    if user_upload:
+        # Custom uploads must use only the category/sub-category the user selected.
+        return None, dict(explicit_defaults or {})
     effective_id = sample_id or detected_sample_id
     merged: dict[str, str] = {}
     if effective_id:
@@ -88,6 +92,18 @@ def merge_landing_sample_defaults(
     if explicit_defaults:
         merged.update(explicit_defaults)
     return effective_id, merged
+
+
+def validate_landing_upload_context(
+    *,
+    category: str | None,
+    sub_category: str | None,
+) -> None:
+    """Custom shelf uploads require explicit audit context from the user."""
+    if not (category or "").strip():
+        raise ValueError("Select a category before uploading your shelf photo.")
+    if not (sub_category or "").strip():
+        raise ValueError("Select a sub-category before uploading your shelf photo.")
 
 
 def landing_skip_reference_cache(*, reference_sample_id: str | None) -> bool:
@@ -577,13 +593,17 @@ def landing_metadata(
     sub_category: str | None = None,
     sub_category_label: str | None = None,
     detected_sample_id: str | None = None,
+    user_upload: bool = False,
 ) -> dict[str, Any]:
     effective_sample_id, defaults = merge_landing_sample_defaults(
         sample_id=sample_id,
         detected_sample_id=detected_sample_id,
         explicit_defaults=sample_defaults,
+        user_upload=user_upload,
     )
     meta: dict[str, Any] = {"export_facings": True}
+    if user_upload:
+        meta["user_upload"] = True
     cat = category or defaults.get("category")
     loc = location or defaults.get("location")
     label = shelf_label or defaults.get("shelf_label")
