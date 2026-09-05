@@ -195,6 +195,53 @@ def test_parse_make_response_openai_choices_wrapper():
     assert parsed["inventory"][0]["brand"] == "Fanta"
 
 
+def test_parse_make_response_make_result_wrapper():
+    parsed = parse_make_response(
+        {
+            "Result": {
+                "products": [
+                    {"brand": "Pepsi", "product": "Soft Drink", "qty": 5, "confidence": 0.91, "variant": "500ml"}
+                ],
+                "executive_summary": "Beverage row looks full.",
+            }
+        }
+    )
+    assert parsed["inventory"][0]["brand"] == "Pepsi"
+
+
+def test_parse_make_response_top_level_product_array():
+    parsed = parse_make_response(
+        [
+            {"brand": "Sprite", "product": "Soft Drink", "qty": 2, "confidence": 0.88, "variant": ""},
+            {"brand": "7UP", "product": "Soft Drink", "qty": 3, "confidence": 0.87, "variant": ""},
+        ]
+    )
+    assert len(parsed["inventory"]) == 2
+
+
+def test_parse_make_response_detected_products_alias():
+    parsed = parse_make_response(
+        {
+            "detected_products": [
+                {"brand": "Red Bull", "product": "Energy Drink", "qty": 4, "confidence": 0.93, "variant": ""}
+            ]
+        }
+    )
+    assert parsed["inventory"][0]["brand"] == "Red Bull"
+
+
+def test_finalize_make_scan_empty_products_error_message(tiny_image):
+    parsed = parse_make_response({"products": [], "executive_summary": "No products visible."})
+    with pytest.raises(ValueError, match="empty products list"):
+        finalize_make_scan(
+            tiny_image,
+            scan_id="empty",
+            metadata={},
+            parsed=parsed,
+            processing_ms=100,
+        )
+
+
 def test_build_facings_from_openai_bbox():
     rows = [
         {

@@ -175,7 +175,9 @@ def finalize_make_scan(
         classified = normalize_classified_labels([_normalize_facing_row(row) for row in facings])
         inventory = aggregate_inventory(classified)
     else:
-        raise ValueError("Make.com response did not include inventory or facings.")
+        from app.make_scan import make_missing_products_message
+
+        raise ValueError(make_missing_products_message(raw))
 
     compliance = analyze_subcategory_compliance(classified, scan_context)
     classified = compliance["classified"]

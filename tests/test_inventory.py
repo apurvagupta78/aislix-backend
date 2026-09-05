@@ -105,6 +105,28 @@ def test_merge_inventory_rows_sums_duplicate_skus():
     assert colgate["confidence"] == 0.99
 
 
+def test_merge_inventory_rows_canonicalizes_variant_aliases():
+    rows = [
+        {
+            "brand": "Sunkist",
+            "product_name": "Orange Soda",
+            "variant": "Regular, 2 L",
+            "quantity": 4,
+            "confidence": 0.94,
+        },
+        {
+            "brand": "Sunkist",
+            "product_name": "Orange Soda",
+            "variant": "2 L",
+            "quantity": 2,
+            "confidence": 0.92,
+        },
+    ]
+    merged = merge_inventory_rows(rows)
+    assert len(merged) == 1
+    assert merged[0]["quantity"] == 6
+
+
 def test_fix_gpt_brand_hallucinations_dento_to_doctor():
     rows = [
         {"brand": "Doctor", "product_name": "Toothpaste", "variant": "Original", "quantity": 8},

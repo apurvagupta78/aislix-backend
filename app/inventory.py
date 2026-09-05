@@ -67,6 +67,19 @@ def _normalize_variant_key(variant: str) -> str:
     return v
 
 
+def _canonicalize_variant_for_merge(variant: str) -> str:
+    """Looser variant key so GPT rows split by shelf position still merge."""
+    v = _normalize_variant_key(variant)
+    if not v:
+        return ""
+    v = re.sub(r"^(regular|original|classic),?\s*", "", v)
+    v = re.sub(r"\b2\s*l(?:itre|iter)?s?\b", "2l", v)
+    v = re.sub(r"\bsingle[- ]serve(d)?\s*(bottle|btl)?\b", "single serve", v)
+    v = re.sub(r"\b(\d+)\s*[- ]?\s*pack\s*(?:of\s*)?cans?\b", r"\1pk cans", v)
+    v = re.sub(r"\s+", " ", v).strip()
+    return v
+
+
 def _display_variant(variant: str, existing: str = "") -> str:
     """Prefer a concrete variant string over placeholder values."""
     if existing and _normalize_variant_key(existing):
@@ -171,7 +184,7 @@ def merge_inventory_rows(rows: list[dict]) -> list[dict]:
         variant = (row.get("variant") or "").strip()
         brand_key = _normalize_brand_key(brand, product)
         product_key = _normalize_product_key(product)
-        variant_key = _normalize_variant_key(variant)
+        variant_key = _canonicalize_variant_for_merge(variant)
         key = (brand_key, product_key, variant_key)
         qty = max(0, int(row.get("quantity") or row.get("facings") or 0))
         conf = float(row.get("confidence") or 0.0)

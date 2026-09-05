@@ -185,6 +185,59 @@ def _strip_markdown_json_fence(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+def _looks_like_product_row(row: Any) -> bool:
+    if not isinstance(row, dict):
+        return False
+    has_qty = any(k in row for k in ("qty", "quantity", "facings"))
+    has_label = any(k in row for k in ("brand", "product", "product_name", "name"))
+    return has_qty and has_label
+
+
+def _find_product_rows(data: Any, *, depth: int = 0) -> list[dict[str, Any]] | None:
+    if depth > 5:
+        return None
+    if isinstance(data, list):
+        if data and all(isinstance(row, dict) for row in data[: min(3, len(data))]):
+            if all(_looks_like_product_row(row) for row in data[: min(3, len(data))]):
+                return data
+        return None
+    if not isinstance(data, dict):
+        return None
+    for key in (
+        "products",
+        "Products",
+        "inventory",
+        "items",
+        "detected_products",
+        "product_list",
+        "sku_list",
+        "facings",
+        "Result",
+        "result",
+    ):
+        if key not in data:
+            continue
+        nested = data[key]
+        if isinstance(nested, str):
+            extracted = _extract_json_object(nested)
+            if extracted is not None:
+                nested = extracted
+        if isinstance(nested, list):
+            if nested and all(isinstance(row, dict) for row in nested[: min(3, len(nested))]):
+                if all(_looks_like_product_row(row) for row in nested[: min(3, len(nested))]):
+                    return nested
+        if isinstance(nested, dict):
+            found = _find_product_rows(nested, depth=depth + 1)
+            if found:
+                return found
+    for value in data.values():
+        if isinstance(value, (dict, list)):
+            found = _find_product_rows(value, depth=depth + 1)
+            if found:
+                return found
+    return None
+
+
 def _extract_json_object(text: str) -> dict[str, Any] | None:
     """Best-effort JSON object extraction from reasoning-model prose or fenced blocks."""
     cleaned = _strip_markdown_json_fence(text)
@@ -195,6 +248,8 @@ def _extract_json_object(text: str) -> dict[str, Any] | None:
     if isinstance(parsed, dict):
         return parsed
     if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+        if _looks_like_product_row(parsed[0]):
+            return {"products": parsed}
         return parsed[0]
 
     start = cleaned.find("{")
@@ -244,8 +299,11 @@ def _unwrap_openai_chat_completion(raw: dict[str, Any]) -> dict[str, Any] | str 
 
 def _coerce_json_object(raw: Any) -> dict[str, Any]:
     """Accept dict, JSON string, OpenAI chat payloads, or nested Make/OpenAI text."""
-    if isinstance(raw, list) and len(raw) == 1:
-        raw = raw[0]
+    if isinstance(raw, list):
+        if raw and isinstance(raw[0], dict) and _looks_like_product_row(raw[0]):
+            return {"products": raw}
+        if len(raw) == 1:
+            raw = raw[0]
 
     if isinstance(raw, dict):
         openai_payload = _unwrap_openai_chat_completion(raw)
@@ -254,7 +312,7 @@ def _coerce_json_object(raw: Any) -> dict[str, Any]:
             if extracted is not None:
                 return extracted
         if openai_payload is None:
-            for key in ("output", "text", "answer", "completion", "result", "content", "message"):
+            for key in ("output", "text", "answer", "completion", "result", "Result", "content", "message"):
                 nested = raw.get(key)
                 if isinstance(nested, str) and nested.strip():
                     extracted = _extract_json_object(nested)
@@ -292,15 +350,28 @@ def _coerce_json_object(raw: Any) -> dict[str, Any]:
 
 
 def _unwrap_make_body(raw: dict[str, Any]) -> dict[str, Any]:
-    product_keys = {"inventory", "metrics", "facings", "executive_summary", "products", "Products"}
+    product_keys = {
+        "inventory",
+        "metrics",
+        "facings",
+        "executive_summary",
+        "products",
+        "Products",
+        "items",
+        "detected_products",
+    }
 
-    for key in ("body", "data", "result", "response", "content", "message", "text", "output"):
+    for key in ("body", "data", "result", "Result", "response", "content", "message", "text", "output", "value"):
         nested = raw.get(key)
         if isinstance(nested, dict) and product_keys.intersection(nested.keys()):
             return nested
+        if isinstance(nested, dict) and _find_product_rows(nested):
+            return nested
         if isinstance(nested, str):
             extracted = _extract_json_object(nested)
-            if extracted is not None and product_keys.intersection(extracted.keys()):
+            if extracted is not None and (
+                product_keys.intersection(extracted.keys()) or _find_product_rows(extracted)
+            ):
                 return extracted
             try:
                 parsed = json.loads(nested)
@@ -309,7 +380,50 @@ def _unwrap_make_body(raw: dict[str, Any]) -> dict[str, Any]:
             if isinstance(parsed, dict):
                 return parsed
 
+    found = _find_product_rows(raw)
+    if found and not product_keys.intersection(raw.keys()):
+        return {"products": found, **{k: v for k, v in raw.items() if k not in product_keys}}
+
     return raw
+
+
+def _normalize_make_product_source(data: dict[str, Any]) -> dict[str, Any]:
+    """Coerce stringified product lists and nested Make/OpenAI Result wrappers."""
+    out = dict(data)
+    for key in ("products", "Products", "inventory", "items", "detected_products"):
+        value = out.get(key)
+        if isinstance(value, str):
+            extracted = _extract_json_object(value)
+            if isinstance(extracted, dict):
+                rows = _find_product_rows(extracted)
+                if rows:
+                    out[key] = rows
+            elif isinstance(extracted, list):
+                out[key] = extracted
+    found = _find_product_rows(out)
+    if found and not any(isinstance(out.get(k), list) and out.get(k) for k in ("products", "Products", "inventory")):
+        out.setdefault("products", found)
+    return out
+
+
+def make_missing_products_message(data: dict[str, Any]) -> str:
+    keys = sorted(str(k) for k in data.keys()) if isinstance(data, dict) else []
+    preview = ", ".join(keys[:12]) if keys else "none"
+    empty_products = False
+    for key in ("products", "Products", "inventory"):
+        rows = data.get(key) if isinstance(data, dict) else None
+        if isinstance(rows, list) and not rows:
+            empty_products = True
+            break
+    hint = (
+        "OpenAI returned an empty products list — try Reasoning effort Medium, Max tokens 8192+, "
+        "and confirm module 24 Body maps OpenAI output (e.g. {{13.Result}})."
+        if empty_products
+        else "Webhook response must include a non-empty products[] array. "
+        "In Make, set Webhook response Body to {{13.Result}} or build "
+        '{ "products": {{13.products}}, "executive_summary": {{13.executive_summary}} }.'
+    )
+    return f"Make.com response did not include inventory or facings. Received keys: {preview}. {hint}"
 
 
 def _map_make_products(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -662,26 +776,30 @@ def openai_bbox_facings_trusted(
 
 
 def _raw_product_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
-    for key in ("products", "Products"):
+    for key in ("products", "Products", "items", "detected_products", "product_list"):
         rows = data.get(key)
         if isinstance(rows, list):
             return rows
-    return []
+    found = _find_product_rows(data)
+    return found or []
 
 
 def _products_from_make_data(data: dict[str, Any]) -> list[dict[str, Any]] | None:
-    for key in ("products", "Products", "inventory"):
+    for key in ("products", "Products", "inventory", "items", "detected_products", "product_list"):
         rows = data.get(key)
         if isinstance(rows, list) and rows:
             if key == "inventory" and rows[0].get("product_name"):
                 return rows
             return _map_make_products(rows)
+    found = _find_product_rows(data)
+    if found:
+        return _map_make_products(found)
     return None
 
 
 def parse_make_response(raw: Any) -> dict[str, Any]:
     """Normalize Make webhook JSON into a predictable internal shape."""
-    data = _unwrap_make_body(_coerce_json_object(raw))
+    data = _normalize_make_product_source(_unwrap_make_body(_coerce_json_object(raw)))
 
     inventory = _products_from_make_data(data)
     if inventory is None and isinstance(data.get("inventory"), list):

@@ -52,6 +52,125 @@ Image: `{{1.image:data}}` + `{{1.image:name}}` (adjust `1` to your webhook modul
 
 **Verify:** Run scenario once → Webhook response module output in history must contain `"products": [...]` — not the word `Accepted`.
 
+### Still getting `Accepted` after Body = `13.Result`?
+
+`Accepted` is Make's **default instant ack** — it means Aislix never received your Webhook response body. Check in order:
+
+1. **Remove the JSON Parse module** between OpenAI and Webhook response.  
+   With **Parse JSON Response = Yes** on OpenAI, `13.Result` is already an object. A JSON Parse module often **errors** (expects a string) and the flow **never reaches** module 24.  
+   **Correct chain:** `Webhook (11) → OpenAI (13) → Webhook response (24)` — nothing in between.
+
+2. **Run once** in Make → every module must be **green**, especially module 24.  
+   If OpenAI or JSON Parse is **red**, fix that first — Webhook response never runs.
+
+3. **Scenario must be ON** (toggle bottom-left) and **Saved** after every edit.
+
+4. **Webhook URL must match Railway** — copy URL from module **11 (Custom webhook)** and confirm it equals `MAKE_SCAN_WEBHOOK_URL` in Railway env. Aislix may still be calling an **old scenario URL**.
+
+5. **Open module 24 execution output** — must show `{ "products": [...] }`. If module 24 never appears in history, the scenario stops earlier.
+
+6. **Webhook response Body** — use `13.Result` only (one chip). Do not also map `Choices[].Message.Content`.
+
+7. **Timeout** — sol + Extremely high reasoning can exceed Make's webhook wait. Try Reasoning effort **Medium** and re-test.
+
+### Error: `Make.com response did not include inventory or facings`
+
+JSON is reaching Aislix, but there is no usable `products[]` (or `inventory` / `facings`) list.
+
+**Check in Make execution history (module 13 → module 24):**
+
+1. **Module 13 (OpenAI) output** — must contain `"products": [ {...}, ... ]` with at least one row.  
+   If `products` is missing or `[]`, the model did not finish the audit (token limit, timeout, or reasoning-only output). Fix: **Reasoning effort → Medium**, **Max output tokens → 8192+**, re-run once.
+
+2. **Module 24 (Webhook response) Body** — must pass the OpenAI JSON through:
+   - Best: `{{13.Result}}` when **Parse JSON Response = Yes**
+   - Or explicit body:
+     ```json
+     {
+       "products": {{13.products}},
+       "executive_summary": {{13.executive_summary}}
+     }
+     ```
+   - Avoid mapping the whole module bundle if it wraps fields under `Result` without exposing `products`.
+
+3. **Do not put JSON Parse between OpenAI and Webhook response** — it often errors and module 24 never runs.
+
+4. After a successful run, module 24 output in history must look like:
+   ```json
+   { "products": [ { "brand": "...", "product": "...", "qty": 3 } ], "executive_summary": "..." }
+   ```
+
+The backend now unwraps `Result`, `items`, and `detected_products` aliases; if the error persists, the OpenAI step is returning empty or malformed product data — fix module 13 first.
+
+### GPT says `no shelf image was provided` (products: [])
+
+OpenAI module output looks like:
+
+```json
+{
+  "products": [],
+  "executive_summary": "Visual audit could not be completed because no shelf image was provided..."
+}
+```
+
+**This is not a Webhook response bug.** The text prompt/metadata reached GPT, but the **vision image attachment is missing** in module 13.
+
+**Fix — OpenAI module 13:**
+
+1. Open **OpenAI → Generate a completion** (module 13).
+2. Under **Messages** (User role), you need **two parts** — not text only:
+   - **Text** — your audit prompt + `{{11.metadata}}`
+   - **Image** — map from the webhook file:
+     - **Image data / file:** `{{11.image:data}}` (or pick **Webhooks → 11 → image → data** in the mapper)
+     - **Image name** (if asked): `{{11.image:name}}`
+3. Set **Image detail → High**.
+4. Save scenario → run a real scan from aislix.com (not empty “Run once” without webhook data).
+
+**Verify before re-testing Aislix:**
+
+| Module | What to check in execution history |
+|--------|-------------------------------------|
+| **11 Webhook (input)** | Bundle includes **`image`** with file name + size (not empty) |
+| **13 OpenAI (input)** | Request includes an **image** part alongside text — not metadata text only |
+| **13 OpenAI (output)** | `products` array has rows with brand/product/qty |
+
+**If webhook 11 has no `image` file:**
+
+- Railway `MAKE_UPLOAD_MODE` must be **`multipart`** (default). Aislix sends field name **`image`**.
+- Webhook URL in Railway `MAKE_SCAN_WEBHOOK_URL` must match module **11** URL exactly.
+
+**If webhook 11 has `image` but OpenAI input has no image:**
+
+- Re-add the **Image** content block in module 13 and map `{{11.image:data}}` again (most common fix).
+
+**If you only see Role + Text (no Image option) in Generate a completion:**
+
+Make does **not** use a separate “Image message type” in this module. Image fields appear **inside the same User message**, **below** the text box — but only for vision-capable models.
+
+1. **Delete** extra empty User messages (e.g. Message 3 with blank text).
+2. Use **one User message** (Message 2) for the full audit prompt + `{{11.metadata}}`.
+3. **Scroll down inside that same message block** (below Text Content). With **Show advanced settings = ON** and model **gpt-5.6-sol** / **gpt-4o**, you should see:
+   - **Image input type** → File / Binary
+   - **Image file data** → `{{11.image:data}}`
+   - **Image detail** → High
+4. If those fields still do not appear, **change model** temporarily to **gpt-4o** — save — reopen the message and check again (some Make versions only show image fields for certain models).
+
+**Easier alternative — use “Analyze images (Vision)” instead of “Generate a completion”:**
+
+If image fields never appear in Generate a completion:
+
+1. Delete OpenAI module 13.
+2. Add **OpenAI → Analyze images (Vision)**.
+3. **Prompt** → paste the full audit prompt + `{{11.metadata}}`.
+4. **Images → Add** → **Image file** → map `{{11.image:data}}`.
+5. **Model** → gpt-5.6-sol (or gpt-4o).
+6. **Max tokens** → 8192.
+7. Webhook response 24 Body → map the vision module text output (e.g. `{{13.text}}` or full module output). Backend parses JSON from the text response.
+
+Chain becomes: `Webhook 11 → Analyze images (Vision) 13 → Webhook response 24`.
+
+**JSON mode only** (`MAKE_UPLOAD_MODE=json` on Railway): webhook receives `image_base64` + `image_mime`, not `image:data`. You must map base64 into the OpenAI image field (or switch Railway back to `multipart`).
+
 ### Google Sheets module
 
 Can stay between OpenAI and Webhook response. Do not let Sheets be the last module — Aislix never receives Sheets output.
@@ -72,7 +191,7 @@ AUDIT CONTEXT (COMPLIANCE — NOT A DETECTION FILTER)
 Audit context from webhook (JSON):
 {{11.metadata}}
 
-The audit sub-category (e.g. toothpaste, chips) defines compliance scope.
+The audit sub-category (e.g. toothpaste, chips, beverages) defines compliance scope.
 It does NOT limit detection.
 
 You MUST detect and return EVERY visible retail product, including:
@@ -81,7 +200,7 @@ You MUST detect and return EVERY visible retail product, including:
 - Partially visible or edge-cropped products with visible evidence
 
 For EVERY product row set product_category to the TRUE category:
-toothpaste | mouthwash | water | dishwash | chips | soap | shampoo | unknown | etc.
+toothpaste | mouthwash | water | dishwash | chips | soda | iced tea | soap | shampoo | unknown | etc.
 
 Do NOT omit mismatched categories. Do NOT filter to audit sub-category only.
 
@@ -166,14 +285,57 @@ FORBIDDEN qty patterns:
 FRONT-FACING COUNT (ALL CATEGORIES)
 =========================
 
-Default for toothpaste, chips, shampoo, water:
+Default for toothpaste, chips, shampoo, water, soda:
 - One visible front face = qty 1 at that position
 - Count visible front units left-to-right, row-by-row
 - If uncertain between N and 2N, choose N unless a second front face is clearly visible
 
 Toothpaste: count visible front boxes/cartons only.
-Water bottles: count visible bottle fronts left-to-right.
+Water bottles / soda bottles: count visible bottle fronts left-to-right.
 Do NOT estimate hidden stock behind the shelf.
+
+=========================
+VARIANT NAMING (USE CONSISTENT LABELS)
+=========================
+
+Use SHORT, consistent variant strings so the same SKU never appears twice with different labels.
+
+Pack size labels (pick ONE style per SKU):
+- 2 L bottle → variant: "2 L" (NOT "Regular, 2 L" or "2 L bottle")
+- Single bottle → variant: "Single-serve bottle"
+- Can multipack → variant: "12-pack cans" or "24-pack cans"
+- Diet vs Regular → always prefix: "Diet, 2 L" vs "Original, 2 L"
+
+Flavor / line extensions go in variant:
+- "Ginger Ale and Lemonade, 2 L"
+- "Ginger Ale and Orangeade, 12-pack cans"
+
+Same physical SKU seen in multiple shelf zones → ONE row, summed qty, one variant string.
+
+=========================
+GROUPING & DEDUPLICATION (CRITICAL)
+=========================
+
+After counting across the ENTIRE image:
+
+- ONE products[] row per unique brand + product + variant + product_category
+- Sum qty across ALL shelf positions (Top Left + Bottom Right + etc.) for that SKU
+- NEVER create two rows for the same brand + product + variant just because shelf_position differs
+- shelf_position on each row = where the MAJORITY of that SKU's facings appear (pick one)
+
+Different pack size = different row (correct):
+- 2 L vs 12-pack cans vs single-serve bottle = 3 rows for same brand/product
+
+Different flavor/line = different row (correct):
+- Diet vs Original, Lemonade vs Orangeade = separate rows
+
+BEVERAGE SHELVES:
+- Canada Dry / Ginger Ale with 10 different pack formats = up to 10 rows (correct)
+- Canada Dry / Ginger Ale / "2 L" must appear ONLY ONCE with total qty summed across the shelf
+
+Before returning JSON, scan products[] for duplicate brand+product+variant keys and merge them.
+
+Sum of all qty values = total unique front-facing units you counted.
 
 =========================
 WORKFLOW
@@ -182,8 +344,9 @@ WORKFLOW
 1. Scan entire image: TOP → BOTTOM, LEFT → RIGHT.
 2. Detect every unique visible product / SKU group.
 3. Count front facings per row, then sum per SKU.
-4. Reconcile counts before JSON.
-5. Return JSON only after full image scan is complete.
+4. Merge duplicate SKU rows (same brand + product + variant).
+5. Reconcile counts before JSON.
+6. Return JSON only after full image scan is complete.
 
 Do NOT estimate. Do NOT guess completely hidden products.
 Accuracy is more important than speed.
@@ -204,7 +367,7 @@ No markdown. No ```json. No text outside JSON.
       "qty": 0,
       "confidence": 0.0,
       "shelf_position": "Top Left Front",
-      "product_category": "chips",
+      "product_category": "soda",
       "bbox_2d": [0, 0, 0, 0]
     }
   ],
@@ -213,25 +376,13 @@ No markdown. No ```json. No text outside JSON.
 
 Field rules:
 - brand: never empty ("Unknown" if unreadable)
-- product: never empty
-- variant: flavor/size/pack when readable — REQUIRED for chip flavors and toothpaste variants
-- qty: integer, front-facing visual count only
+- product: never empty (e.g. "Ginger Ale", "Orange Soda", "Root Beer")
+- variant: pack size / flavor / diet flag — REQUIRED; use consistent labels from VARIANT NAMING section
+- qty: integer, front-facing visual count only (summed across entire shelf for that SKU)
 - confidence: SKU identification confidence (0.80–0.99, never 1.00)
-- shelf_position: one of Top/Middle/Bottom + Left/Right + Front/Back (9-grid)
+- shelf_position: one of Top/Middle/Bottom + Left/Right + Front/Back (9-grid) — primary location only
 - product_category: true category for compliance
-- bbox_2d: [x1,y1,x2,y2] normalized 0–1000 (optional for display; still return for audit)
-
-=========================
-GROUPING
-=========================
-
-After counting:
-- ONE products[] row per unique brand + product + variant + product_category
-- Sum qty across all rows for that SKU
-- Different flavor = different row (even same brand)
-- Misplaced items (water on toothpaste shelf) = separate rows with correct product_category
-
-Sum of all qty values = total unique front-facing units you counted.
+- bbox_2d: [x1,y1,x2,y2] normalized 0–1000, tight around that SKU's visible block
 
 =========================
 CONFIDENCE
@@ -255,6 +406,7 @@ Rules:
 - One variant per box — do not span whole shelf with one box
 - Lay's: 3 SKUs → 3 boxes (blue block, red row, green block)
 - Toothpaste: separate box per variant block at its shelf height
+- Beverages: one box per pack-format block (e.g. all 2L Canada Dry in one band)
 - Area ≤ 45% of image; y1 usually ≥ 100 unless products start at top edge
 
 =========================
@@ -262,15 +414,16 @@ FINAL CHECKLIST (ALL MUST PASS)
 =========================
 
 1. Every visible product category included (not filtered to audit only)
-2. One row per unique SKU (no merged flavors)
-3. qty = visual front-facing count only (NOT planogram expected_qty)
-4. Lay's: blue/red/green rows mapped to correct variants
-5. Lay's: Tomato qty = red row front count (typically 6, not 12)
-6. Lay's: Magic qty = sum of blue row front counts only
-7. No duplicate rows for same flavor
+2. One row per unique SKU (no merged flavors, no merged pack sizes)
+3. No duplicate rows for same brand + product + variant (merged qty)
+4. qty = visual front-facing count only (NOT planogram expected_qty)
+5. Lay's: blue/red/green rows mapped to correct variants
+6. Lay's: Tomato qty = red row front count (typically 6, not 12)
+7. Lay's: Magic qty = sum of blue row front counts only
 8. Every row has product_category, variant (when readable), bbox_2d
-9. If planogram_expected_skus present: len(products[]) matches expected SKU count
-10. executive_summary mentions planogram qty gaps if any
+9. Variant strings follow VARIANT NAMING rules (no "Regular, 2 L" AND "2 L" for same SKU)
+10. If planogram_expected_skus present: len(products[]) matches expected SKU count
+11. executive_summary mentions planogram qty gaps if any
 
 Return ONLY valid JSON.
 ```
