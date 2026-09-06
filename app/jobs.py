@@ -23,8 +23,14 @@ def start_job(scan_id: str, runner: Callable[[], dict]) -> dict[str, str]:
             with _lock:
                 _jobs[scan_id] = {"status": "completed", "result": result, "error": None}
         except Exception as exc:
+            from app.user_errors import public_error_from_exception
+
             with _lock:
-                _jobs[scan_id] = {"status": "failed", "result": None, "error": str(exc)}
+                _jobs[scan_id] = {
+                    "status": "failed",
+                    "result": None,
+                    "error": public_error_from_exception(exc),
+                }
 
     threading.Thread(target=_run, daemon=True).start()
     return {"scan_id": scan_id, "status": "processing"}

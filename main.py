@@ -31,10 +31,13 @@ app = FastAPI(title="Aislix API", version="1.0.0")
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
+    from app.user_errors import MSG_SERVER_ERROR, public_http_detail
+
     if isinstance(exc, HTTPException):
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        detail = public_http_detail(exc.status_code, exc.detail)
+        return JSONResponse(status_code=exc.status_code, content={"detail": detail})
     print(f"Unhandled error on {request.url.path}: {exc}")
-    return JSONResponse(status_code=500, content={"detail": str(exc)[:500]})
+    return JSONResponse(status_code=500, content={"detail": MSG_SERVER_ERROR})
 
 
 app.add_middleware(
@@ -158,7 +161,9 @@ async def scan(request: Request):
         try:
             return run_scan_from_bytes(data)
         except Exception as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            from app.user_errors import public_error_from_exception
+
+            raise HTTPException(status_code=422, detail=public_error_from_exception(exc)) from exc
 
     if "application/json" in content_type:
         body = await request.json()
@@ -263,7 +268,12 @@ async def export_assets(request: Request):
     try:
         result = run_scan_from_url(image_url, scan_id=scan_id, metadata=metadata)
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        from app.user_errors import public_error_from_exception
+
+        raise HTTPException(
+            status_code=422,
+            detail=public_error_from_exception(exc, context="export"),
+        ) from exc
 
     return {
         "pdf_base64": result.get("pdf_base64"),
@@ -555,8 +565,12 @@ async def landing_scan(request: Request):
     try:
         result = run_scan_from_image(image, metadata=metadata)
     except Exception as exc:
-        save_scan_failure(token, str(exc))
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        from app.user_errors import public_error_from_exception
+
+        public_error = public_error_from_exception(exc)
+        print(f"Landing scan failed ({token}): {exc}")
+        save_scan_failure(token, public_error)
+        raise HTTPException(status_code=422, detail=public_error) from exc
 
     scan_id = result.get("scan_id") or "landing"
     storage_path = upload_scan_image(token, scan_id, image_bytes)
