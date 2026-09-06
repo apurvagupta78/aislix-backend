@@ -119,6 +119,20 @@ def _looks_internal(message: str) -> bool:
     return bool(_INTERNAL_MARKERS.search(message))
 
 
+def _is_no_products_error(message: str) -> bool:
+    lowered = _normalize_message(message).lower()
+    if lowered.startswith("no products detected"):
+        return True
+    markers = (
+        "empty products list",
+        "no products visible",
+        "no shelf image",
+        "visual audit could not be completed",
+        "could not be completed because no shelf image",
+    )
+    return any(marker in lowered for marker in markers)
+
+
 def sanitize_error_message(raw: str, *, context: str = "scan") -> str:
     """Return a user-safe message; never expose vendor or infra details."""
     message = _normalize_message(raw)
@@ -127,7 +141,7 @@ def sanitize_error_message(raw: str, *, context: str = "scan") -> str:
 
     lowered = message.lower()
 
-    if lowered.startswith("no products detected"):
+    if _is_no_products_error(message):
         return MSG_NO_PRODUCTS
 
     if "unknown sample_id" in lowered or "known samples:" in lowered:
@@ -143,6 +157,8 @@ def sanitize_error_message(raw: str, *, context: str = "scan") -> str:
         r"openai|credits?|billing|quota|ratelimit|rate[\s_-]?limit|\b429\b|platform\.openai",
         lowered,
     ):
+        if _is_no_products_error(message):
+            return MSG_NO_PRODUCTS
         return MSG_SERVICE_UNAVAILABLE
 
     if _looks_internal(message):

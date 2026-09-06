@@ -10,6 +10,14 @@ from app.user_errors import (
 )
 
 
+def test_empty_products_openai_message_maps_to_no_products():
+    raw = (
+        "Make.com response did not include inventory or facings. Received keys: products, "
+        "executive_summary. OpenAI returned an empty products list — try Reasoning effort Medium."
+    )
+    assert sanitize_error_message(raw) == MSG_NO_PRODUCTS
+
+
 def test_openai_credits_exhausted_is_generic():
     raw = (
         "Make.com returned HTTP 500: OpenAI credits exhausted — add billing at "

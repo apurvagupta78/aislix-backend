@@ -232,7 +232,7 @@ def test_parse_make_response_detected_products_alias():
 
 def test_finalize_make_scan_empty_products_error_message(tiny_image):
     parsed = parse_make_response({"products": [], "executive_summary": "No products visible."})
-    with pytest.raises(ValueError, match="empty products list"):
+    with pytest.raises(ValueError, match="No products detected in this shelf image"):
         finalize_make_scan(
             tiny_image,
             scan_id="empty",

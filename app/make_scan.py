@@ -407,23 +407,47 @@ def _normalize_make_product_source(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def make_missing_products_message(data: dict[str, Any]) -> str:
+    from app.user_errors import MSG_NO_PRODUCTS
+
+    empty_products = False
+    if isinstance(data, dict):
+        for key in ("products", "Products", "inventory", "items", "detected_products"):
+            rows = data.get(key)
+            if isinstance(rows, list) and not rows:
+                empty_products = True
+                break
+        summary = str(
+            data.get("executive_summary") or data.get("summary") or data.get("summary_text") or ""
+        ).lower()
+        if empty_products or _summary_indicates_no_products(summary):
+            return MSG_NO_PRODUCTS
+
     keys = sorted(str(k) for k in data.keys()) if isinstance(data, dict) else []
     preview = ", ".join(keys[:12]) if keys else "none"
-    empty_products = False
-    for key in ("products", "Products", "inventory"):
-        rows = data.get(key) if isinstance(data, dict) else None
-        if isinstance(rows, list) and not rows:
-            empty_products = True
-            break
     hint = (
-        "OpenAI returned an empty products list — try Reasoning effort Medium, Max tokens 8192+, "
-        "and confirm module 24 Body maps OpenAI output (e.g. {{13.Result}})."
-        if empty_products
-        else "Webhook response must include a non-empty products[] array. "
+        "Webhook response must include a non-empty products[] array. "
         "In Make, set Webhook response Body to {{13.Result}} or build "
         '{ "products": {{13.products}}, "executive_summary": {{13.executive_summary}} }.'
     )
     return f"Make.com response did not include inventory or facings. Received keys: {preview}. {hint}"
+
+
+def _summary_indicates_no_products(summary: str) -> bool:
+    if not summary:
+        return False
+    markers = (
+        "no shelf image",
+        "no products",
+        "could not be completed",
+        "could not complete",
+        "not visible",
+        "blank image",
+        "empty shelf",
+        "unable to detect",
+        "no retail",
+        "no visible",
+    )
+    return any(marker in summary for marker in markers)
 
 
 def _map_make_products(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
