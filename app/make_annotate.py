@@ -47,6 +47,12 @@ def make_planogram_yolo_qty_enabled() -> bool:
     return os.getenv("MAKE_PLANOGRAM_YOLO_QTY", "true").lower() in {"1", "true", "yes"}
 
 
+def _openai_direct_scan_provider() -> bool:
+    from app.make_scan import use_openai_provider
+
+    return use_openai_provider()
+
+
 def _annotate_env_float(name: str, default: float) -> float:
     raw = os.getenv(name, "").strip()
     if not raw:
@@ -691,7 +697,24 @@ def build_make_annotated_facings(
     product_rows: list[dict] | None = None,
 ) -> tuple[list[dict], str]:
     """Build facings used ONLY for annotated image rendering."""
-    if make_yolo_overlay_only() and make_local_annotate_enabled():
+    unique_skus = len(_unique_inventory_for_assignment(inventory))
+    direct_openai = _openai_direct_scan_provider()
+
+    if openai_facings and (direct_openai or make_use_openai_bbox_for_annotate()):
+        from app.make_scan import openai_bbox_facings_trusted, relabel_facings_by_vertical_order
+
+        min_facings = 1 if direct_openai else unique_skus
+        trusted = openai_bbox_facings_trusted(openai_facings, inventory, image.shape)
+        if len(openai_facings) >= min_facings and (direct_openai or trusted):
+            relabeled = relabel_facings_by_vertical_order(
+                openai_facings,
+                inventory,
+                planogram_items=planogram_items,
+            )
+            mode = "openai+openai_bbox" if direct_openai else "make.com+openai_bbox"
+            return normalize_classified_labels(relabeled), mode
+
+    if not direct_openai and make_yolo_overlay_only() and make_local_annotate_enabled():
         try:
             overlay = build_yolo_overlay_facings(image, metadata, scan_context)
             if overlay:
@@ -699,7 +722,6 @@ def build_make_annotated_facings(
         except Exception as exc:
             print(f"Make YOLO overlay skipped: {exc}")
 
-    unique_skus = len(_unique_inventory_for_assignment(inventory))
     max_sku_bands = int(os.getenv("MAKE_SKU_BAND_MAX", "30"))
 
     if make_sku_band_annotate_enabled() and 1 <= unique_skus <= max_sku_bands:
@@ -724,21 +746,6 @@ def build_make_annotated_facings(
             else:
                 mode = "make.com+sku_band"
             return bands, mode
-
-    if (
-        openai_facings
-        and make_use_openai_bbox_for_annotate()
-        and len(openai_facings) >= unique_skus
-    ):
-        from app.make_scan import openai_bbox_facings_trusted, relabel_facings_by_vertical_order
-
-        if openai_bbox_facings_trusted(openai_facings, inventory, image.shape):
-            relabeled = relabel_facings_by_vertical_order(
-                openai_facings,
-                inventory,
-                planogram_items=planogram_items,
-            )
-            return normalize_classified_labels(relabeled), "make.com+openai_bbox"
 
     if make_per_box_annotate_enabled() and make_local_annotate_enabled():
         try:

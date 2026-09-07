@@ -77,7 +77,7 @@ def test_call_openai_vision_success(mock_get_client, monkeypatch, tiny_image):
     _, kwargs = mock_get_client.return_value.responses.create.call_args
     assert kwargs["model"] == "gpt-6-astra"
     assert kwargs["text"] == {"format": {"type": "json_object"}}
-    assert kwargs["reasoning"] == {"effort": "medium"}
+    assert kwargs["reasoning"] == {"effort": "low"}
     content = kwargs["input"][0]["content"]
     assert content[0]["type"] == "input_text"
     assert content[1]["type"] == "input_image"

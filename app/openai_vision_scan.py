@@ -34,7 +34,7 @@ def vision_model() -> str:
 
 
 def vision_reasoning_effort() -> str:
-    return os.getenv("OPENAI_VISION_REASONING_EFFORT", "medium").strip().lower() or "medium"
+    return os.getenv("OPENAI_VISION_REASONING_EFFORT", "low").strip().lower() or "low"
 
 
 def vision_max_output_tokens() -> int:
@@ -46,11 +46,11 @@ def vision_max_output_tokens() -> int:
 
 
 def vision_timeout_seconds() -> float:
-    raw = os.getenv("OPENAI_VISION_TIMEOUT_SECONDS", "300")
+    raw = os.getenv("OPENAI_VISION_TIMEOUT_SECONDS", "240")
     try:
         return max(10.0, float(raw))
     except ValueError:
-        return 300.0
+        return 240.0
 
 
 def vision_max_image_px() -> int:
@@ -168,6 +168,10 @@ def call_openai_vision(
 
     timeout = vision_timeout_seconds()
     started = time.time()
+    print(
+        f"OpenAI vision scan {scan_id}: starting model={vision_model()} effort={effort or 'none'} "
+        f"detail={detail} timeout={int(timeout)}s image={image.shape[1]}x{image.shape[0]}"
+    )
     try:
         response = get_client().responses.create(**request_kwargs, timeout=timeout)
     except APITimeoutError as exc:
