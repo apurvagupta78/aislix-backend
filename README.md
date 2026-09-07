@@ -119,13 +119,20 @@ Partial responses are normalized by the backend (metrics, PDF, CSV, planogram co
 
 ### RetailKLIP on Railway (bundled in Docker)
 
-The fine-tuned checkpoint `models/retailklip_vitb32.pt` (~335 MB) is stored in **Git LFS**. The Dockerfile uses a multi-stage build that `git clone`s the repo and runs `git lfs pull` (Railway’s Docker context does not include `.git`, so a plain `COPY` only gets the pointer stub).
+The fine-tuned checkpoint `models/retailklip_vitb32.pt` (~335 MB) is stored in **Git LFS**. The Dockerfile fetches it at build time via `scripts/fetch_retailklip_docker.sh`:
 
-1. Push to the branch Railway deploys from.
-2. Railway builds `Dockerfile` — the `lfs-fetch` stage downloads the real checkpoint.
-3. Verify: `GET /health` → `"retailklip": true`
+1. **Supabase storage** (preferred) — if `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are Railway service variables and `catalog-data/retailklip_vitb32.pt` exists in storage.
+2. **Git LFS** (fallback) — clone + `git lfs pull`. Set Railway variable **`GITHUB_TOKEN`** (GitHub PAT, `repo` read) if anonymous LFS fails.
 
-If the build fails on `git clone` (private repo), add a Railway build arg `GITHUB_TOKEN` with repo read access.
+Railway redeploys rebuild Docker; changing runtime vars (e.g. `OPENAI_VISION_REASONING_EFFORT`) triggers a new build — LFS fetch failures are unrelated to those vars.
+
+Verify after deploy: `GET /health` → `"retailklip": true`
+
+If the build fails on Git LFS (`could not read Username for github.com`), either add `GITHUB_TOKEN` or upload the checkpoint:
+
+```bash
+python scripts/upload_retailklip.py   # needs SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY locally
+```
 
 Set `USE_RETAILKLIP=false` to revert to base OpenCLIP embeddings.
 

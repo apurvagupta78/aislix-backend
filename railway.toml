@@ -3,6 +3,9 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 # Materialize LFS before Docker build (Dockerfile also pulls LFS if .git is present).
 buildCommand = "git lfs install && git lfs pull"
+# Build-time ARGs (Dockerfile): GITHUB_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+# Railway auto-passes service variables whose names match Dockerfile ARG declarations.
+# GITHUB_TOKEN = GitHub PAT with repo read (fallback if Supabase checkpoint fetch fails).
 
 [deploy]
 startCommand = "python run.py"

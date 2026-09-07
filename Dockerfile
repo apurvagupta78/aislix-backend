@@ -1,23 +1,17 @@
 FROM alpine:3.20 AS lfs-fetch
 
-RUN apk add --no-cache git git-lfs
+RUN apk add --no-cache git git-lfs curl
 
 ARG GIT_REPO=https://github.com/apurvagupta78/aislix-backend.git
 ARG GIT_BRANCH=main
 ARG GITHUB_TOKEN=""
+# Railway passes service variables matching these ARG names at build time.
+ARG SUPABASE_URL=""
+ARG SUPABASE_SERVICE_ROLE_KEY=""
+ARG LEARNED_CATALOG_BUCKET="catalog-data"
 
-# Railway Docker builds omit .git, so clone + LFS pull fetches the real checkpoint.
-RUN set -eux; \
-    REPO="${GIT_REPO}"; \
-    if [ -n "${GITHUB_TOKEN}" ]; then \
-      REPO="https://${GITHUB_TOKEN}@github.com/apurvagupta78/aislix-backend.git"; \
-    fi; \
-    git lfs install; \
-    git clone --depth 1 --branch "${GIT_BRANCH}" "${REPO}" /src; \
-    cd /src; \
-    git lfs pull; \
-    test "$(wc -c < models/retailklip_vitb32.pt)" -gt 1000000; \
-    echo "RetailKLIP LFS fetch OK: $(wc -c < models/retailklip_vitb32.pt) bytes"
+COPY scripts/fetch_retailklip_docker.sh /fetch_retailklip_docker.sh
+RUN chmod +x /fetch_retailklip_docker.sh && /fetch_retailklip_docker.sh /src/models
 
 FROM python:3.11-slim
 
