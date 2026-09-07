@@ -81,7 +81,7 @@ def test_call_openai_vision_success(mock_get_client, monkeypatch, tiny_image):
     content = kwargs["input"][0]["content"]
     assert content[0]["type"] == "input_text"
     assert content[1]["type"] == "input_image"
-    assert content[1]["detail"] == "high"
+    assert content[1]["detail"] == "auto"
 
 
 @patch("app.recognizer.get_client")

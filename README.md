@@ -61,8 +61,9 @@ Replace the local YOLO/OCR pipeline with OpenAI vision directly (**recommended**
 - `OPENAI_VISION_MODEL=gpt-6-astra` — shelf audit model (A/B tested vs gpt-5.6-sol)
 - `OPENAI_VISION_REASONING_EFFORT=medium` — balance speed vs quality on large shelves
 - `OPENAI_VISION_MAX_TOKENS=8192` — max output tokens (reasoning models need headroom for JSON)
-- `OPENAI_VISION_TIMEOUT_SECONDS=180` — request timeout
-- `OPENAI_VISION_IMAGE_DETAIL=high` — image resolution sent to the model
+- `OPENAI_VISION_TIMEOUT_SECONDS=300` — request timeout (complex multi-row shelves may need 3–5 min)
+- `OPENAI_VISION_IMAGE_DETAIL=auto` — use `high` only for photos wider/taller than 1024px
+- `OPENAI_VISION_MAX_IMAGE_PX=2048` — downscale large uploads before the API call
 
 Uses the same shelf audit prompt as Make (`docs/MAKE_OPENAI_PROMPT.md`) and the same response parser/post-processing as the Make provider.
 

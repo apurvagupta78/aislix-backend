@@ -162,6 +162,23 @@ def encode_shelf_image_bytes(image: np.ndarray, *, quality: int = 92) -> bytes:
     return encoded.tobytes()
 
 
+def encode_vision_image_bytes(
+    image: np.ndarray,
+    *,
+    max_long_edge: int = 2048,
+    quality: int = 85,
+) -> bytes:
+    """Downscale + compress shelf photo for OpenAI vision (API-only; originals unchanged)."""
+    h, w = image.shape[:2]
+    long_edge = max(h, w)
+    if max_long_edge > 0 and long_edge > max_long_edge:
+        scale = max_long_edge / float(long_edge)
+        new_w = max(1, int(round(w * scale)))
+        new_h = max(1, int(round(h * scale)))
+        image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    return encode_shelf_image_bytes(image, quality=quality)
+
+
 def encode_annotated_image_bytes(annotated: np.ndarray, *, quality: int = 92) -> bytes:
     """Encode annotated shelf image once — shared by download JPEG and PDF embed."""
     rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import time
@@ -12,7 +13,6 @@ import numpy as np
 
 from app.make_scan import (
     build_scan_metadata_payload,
-    encode_image_base64,
     parse_make_response,
     use_openai_provider,
 )
@@ -46,16 +46,53 @@ def vision_max_output_tokens() -> int:
 
 
 def vision_timeout_seconds() -> float:
-    raw = os.getenv("OPENAI_VISION_TIMEOUT_SECONDS", "180")
+    raw = os.getenv("OPENAI_VISION_TIMEOUT_SECONDS", "300")
     try:
         return max(10.0, float(raw))
     except ValueError:
-        return 180.0
+        return 300.0
+
+
+def vision_max_image_px() -> int:
+    raw = os.getenv("OPENAI_VISION_MAX_IMAGE_PX", "2048")
+    try:
+        return max(512, int(raw))
+    except ValueError:
+        return 2048
+
+
+def vision_jpeg_quality() -> int:
+    raw = os.getenv("OPENAI_VISION_JPEG_QUALITY", "85")
+    try:
+        return max(60, min(95, int(raw)))
+    except ValueError:
+        return 85
 
 
 def vision_image_detail() -> str:
-    detail = os.getenv("OPENAI_VISION_IMAGE_DETAIL", "high").strip().lower()
-    return detail if detail in {"low", "high", "auto"} else "high"
+    detail = os.getenv("OPENAI_VISION_IMAGE_DETAIL", "auto").strip().lower()
+    return detail if detail in {"low", "high", "auto"} else "auto"
+
+
+def resolve_vision_image_detail(image: np.ndarray) -> str:
+    """Use high detail only when the photo is large enough to benefit."""
+    configured = vision_image_detail()
+    if configured in {"low", "high"}:
+        return configured
+    h, w = image.shape[:2]
+    threshold = int(os.getenv("OPENAI_VISION_HIGH_DETAIL_MIN_PX", "1024"))
+    return "high" if max(h, w) > threshold else "auto"
+
+
+def encode_vision_image_base64(image: np.ndarray) -> tuple[str, str]:
+    from app.report_generator import encode_vision_image_bytes
+
+    jpeg = encode_vision_image_bytes(
+        image,
+        max_long_edge=vision_max_image_px(),
+        quality=vision_jpeg_quality(),
+    )
+    return base64.b64encode(jpeg).decode("ascii"), "image/jpeg"
 
 
 def load_shelf_audit_prompt() -> str:
@@ -101,13 +138,13 @@ def call_openai_vision(
     if not os.getenv("OPENAI_API_KEY", "").strip():
         raise OpenAIVisionScanError("OPENAI_API_KEY is not configured.")
 
-    image_b64, image_mime = encode_image_base64(image)
+    image_b64, image_mime = encode_vision_image_base64(image)
     user_message = build_vision_user_message(metadata)
     image_part: dict[str, Any] = {
         "type": "input_image",
         "image_url": f"data:{image_mime};base64,{image_b64}",
     }
-    detail = vision_image_detail()
+    detail = resolve_vision_image_detail(image)
     if detail:
         image_part["detail"] = detail
 
@@ -130,6 +167,7 @@ def call_openai_vision(
         request_kwargs["reasoning"] = {"effort": effort}
 
     timeout = vision_timeout_seconds()
+    started = time.time()
     try:
         response = get_client().responses.create(**request_kwargs, timeout=timeout)
     except APITimeoutError as exc:
@@ -138,6 +176,11 @@ def call_openai_vision(
         raise OpenAIVisionScanError(f"Vision scan request failed: {exc}") from exc
     except Exception as exc:
         raise OpenAIVisionScanError(f"Vision scan request failed: {exc}") from exc
+    elapsed = int((time.time() - started) * 1000)
+    print(
+        f"OpenAI vision scan {scan_id}: model={vision_model()} effort={effort or 'none'} "
+        f"detail={detail} ms={elapsed} image={image.shape[1]}x{image.shape[0]}"
+    )
 
     output_text = (getattr(response, "output_text", None) or "").strip()
     if not output_text:
