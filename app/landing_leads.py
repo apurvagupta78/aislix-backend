@@ -39,6 +39,21 @@ LAYS_SHELF_BRAND_GUIDE = (
     "Return separate products[] rows per variant with flavor in variant field when product is 'Potato Chips'."
 )
 
+TEA_SHELF_BRAND_GUIDE = (
+    "Indian FMCG tea shelf. Read logos on pouches and cartons — do NOT return brand Unknown or "
+    "product_name 'Tea' when pack text is readable. Expected SKUs: "
+    "Brooke Bond Taaza = bright GREEN pouches (brand Brooke Bond or Tata Tea, product Taaza). "
+    "Tata Tea Agni = BLUE or ORANGE/RED pouches with AGNI logo (brand Tata Tea, product Agni). "
+    "Brooke Bond Red Label = RED pouches with gold/white accents. "
+    "Brooke Bond Yellow Label = YELLOW pouches. "
+    "Taj Mahal = premium Brooke Bond/Tata cartons. "
+    "Lipton = green/yellow cartons and bags (Green Tea, Yellow Label, etc.). "
+    "Tetley = brown/cream cartons. "
+    "Return separate rows per flavor/size — never merge Taaza, Agni, Red Label into one generic Tea row. "
+    "Snacks on tea bay (e.g. Britannia Little Hearts) → product_category packaged food, not tea. "
+    "Ignore edge-cropped products on adjoining non-tea shelves unless clearly on the main tea bay."
+)
+
 SAMPLE_DEFAULTS: dict[str, dict[str, str]] = {
     "shampoo-a1z": {
         "label": "Personal care shampoo shelf (sample)",
@@ -80,6 +95,7 @@ DEFAULT_SAMPLE_ID = "toothpaste-a1l"
 SUB_CATEGORY_BRAND_GUIDES: dict[str, str] = {
     "toothpaste": SAMPLE_DEFAULTS["toothpaste-a1l"]["shelf_brand_guide"],
     "chips": LAYS_SHELF_BRAND_GUIDE,
+    "tea": TEA_SHELF_BRAND_GUIDE,
 }
 
 _rate_cache: dict[str, tuple[int, str]] = {}

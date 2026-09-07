@@ -84,6 +84,22 @@ def test_enrich_reference_sample_metadata_adds_brand_guide(toothpaste_image):
     assert "Doctor" in meta["shelf_brand_guide"]
 
 
+def test_enrich_dashboard_tea_upload_gets_tea_brand_guide():
+    image = np.zeros((120, 160, 3), dtype=np.uint8)
+    meta = enrich_reference_sample_metadata(
+        image,
+        {
+            "category": "Beverages",
+            "sub_category": "tea",
+            "sub_category_label": "Tea",
+            "location": "A-1-L",
+        },
+    )
+    assert "Taaza" in meta["shelf_brand_guide"]
+    assert "Agni" in meta["shelf_brand_guide"]
+    assert "sample_id" not in meta
+
+
 def test_finalize_cached_toothpaste_scan_metrics(toothpaste_image, monkeypatch):
     monkeypatch.setenv("MAKE_LOCAL_ANNOTATE", "false")
     parsed = lookup_reference_parsed(

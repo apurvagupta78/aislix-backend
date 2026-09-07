@@ -172,19 +172,21 @@ def enrich_reference_sample_metadata(
     image_url: str | None = None,
 ) -> dict[str, Any]:
     """Apply reference-sample defaults (brand guide, sub-category) for known shelf photos."""
-    from app.landing_leads import SAMPLE_DEFAULTS
+    from app.landing_leads import SAMPLE_DEFAULTS, SUB_CATEGORY_BRAND_GUIDES
 
     meta = dict(metadata or {})
-    if meta.get("user_upload"):
-        from app.landing_leads import SAMPLE_DEFAULTS, SUB_CATEGORY_BRAND_GUIDES
-
+    if not meta.get("shelf_brand_guide"):
         sub = (meta.get("sub_category") or "").strip().lower()
         guide = SUB_CATEGORY_BRAND_GUIDES.get(sub)
-        matched = meta.get("reference_sample_id") or sample_id_for_image(image)
-        if matched:
-            guide = guide or (SAMPLE_DEFAULTS.get(matched) or {}).get("shelf_brand_guide")
         if guide:
             meta["shelf_brand_guide"] = guide
+
+    if meta.get("user_upload"):
+        matched = meta.get("reference_sample_id") or sample_id_for_image(image)
+        if matched and not meta.get("shelf_brand_guide"):
+            sample_guide = (SAMPLE_DEFAULTS.get(matched) or {}).get("shelf_brand_guide")
+            if sample_guide:
+                meta["shelf_brand_guide"] = sample_guide
         return meta
 
     sample_id = resolve_reference_sample_id(image, meta, image_url=image_url)

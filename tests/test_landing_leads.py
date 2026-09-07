@@ -268,3 +268,17 @@ def test_landing_metadata_user_upload_chips_gets_lays_brand_guide():
     )
     assert "BLUE bags" in meta["shelf_brand_guide"]
     assert "Magic Masala" in meta["shelf_brand_guide"]
+
+
+def test_landing_metadata_user_upload_tea_gets_tea_brand_guide():
+    meta = landing_metadata(
+        "Beverages",
+        "A-1-L",
+        "A-1-L",
+        sub_category="tea",
+        sub_category_label="Tea",
+        user_upload=True,
+    )
+    assert "Taaza" in meta["shelf_brand_guide"]
+    assert "Red Label" in meta["shelf_brand_guide"]
+    assert "do NOT return brand Unknown" in meta["shelf_brand_guide"]
