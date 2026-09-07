@@ -172,6 +172,15 @@ def run_scan_from_image(
     image_url: str | None = None,
 ) -> dict:
     from app.make_scan import make_fallback_local, run_make_scan_from_image, use_make_provider
+    from app.openai_vision_scan import run_openai_vision_scan_from_image, use_openai_provider
+
+    if use_openai_provider():
+        return run_openai_vision_scan_from_image(
+            image,
+            scan_id=scan_id,
+            metadata=metadata,
+            image_url=image_url,
+        )
 
     if use_make_provider():
         try:

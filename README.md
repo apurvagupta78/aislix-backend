@@ -50,11 +50,25 @@ uvicorn main:app --reload --port 8000
 - `DETECTION_MODE=standard` (set to `sahi` for slicing-aided tiled YOLO — see `data/benchmark/README.md`)
 - `SAHI_TILE_SIZE=640` / `SAHI_OVERLAP_RATIO=0.25` (optional SAHI tuning)
 
-### Make.com scan provider (optional)
+### Vision scan providers (optional)
 
-Replace the local YOLO/OCR pipeline with a Make.com custom webhook:
+Replace the local YOLO/OCR pipeline with OpenAI vision directly (**recommended**) or a Make.com webhook:
 
-- `SCAN_PROVIDER=make` — use Make.com for all scans (`POST /scan`, `POST /landing/scan`, `POST /scan/export-assets`)
+#### Direct OpenAI (recommended)
+
+- `SCAN_PROVIDER=openai` — call OpenAI from the backend for all scans (`POST /scan`, `POST /landing/scan`, `POST /scan/export-assets`)
+- `OPENAI_API_KEY` — required
+- `OPENAI_VISION_MODEL=gpt-6-astra` — shelf audit model (A/B tested vs gpt-5.6-sol)
+- `OPENAI_VISION_REASONING_EFFORT=medium` — balance speed vs quality on large shelves
+- `OPENAI_VISION_MAX_TOKENS=8192` — max output tokens (reasoning models need headroom for JSON)
+- `OPENAI_VISION_TIMEOUT_SECONDS=180` — request timeout
+- `OPENAI_VISION_IMAGE_DETAIL=high` — image resolution sent to the model
+
+Uses the same shelf audit prompt as Make (`docs/MAKE_OPENAI_PROMPT.md`) and the same response parser/post-processing as the Make provider.
+
+#### Make.com (legacy)
+
+- `SCAN_PROVIDER=make` — use Make.com for all scans
 - `MAKE_SCAN_WEBHOOK_URL` — Make custom webhook URL (required when `SCAN_PROVIDER=make`)
 - `MAKE_WEBHOOK_SECRET` — optional shared secret sent as `X-Aislix-Secret`
 - `MAKE_SCAN_TIMEOUT_SECONDS=90` — webhook timeout

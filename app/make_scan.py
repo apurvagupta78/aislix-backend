@@ -14,6 +14,7 @@ import requests
 from app.scan_post_process import finalize_make_scan
 
 MAKE_PROVIDER = "make"
+OPENAI_PROVIDER = "openai"
 
 
 class MakeScanError(Exception):
@@ -26,6 +27,10 @@ def scan_provider() -> str:
 
 def use_make_provider() -> bool:
     return scan_provider() == MAKE_PROVIDER
+
+
+def use_openai_provider() -> bool:
+    return scan_provider() == OPENAI_PROVIDER
 
 
 def make_fallback_local() -> bool:
@@ -68,19 +73,9 @@ def encode_image_base64(image: np.ndarray) -> tuple[str, str]:
     return base64.b64encode(jpeg).decode("ascii"), "image/jpeg"
 
 
-def build_make_multipart(
-    scan_id: str,
-    image: np.ndarray,
-    metadata: dict[str, Any],
-) -> tuple[dict[str, tuple[str, bytes, str]], dict[str, str]]:
-    """Build multipart body matching Make Custom Webhook `image` file collection."""
-    from app.report_generator import encode_shelf_image_bytes
+def build_scan_metadata_payload(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Build audit metadata JSON shared by Make webhook and direct OpenAI vision."""
     from app.scan_context import resolve_scan_context
-
-    jpeg = encode_shelf_image_bytes(image)
-    filename = os.getenv("MAKE_IMAGE_FILENAME", f"{scan_id}.jpg")
-    field = os.getenv("MAKE_IMAGE_FIELD", "image")
-    files = {field: (filename, jpeg, "image/jpeg")}
 
     scan_context = resolve_scan_context(metadata)
     audit_sub = scan_context.get("sub_category") or metadata.get("sub_category") or ""
@@ -138,6 +133,31 @@ def build_make_multipart(
             " BRAND ACCURACY: read logos/text on packaging only — do not guess from color or "
             "training priors. " + brand_guide
         )
+    return payload_metadata
+
+
+def build_make_multipart(
+    scan_id: str,
+    image: np.ndarray,
+    metadata: dict[str, Any],
+) -> tuple[dict[str, tuple[str, bytes, str]], dict[str, str]]:
+    """Build multipart body matching Make Custom Webhook `image` file collection."""
+    from app.report_generator import encode_shelf_image_bytes
+    from app.scan_context import resolve_scan_context
+
+    jpeg = encode_shelf_image_bytes(image)
+    filename = os.getenv("MAKE_IMAGE_FILENAME", f"{scan_id}.jpg")
+    field = os.getenv("MAKE_IMAGE_FIELD", "image")
+    files = {field: (filename, jpeg, "image/jpeg")}
+
+    scan_context = resolve_scan_context(metadata)
+    audit_sub = scan_context.get("sub_category") or metadata.get("sub_category") or ""
+    audit_label = (
+        scan_context.get("sub_category_label")
+        or metadata.get("sub_category_label")
+        or audit_sub.replace("_", " ").title()
+    )
+    payload_metadata = build_scan_metadata_payload(metadata)
 
     data: dict[str, str] = {
         "scan_id": scan_id,
