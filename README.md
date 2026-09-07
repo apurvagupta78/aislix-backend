@@ -119,7 +119,7 @@ Partial responses are normalized by the backend (metrics, PDF, CSV, planogram co
 
 ### RetailKLIP on Railway (bundled in Docker)
 
-The fine-tuned checkpoint `models/retailklip_vitb32.pt` (~335 MB) is stored in **Git LFS**. The Dockerfile fetches it at build time via `scripts/fetch_retailklip_docker.sh`:
+The fine-tuned checkpoint `models/retailklip_vitb32.pt` (~335 MB) is stored in **Git LFS**. Railway runs `git lfs pull` in `railway.toml` **before** Docker build (using the GitHub deploy connection). The Dockerfile copies that file from the build context; fallback fetch uses Supabase or `GITHUB_TOKEN` only if the context still has an LFS pointer stub.
 
 1. **Supabase storage** (preferred) — if `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are Railway service variables and `catalog-data/retailklip_vitb32.pt` exists in storage.
 2. **Git LFS** (fallback) — clone + `git lfs pull`. Set Railway variable **`GITHUB_TOKEN`** (GitHub PAT, `repo` read) if anonymous LFS fails.

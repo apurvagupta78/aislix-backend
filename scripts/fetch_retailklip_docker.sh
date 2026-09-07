@@ -42,17 +42,39 @@ fetch_git_lfs() {
   WORK="/tmp/aislix-lfs"
   rm -rf "${WORK}"
   git lfs install
-  git clone --depth 1 --branch "${BRANCH}" "${REPO}" "${WORK}"
+  if ! git clone --depth 1 --branch "${BRANCH}" "${REPO}" "${WORK}"; then
+    echo "git clone failed" >&2
+    rm -rf "${WORK}"
+    return 1
+  fi
   cd "${WORK}"
-  git lfs pull
+  if ! git lfs pull; then
+    echo "git lfs pull failed" >&2
+    cd /
+    rm -rf "${WORK}"
+    return 1
+  fi
+  if [ ! -f "${WORK}/models/retailklip_vitb32.pt" ]; then
+    echo "checkpoint missing after git lfs pull" >&2
+    cd /
+    rm -rf "${WORK}"
+    return 1
+  fi
   cp "${WORK}/models/retailklip_vitb32.pt" "${CHECKPOINT}"
   SIZE="$(wc -c < "${CHECKPOINT}")"
   echo "Git LFS fetch: ${SIZE} bytes"
+  cd /
+  rm -rf "${WORK}"
   [ "${SIZE}" -gt "${MIN_BYTES}" ]
 }
 
 if fetch_supabase; then
   echo "RetailKLIP ready (Supabase)"
+  exit 0
+fi
+
+if [ -f "${CHECKPOINT}" ] && [ "$(wc -c < "${CHECKPOINT}")" -gt "${MIN_BYTES}" ]; then
+  echo "RetailKLIP already present in build context"
   exit 0
 fi
 

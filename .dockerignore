@@ -9,6 +9,5 @@ audit_report.pdf
 *.log
 test_scan_output.json
 build_faiss.log
-# Exclude LFS pointer stub — Dockerfile fetches the real .pt via multi-stage git lfs pull.
-models/*.pt
-# .git/ is not available in Railway Docker context anyway.
+# Keep models/*.pt in the Docker context when Railway buildCommand runs `git lfs pull`.
+# .git/ is not available inside Docker; LFS must be materialized before `docker build`.
