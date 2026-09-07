@@ -9,5 +9,5 @@ audit_report.pdf
 *.log
 test_scan_output.json
 build_faiss.log
-# Keep models/*.pt in the Docker context when Railway buildCommand runs `git lfs pull`.
-# .git/ is not available inside Docker; LFS must be materialized before `docker build`.
+# LFS pointer stub only — full checkpoint loaded at runtime via Supabase (see app/retailklip.py).
+models/*.pt

@@ -119,20 +119,16 @@ Partial responses are normalized by the backend (metrics, PDF, CSV, planogram co
 
 ### RetailKLIP on Railway (bundled in Docker)
 
-The fine-tuned checkpoint `models/retailklip_vitb32.pt` (~335 MB) is stored in **Git LFS**. Railway runs `git lfs pull` in `railway.toml` **before** Docker build (using the GitHub deploy connection). The Dockerfile copies that file from the build context; fallback fetch uses Supabase or `GITHUB_TOKEN` only if the context still has an LFS pointer stub.
+The fine-tuned checkpoint `models/retailklip_vitb32.pt` (~335 MB) is stored in **Git LFS**. The Docker build **does not require** it (OpenAI vision scans work without it). At **runtime**, `app/retailklip.ensure_checkpoint()` downloads from Supabase when `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set and `catalog-data/retailklip_vitb32.pt` exists.
 
-1. **Supabase storage** (preferred) — if `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are Railway service variables and `catalog-data/retailklip_vitb32.pt` exists in storage.
-2. **Git LFS** (fallback) — clone + `git lfs pull`. Set Railway variable **`GITHUB_TOKEN`** (GitHub PAT, `repo` read) if anonymous LFS fails.
-
-Railway redeploys rebuild Docker; changing runtime vars (e.g. `OPENAI_VISION_REASONING_EFFORT`) triggers a new build — LFS fetch failures are unrelated to those vars.
-
-Verify after deploy: `GET /health` → `"retailklip": true`
-
-If the build fails on Git LFS (`could not read Username for github.com`), either add `GITHUB_TOKEN` or upload the checkpoint:
+Upload once from a machine with the full LFS file:
 
 ```bash
-python scripts/upload_retailklip.py   # needs SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY locally
+git lfs pull
+python scripts/upload_retailklip.py
 ```
+
+Verify after deploy: `GET /health` → `"retailklip": true` (optional; `false` is OK for `SCAN_PROVIDER=openai` only).
 
 Set `USE_RETAILKLIP=false` to revert to base OpenCLIP embeddings.
 
