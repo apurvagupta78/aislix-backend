@@ -1,4 +1,57 @@
 -- Phase 3: territories hierarchy + manager verification on assignments
+-- Uses existing RLS helpers: is_org_member(uuid), is_org_manager(uuid)
+
+-- Ensure helpers exist (same signatures as 20260811120000_assigned_scans_planogram.sql)
+CREATE OR REPLACE FUNCTION public.is_org_member(p_org_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.organization_members om
+    WHERE om.org_id = p_org_id
+      AND om.user_id = auth.uid()
+      AND om.status = 'active'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_org_manager(p_org_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.organization_members om
+    WHERE om.org_id = p_org_id
+      AND om.user_id = auth.uid()
+      AND om.status = 'active'
+      AND lower(om.role::text) IN ('owner', 'admin', 'manager', 'store_manager')
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_org_owner_or_admin(p_org_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.organization_members om
+    WHERE om.org_id = p_org_id
+      AND om.user_id = auth.uid()
+      AND om.status = 'active'
+      AND lower(om.role::text) IN ('owner', 'admin')
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_org_member(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_org_manager(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_org_owner_or_admin(UUID) TO authenticated;
 
 CREATE TABLE IF NOT EXISTS public.territories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -22,22 +75,21 @@ ALTER TABLE public.territories ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS territories_select ON public.territories;
 CREATE POLICY territories_select ON public.territories
-  FOR SELECT USING (public.is_org_member(org_id, auth.uid()));
+  FOR SELECT TO authenticated
+  USING (public.is_org_member(org_id));
 
 DROP POLICY IF EXISTS territories_insert ON public.territories;
 CREATE POLICY territories_insert ON public.territories
-  FOR INSERT WITH CHECK (
-    public.has_org_role(org_id, auth.uid(), ARRAY['owner','admin','manager']::public.app_role[])
-  );
+  FOR INSERT TO authenticated
+  WITH CHECK (public.is_org_manager(org_id));
 
 DROP POLICY IF EXISTS territories_update ON public.territories;
 CREATE POLICY territories_update ON public.territories
-  FOR UPDATE USING (
-    public.has_org_role(org_id, auth.uid(), ARRAY['owner','admin','manager']::public.app_role[])
-  );
+  FOR UPDATE TO authenticated
+  USING (public.is_org_manager(org_id))
+  WITH CHECK (public.is_org_manager(org_id));
 
 DROP POLICY IF EXISTS territories_delete ON public.territories;
 CREATE POLICY territories_delete ON public.territories
-  FOR DELETE USING (
-    public.has_org_role(org_id, auth.uid(), ARRAY['owner','admin']::public.app_role[])
-  );
+  FOR DELETE TO authenticated
+  USING (public.is_org_owner_or_admin(org_id));
