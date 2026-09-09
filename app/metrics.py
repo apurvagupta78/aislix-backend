@@ -174,6 +174,60 @@ def compute_metrics(
     }
 
 
+def compute_competitor_intel(
+    brand_share_rows: list[dict],
+    *,
+    primary_brand: str | None,
+    competitor_brands: list[str] | None,
+) -> dict | None:
+    """Own-brand vs configured competitor facings share."""
+    primary = (primary_brand or "").strip()
+    if not primary or not brand_share_rows:
+        return None
+
+    competitors = [b.strip() for b in (competitor_brands or []) if b and str(b).strip()]
+    by_key: dict[str, dict] = {}
+    for row in brand_share_rows:
+        brand = (row.get("brand") or "").strip()
+        if not brand:
+            continue
+        by_key[brand.lower()] = row
+
+    own_row = by_key.get(primary.lower(), {})
+    own_share = float(own_row.get("share") or 0.0)
+    competitor_shares: list[dict] = []
+    detected = 0
+    for name in competitors:
+        row = by_key.get(name.lower(), {})
+        share = float(row.get("share") or 0.0)
+        if share > 0:
+            detected += 1
+        competitor_shares.append(
+            {
+                "brand": name,
+                "share": round(share, 1),
+                "quantity": int(row.get("quantity") or 0),
+                "is_competitor": True,
+            }
+        )
+
+    return {
+        "primary_brand": primary,
+        "own_brand_share_percent": round(own_share, 1),
+        "competitor_shares": [
+            {
+                "brand": primary,
+                "share": round(own_share, 1),
+                "quantity": int(own_row.get("quantity") or 0),
+                "is_primary": True,
+            },
+            *competitor_shares,
+        ],
+        "competitors_detected": detected,
+        "competitors_configured": len(competitors),
+    }
+
+
 def brand_share(
     inventory: list[dict],
     *,

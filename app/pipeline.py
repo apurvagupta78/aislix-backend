@@ -415,6 +415,17 @@ def run_scan_from_image(
         metrics["top_brands"] = share_payload["top_brands"]
         metrics["brand_share_scope"] = share_payload["brand_share_scope"]
         metrics["brand_share_denominator"] = share_payload["brand_share_denominator"]
+        from app.metrics import compute_competitor_intel
+
+        primary_brand = metadata.get("primary_brand") or scan_context.get("primary_brand")
+        competitor_brands = metadata.get("competitor_brands") or scan_context.get("competitor_brands")
+        competitor_intel = compute_competitor_intel(
+            shares,
+            primary_brand=str(primary_brand) if primary_brand else None,
+            competitor_brands=list(competitor_brands) if isinstance(competitor_brands, list) else None,
+        )
+        if competitor_intel:
+            metrics["competitor_intel"] = competitor_intel
         categories = category_breakdown(inventory_counted_rows(inventory))
         alerts = build_alerts(metrics, compliance_alerts=compliance_alerts)
         recommendations = build_recommendations(metrics, inventory, compliance_alerts=compliance_alerts)
