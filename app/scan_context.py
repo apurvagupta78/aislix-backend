@@ -588,8 +588,8 @@ AISLE_DISPLAY_NAMES: dict[str, str] = {
 }
 
 # Primary compliance messaging (dashboard, PDF, API).
-COMPLIANCE_ALERT_TITLE = "Category Mismatch Detected"
-COMPLIANCE_ALERT_INTERPRETATION = "Likely Putaway / Shelf Placement Violation"
+COMPLIANCE_ALERT_TITLE = "Placement issues detected"
+COMPLIANCE_ALERT_INTERPRETATION = "Facings appear outside the expected category or shelf position"
 
 _categories: list[dict] | None = None
 _name_index: dict[str, dict] | None = None

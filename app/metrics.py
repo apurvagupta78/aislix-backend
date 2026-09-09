@@ -45,6 +45,42 @@ def shelf_utilization(classified: list[dict], image_shape: tuple[int, int, int])
     return round(min(100.0, (box_area / image_area) * 100), 2)
 
 
+def finalize_execution_score(metrics: dict) -> None:
+    """Recompute shelf execution after planogram fields are merged into metrics."""
+    planogram = metrics.get("planogram_compliance_percent")
+    planogram_val = float(planogram) if planogram is not None else None
+    metrics["shelf_execution_score"] = compute_shelf_execution_score(
+        availability_percent=float(metrics.get("availability_percent") or metrics.get("osa_percent") or 0),
+        planogram_percent=planogram_val,
+        facing_compliance_percent=float(metrics.get("facing_compliance_percent") or 0),
+        placement_compliance_percent=float(metrics.get("placement_compliance_percent") or 0),
+    )
+
+
+def compute_shelf_execution_score(
+    *,
+    availability_percent: float,
+    planogram_percent: float | None,
+    facing_compliance_percent: float,
+    placement_compliance_percent: float,
+) -> float:
+    """Retail execution score — excludes model confidence."""
+    if planogram_percent is not None:
+        return round(
+            availability_percent * 0.30
+            + planogram_percent * 0.25
+            + facing_compliance_percent * 0.25
+            + placement_compliance_percent * 0.20,
+            1,
+        )
+    return round(
+        availability_percent * 0.35
+        + facing_compliance_percent * 0.35
+        + placement_compliance_percent * 0.30,
+        1,
+    )
+
+
 def compute_metrics(
     inventory: list[dict],
     classified: list[dict],
@@ -52,22 +88,18 @@ def compute_metrics(
     processing_ms: int,
     *,
     misplaced_facings: int = 0,
+    planogram_compliance_percent: float | None = None,
 ) -> dict:
     total_facings = len(classified)
     counted_inventory = [row for row in inventory if row.get("counted_in_totals", True)]
     unique_skus = len(counted_inventory)
     brands = {row["brand"] for row in counted_inventory if row.get("brand")}
     low_stock = sum(1 for row in counted_inventory if row["quantity"] <= LOW_STOCK_THRESHOLD)
+    confirmed_oos = sum(1 for row in counted_inventory if int(row.get("quantity") or 0) == 0)
     confidences = [float(row.get("confidence") or 0.0) for row in counted_inventory]
     avg_conf = sum(confidences) / max(len(confidences), 1)
     utilization = shelf_utilization(classified, image_shape)
-    osa = round(((total_facings - 0) / max(total_facings, 1)) * 100, 2)
-    health = round(osa * 0.6 + utilization * 0.25 + avg_conf * 100 * 0.15, 2)
-    if misplaced_facings > 0 and total_facings > 0:
-        penalty = min(10.0, (misplaced_facings / total_facings) * 100 * 0.1)
-        health = round(max(0.0, health - penalty), 2)
 
-    mismatch_skus = sum(1 for row in inventory if row.get("compliance_status") == "category_mismatch")
     needs_review = sum(
         1
         for row in classified
@@ -75,6 +107,40 @@ def compute_metrics(
         or (row.get("brand") or "").strip().lower() in {"", "unknown"}
         or (row.get("product_name") or "").strip().lower() in {"", "unknown", "unidentified sku"}
     )
+    identified_facings = max(0, total_facings - needs_review)
+    recognition_coverage = round((identified_facings / max(total_facings, 1)) * 100, 1)
+
+    # Availability: penalise low-stock SKUs relative to assortment size (not raw facing count).
+    low_stock_penalty = (low_stock / max(unique_skus, 1)) * 100
+    availability = round(max(0.0, min(100.0, 100.0 - low_stock_penalty * 0.6 - confirmed_oos * 5)), 1)
+
+    placement_compliance = round(
+        max(0.0, 100.0 - (misplaced_facings / max(total_facings, 1)) * 100),
+        1,
+    )
+    facing_compliance = placement_compliance
+    if planogram_compliance_percent is not None:
+        facing_compliance = round(
+            (placement_compliance + float(planogram_compliance_percent)) / 2,
+            1,
+        )
+
+    execution = compute_shelf_execution_score(
+        availability_percent=availability,
+        planogram_percent=planogram_compliance_percent,
+        facing_compliance_percent=facing_compliance,
+        placement_compliance_percent=placement_compliance,
+    )
+
+    # Legacy health score (kept for backward compatibility on old dashboards).
+    health = round(osa := availability, 2)
+    if misplaced_facings > 0 and total_facings > 0:
+        penalty = min(10.0, (misplaced_facings / total_facings) * 100 * 0.1)
+        health = round(max(0.0, health - penalty), 2)
+
+    mismatch_skus = sum(1 for row in inventory if row.get("compliance_status") == "category_mismatch")
+    possible_oos = low_stock
+    shelf_gap_count = max(0, needs_review)
 
     return {
         "total_products": sum(row["quantity"] for row in counted_inventory),
@@ -82,18 +148,28 @@ def compute_metrics(
         "unique_skus": unique_skus,
         "unique_brands": len(brands),
         "low_stock_products": low_stock,
-        "out_of_stock_products": 0,
+        "out_of_stock_products": confirmed_oos,
+        "confirmed_oos_count": confirmed_oos,
+        "possible_oos_count": possible_oos,
+        "shelf_gap_count": shelf_gap_count,
         "misplaced_products": misplaced_facings,
+        "placement_issue_count": misplaced_facings,
         "subcategory_mismatch_skus": mismatch_skus,
         "needs_review_facings": needs_review,
         "excluded_from_count_facings": sum(
             1 for row in classified if row.get("exclude_from_inventory")
         ),
         "average_confidence": round(avg_conf, 4),
+        "recognition_coverage_percent": recognition_coverage,
         "osa_percent": osa,
+        "availability_percent": availability,
+        "facing_compliance_percent": facing_compliance,
+        "placement_compliance_percent": placement_compliance,
         "share_of_shelf_percent": utilization,
         "shelf_utilization_percent": utilization,
         "shelf_health_score": health,
+        "shelf_execution_score": execution,
+        "low_stock_threshold": LOW_STOCK_THRESHOLD,
         "processing_time_ms": processing_ms,
     }
 
@@ -171,22 +247,31 @@ def build_alerts(
     for alert in compliance_alerts:
         alerts.append({**alert})
 
+    if metrics.get("confirmed_oos_count", 0) > 0:
+        alerts.append(
+            {
+                "id": "oos",
+                "severity": "high",
+                "title": f"{metrics['confirmed_oos_count']} confirmed out-of-stock SKUs",
+                "detail": "Expected assortment items were not detected on the shelf.",
+            }
+        )
     if metrics["low_stock_products"] > 0:
         alerts.append(
             {
                 "id": "low-stock",
                 "severity": "high" if metrics["low_stock_products"] > 10 else "medium",
-                "title": f"{metrics['low_stock_products']} products are low on stock",
-                "detail": f"Threshold: {LOW_STOCK_THRESHOLD} facings or fewer.",
+                "title": f"{metrics['low_stock_products']} SKUs below facing threshold",
+                "detail": f"Threshold: {metrics.get('low_stock_threshold', LOW_STOCK_THRESHOLD)} facings or fewer.",
             }
         )
-    if metrics["average_confidence"] < 0.6:
+    if metrics.get("placement_issue_count", 0) > 0:
         alerts.append(
             {
-                "id": "confidence",
-                "severity": "medium",
-                "title": "Average AI confidence is below 60%",
-                "detail": "Consider retaking the shelf photo with better lighting.",
+                "id": "placement",
+                "severity": "high",
+                "title": f"{metrics['placement_issue_count']} placement issues detected",
+                "detail": COMPLIANCE_ALERT_INTERPRETATION,
             }
         )
     return alerts
@@ -197,58 +282,81 @@ def build_recommendations(
     inventory: list[dict],
     compliance_alerts: list[dict] | None = None,
 ) -> list[dict]:
-    recs = []
+    recs: list[dict] = []
     compliance_alerts = compliance_alerts or []
+    threshold = int(metrics.get("low_stock_threshold") or LOW_STOCK_THRESHOLD)
 
-    if compliance_alerts:
-        primary = compliance_alerts[0]
+    if metrics.get("confirmed_oos_count", 0) > 0:
         recs.append(
             {
-                "id": "putaway-violation",
-                "title": COMPLIANCE_ALERT_TITLE,
-                "detail": (
-                    f"{COMPLIANCE_ALERT_INTERPRETATION}. "
-                    f"{primary.get('detail') or 'Review shelf placement and correct misplaced facings.'}"
-                ),
-                "category": "Compliance",
+                "id": "replenish-oos",
+                "title": f"Replenish {metrics['confirmed_oos_count']} out-of-stock SKUs",
+                "detail": "Priority items from your assortment are missing from the shelf.",
+                "category": "Replenishment",
                 "impact": "high",
+                "priority": "high",
+                "action_type": "oos",
             }
         )
 
     if metrics["low_stock_products"] > 0:
         recs.append(
             {
-                "id": "replenish",
+                "id": "replenish-low",
                 "title": f"Replenish {metrics['low_stock_products']} low-stock SKUs",
-                "detail": "Prioritize restocking items at or below facing threshold.",
+                "detail": f"SKUs at or below {threshold} facings need restocking.",
                 "category": "Replenishment",
                 "impact": "high",
+                "priority": "high",
+                "action_type": "low_stock",
             }
         )
-    if inventory:
-        top_brand = inventory[0]["brand"]
+
+    placement_count = int(metrics.get("placement_issue_count") or metrics.get("misplaced_products") or 0)
+    if placement_count > 0:
+        primary = compliance_alerts[0] if compliance_alerts else None
         recs.append(
             {
-                "id": "brand-focus",
-                "title": f"Top brand on shelf: {top_brand}",
-                "detail": "Review share-of-shelf against planogram targets.",
-                "category": "Merchandising",
-                "impact": "medium",
+                "id": "fix-placement",
+                "title": f"Fix {placement_count} misplaced facings",
+                "detail": primary.get("detail") if primary else COMPLIANCE_ALERT_INTERPRETATION,
+                "category": "Placement",
+                "impact": "high",
+                "priority": "high",
+                "action_type": "placement",
             }
         )
+
+    if metrics.get("planogram_compliance_percent") is not None and metrics["planogram_compliance_percent"] < 85:
+        recs.append(
+            {
+                "id": "planogram",
+                "title": "Restore planogram compliance",
+                "detail": f"Compliance is {metrics['planogram_compliance_percent']:.0f}% — review expected vs actual layout.",
+                "category": "Planogram",
+                "impact": "medium",
+                "priority": "medium",
+                "action_type": "planogram",
+            }
+        )
+
     return recs
 
 
 def executive_summary(metrics: dict, compliance_alerts: list[dict] | None = None) -> str:
+    facings = metrics.get("total_facings") or metrics.get("total_products") or 0
+    execution = metrics.get("shelf_execution_score") or metrics.get("shelf_health_score") or 0
+    recognition = metrics.get("recognition_coverage_percent") or 0
     base = (
-        f"This shelf audit detected {metrics['total_products']} product facings across "
-        f"{metrics['unique_skus']} unique SKUs and {metrics['unique_brands']} brands. "
-        f"Shelf utilization is {metrics['share_of_shelf_percent']:.1f}% with an average "
-        f"AI confidence of {metrics['average_confidence'] * 100:.1f}%."
+        f"Aislix detected {facings} facings across {metrics['unique_skus']} unique SKUs and "
+        f"{metrics['unique_brands']} brands. Recognition coverage is {recognition:.0f}%. "
+        f"Shelf execution score is {execution:.0f}/100."
     )
     if metrics.get("misplaced_products", 0) > 0:
         base += (
-            f" {COMPLIANCE_ALERT_TITLE}: {metrics['misplaced_products']} facing(s) — "
-            f"{COMPLIANCE_ALERT_INTERPRETATION}."
+            f" {metrics['misplaced_products']} placement issue(s) were detected — "
+            f"{COMPLIANCE_ALERT_INTERPRETATION.lower()}."
         )
+    if metrics.get("low_stock_products", 0) > 0:
+        base += f" {metrics['low_stock_products']} SKU(s) are below the facing threshold."
     return base

@@ -217,6 +217,9 @@ def finalize_make_scan(
         metrics["planogram_sku_match_percent"] = planogram_compliance.get("planogram_sku_match_percent")
         metrics["planogram_qty_compliance_percent"] = planogram_compliance.get("planogram_qty_compliance_percent")
         metrics["planogram_summary"] = planogram_compliance.get("summary")
+    from app.metrics import finalize_execution_score
+
+    finalize_execution_score(metrics)
     if scan_context.get("planogram_yolo_qty"):
         metrics["planogram_yolo_qty"] = True
     if scan_context.get("yolo_row_counts"):
