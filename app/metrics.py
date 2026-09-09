@@ -397,6 +397,60 @@ def build_recommendations(
     return recs
 
 
+# Indicative FMCG defaults when SKU price is unknown (INR).
+_DEFAULT_ASP_INR = 75.0
+_UNITS_PER_DAY = 4.0
+_LOW_STOCK_RISK_FACTOR = 0.35
+
+
+def compute_financial_impact(inventory: list[dict], metrics: dict) -> dict:
+    """Estimate daily / weekly lost sales from OOS and low-stock SKUs."""
+    counted = [row for row in inventory if row.get("counted_in_totals", True)]
+    oos_daily = 0.0
+    at_risk_daily = 0.0
+    oos_skus = 0
+    at_risk_skus = 0
+    threshold = int(metrics.get("low_stock_threshold") or LOW_STOCK_THRESHOLD)
+
+    for row in counted:
+        qty = int(row.get("quantity") or 0)
+        asp = float(row.get("price_inr") or row.get("avg_price_inr") or _DEFAULT_ASP_INR)
+        if qty <= 0:
+            oos_daily += _UNITS_PER_DAY * asp
+            oos_skus += 1
+        elif qty <= threshold:
+            gap = max(0, threshold - qty)
+            at_risk_daily += gap * _UNITS_PER_DAY * asp * _LOW_STOCK_RISK_FACTOR
+            at_risk_skus += 1
+
+    daily = round(oos_daily + at_risk_daily)
+    if daily <= 0 and oos_skus == 0 and at_risk_skus == 0:
+        return {
+            "estimated_daily_lost_sales_inr": 0,
+            "estimated_weekly_lost_sales_inr": 0,
+            "estimated_monthly_lost_sales_inr": 0,
+            "oos_sku_count": 0,
+            "at_risk_sku_count": 0,
+            "methodology": (
+                "Indicative estimate using category ASP defaults and typical daily velocity."
+            ),
+            "confidence": "indicative",
+        }
+
+    return {
+        "estimated_daily_lost_sales_inr": daily,
+        "estimated_weekly_lost_sales_inr": daily * 7,
+        "estimated_monthly_lost_sales_inr": daily * 30,
+        "oos_sku_count": oos_skus,
+        "at_risk_sku_count": at_risk_skus,
+        "methodology": (
+            "Indicative estimate using category ASP defaults (₹75 when price unknown) "
+            f"and {_UNITS_PER_DAY:.0f} units/day velocity per at-risk SKU."
+        ),
+        "confidence": "indicative",
+    }
+
+
 def executive_summary(metrics: dict, compliance_alerts: list[dict] | None = None) -> str:
     facings = metrics.get("total_facings") or metrics.get("total_products") or 0
     execution = metrics.get("shelf_execution_score") or metrics.get("shelf_health_score") or 0

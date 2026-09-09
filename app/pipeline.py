@@ -404,9 +404,10 @@ def run_scan_from_image(
                 "planogram_qty_compliance_percent"
             )
             metrics["planogram_summary"] = planogram_compliance.get("summary")
-        from app.metrics import finalize_execution_score
+        from app.metrics import compute_financial_impact, finalize_execution_score
 
         finalize_execution_score(metrics)
+        metrics["financial_impact"] = compute_financial_impact(inventory, metrics)
         share_payload = build_brand_share_payload(
             inventory,
             audit_sub_category=scan_context.get("sub_category"),
