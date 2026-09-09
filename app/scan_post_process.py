@@ -217,9 +217,10 @@ def finalize_make_scan(
         metrics["planogram_sku_match_percent"] = planogram_compliance.get("planogram_sku_match_percent")
         metrics["planogram_qty_compliance_percent"] = planogram_compliance.get("planogram_qty_compliance_percent")
         metrics["planogram_summary"] = planogram_compliance.get("summary")
-    from app.metrics import finalize_execution_score
+    from app.metrics import compute_financial_impact, finalize_execution_score
 
     finalize_execution_score(metrics)
+    metrics["financial_impact"] = compute_financial_impact(inventory, metrics)
     if scan_context.get("planogram_yolo_qty"):
         metrics["planogram_yolo_qty"] = True
     if scan_context.get("yolo_row_counts"):
@@ -313,7 +314,18 @@ def finalize_make_scan(
         logo_path=LOGO_PATH if LOGO_PATH.exists() else None,
         annotated_jpeg=annotated_jpeg,
     )
-    csv_b64 = base64.b64encode(generate_csv_bytes(inventory)).decode("utf-8")
+    csv_b64 = base64.b64encode(
+        generate_csv_bytes(
+            inventory,
+            scan_id=scan_id,
+            metrics=metrics,
+            shares=shares,
+            recommendations=recommendations,
+            alerts=alerts,
+            compliance_alerts=compliance_alerts,
+            executive_summary=summary_text,
+        )
+    ).decode("utf-8")
 
     return {
         "scan_id": scan_id,

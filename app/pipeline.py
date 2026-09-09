@@ -465,7 +465,18 @@ def run_scan_from_image(
             logo_path=LOGO_PATH if LOGO_PATH.exists() else None,
             annotated_jpeg=annotated_jpeg,
         )
-        csv_b64 = base64.b64encode(generate_csv_bytes(inventory)).decode("utf-8")
+        csv_b64 = base64.b64encode(
+            generate_csv_bytes(
+                inventory,
+                scan_id=scan_id,
+                metrics=metrics,
+                shares=shares,
+                recommendations=recommendations,
+                alerts=alerts,
+                compliance_alerts=compliance_alerts,
+                executive_summary=summary_text,
+            )
+        ).decode("utf-8")
 
         return {
             "scan_id": scan_id,

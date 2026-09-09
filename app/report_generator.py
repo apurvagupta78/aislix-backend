@@ -193,8 +193,159 @@ def annotated_image_dimensions(annotated: np.ndarray) -> dict[str, int]:
     return {"width": int(width), "height": int(height)}
 
 
-def generate_csv_bytes(inventory: list[dict]) -> bytes:
-    buffer = io.StringIO()
+def _csv_escape(value) -> str:
+    s = "" if value is None else str(value)
+    if any(ch in s for ch in '",\n'):
+        return f'"{s.replace(chr(34), chr(34) + chr(34))}"'
+    return s
+
+
+def _csv_section(title: str, rows: list[list]) -> list[str]:
+    lines = [f"# {title}"]
+    for row in rows:
+        lines.append(",".join(_csv_escape(cell) for cell in row))
+    return lines
+
+
+def generate_csv_bytes(
+    inventory: list[dict],
+    *,
+    scan_id: str | None = None,
+    metrics: dict | None = None,
+    shares: list[dict] | None = None,
+    recommendations: list[dict] | None = None,
+    alerts: list[dict] | None = None,
+    compliance_alerts: list[dict] | None = None,
+    executive_summary: str | None = None,
+) -> bytes:
+    """Inventory-only CSV when metrics is omitted; full multi-section report otherwise."""
+    if not metrics:
+        buffer = io.StringIO()
+        fieldnames = [
+            "Brand",
+            "Product",
+            "Variant",
+            "Shelf Position",
+            "Category",
+            "Quantity",
+            "Confidence %",
+            "Compliance Alert",
+            "Compliance Note",
+            "Detected Sub-category",
+            "Audit Sub-category",
+            "Stock Status",
+        ]
+        writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in inventory:
+            conf = float(row.get("confidence") or 0)
+            writer.writerow(
+                {
+                    "Brand": row.get("brand", ""),
+                    "Product": row.get("product_name", ""),
+                    "Variant": row.get("variant", ""),
+                    "Shelf Position": row.get("shelf_position") or row.get("location") or "",
+                    "Category": row.get("category", ""),
+                    "Quantity": row.get("quantity", 0),
+                    "Confidence %": round(conf * 100, 1),
+                    "Compliance Alert": row.get("compliance_alert") or "OK",
+                    "Compliance Note": row.get("compliance_interpretation") or "",
+                    "Detected Sub-category": row.get("detected_sub_category_label") or "",
+                    "Audit Sub-category": row.get("expected_sub_category_label") or "",
+                    "Stock Status": (row.get("stock_status") or "in_stock").replace("_", " "),
+                }
+            )
+        return buffer.getvalue().encode("utf-8")
+
+    lines: list[str] = [
+        "# Aislix Shelf Audit Report",
+        f"# Scan ID,{_csv_escape(scan_id or '')}",
+    ]
+    execution = metrics.get("shelf_execution_score") or metrics.get("shelf_health_score") or 0
+    lines.extend(
+        _csv_section(
+            "Execution summary",
+            [
+                ["Metric", "Value"],
+                ["Shelf execution score", execution],
+                ["Shelf health score", metrics.get("shelf_health_score", "")],
+                ["Total facings", metrics.get("total_facings") or metrics.get("total_products", 0)],
+                ["Unique SKUs", metrics.get("unique_skus", 0)],
+                ["Unique brands", metrics.get("unique_brands", 0)],
+                ["Recognition coverage %", metrics.get("recognition_coverage_percent", "")],
+                ["Availability %", metrics.get("availability_percent") or metrics.get("osa_percent", "")],
+                ["Facing compliance %", metrics.get("facing_compliance_percent", "")],
+                ["Placement compliance %", metrics.get("placement_compliance_percent", "")],
+                ["Share of shelf %", metrics.get("share_of_shelf_percent", "")],
+                [
+                    "Planogram compliance %",
+                    metrics.get("planogram_sku_match_percent")
+                    or metrics.get("planogram_compliance_percent", ""),
+                ],
+                ["Confirmed OOS", metrics.get("confirmed_oos_count") or metrics.get("out_of_stock_products", 0)],
+                ["Possible OOS / low stock", metrics.get("possible_oos_count") or metrics.get("low_stock_products", 0)],
+                ["Placement issues", metrics.get("placement_issue_count") or metrics.get("misplaced_products", 0)],
+                ["Avg confidence %", round(float(metrics.get("average_confidence") or 0) * 100, 1)],
+            ],
+        )
+    )
+    if executive_summary:
+        lines.extend(["", "# Executive summary", _csv_escape(executive_summary)])
+
+    financial = metrics.get("financial_impact") or {}
+    if financial:
+        lines.extend(
+            _csv_section(
+                "Financial impact (indicative)",
+                [
+                    ["Metric", "Value (INR)"],
+                    ["Estimated daily lost sales", financial.get("estimated_daily_lost_sales_inr", 0)],
+                    ["Estimated weekly lost sales", financial.get("estimated_weekly_lost_sales_inr", 0)],
+                    ["Estimated monthly lost sales", financial.get("estimated_monthly_lost_sales_inr", 0)],
+                    ["OOS SKU count", financial.get("oos_sku_count", 0)],
+                    ["At-risk SKU count", financial.get("at_risk_sku_count", 0)],
+                    ["Confidence", financial.get("confidence", "")],
+                    ["Methodology", financial.get("methodology", "")],
+                ],
+            )
+        )
+
+    if shares:
+        lines.extend(
+            _csv_section(
+                "Top brands by shelf share",
+                [["Brand", "Share %"]] + [[row.get("brand", ""), f"{float(row.get('share', 0)):.1f}"] for row in shares[:15]],
+            )
+        )
+
+    if recommendations:
+        lines.extend(
+            _csv_section(
+                "Recommended actions",
+                [["Title", "Impact", "Detail"]]
+                + [[rec.get("title", ""), rec.get("impact", ""), rec.get("detail", "")] for rec in recommendations[:20]],
+            )
+        )
+
+    if compliance_alerts:
+        lines.extend(
+            _csv_section(
+                "Compliance alerts",
+                [["Severity", "Title", "Detail"]]
+                + [[a.get("severity", ""), a.get("title", ""), a.get("detail", "")] for a in compliance_alerts[:20]],
+            )
+        )
+
+    if alerts:
+        lines.extend(
+            _csv_section(
+                "Alerts",
+                [["Severity", "Title", "Detail"]]
+                + [[a.get("severity", ""), a.get("title", ""), a.get("detail", "")] for a in alerts[:20]],
+            )
+        )
+
+    inv_buffer = io.StringIO()
     fieldnames = [
         "Brand",
         "Product",
@@ -209,7 +360,7 @@ def generate_csv_bytes(inventory: list[dict]) -> bytes:
         "Audit Sub-category",
         "Stock Status",
     ]
-    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+    writer = csv.DictWriter(inv_buffer, fieldnames=fieldnames)
     writer.writeheader()
     for row in inventory:
         conf = float(row.get("confidence") or 0)
@@ -229,7 +380,8 @@ def generate_csv_bytes(inventory: list[dict]) -> bytes:
                 "Stock Status": (row.get("stock_status") or "in_stock").replace("_", " "),
             }
         )
-    return buffer.getvalue().encode("utf-8")
+    lines.extend(["", "# Complete inventory", inv_buffer.getvalue()])
+    return "\n".join(lines).encode("utf-8")
 
 
 def _logo_flowable(logo_path, width=1.85 * inch):
@@ -335,18 +487,35 @@ def generate_pdf_bytes(
     if annotated_jpeg:
         _append_annotated_shelf_section(story, styles, annotated_jpeg)
 
+    execution_score = metrics.get("shelf_execution_score") or metrics.get("shelf_health_score") or 0
     summary = [
         ["Metric", "Value"],
-        ["Total Facings", metrics.get("total_products", 0)],
+        ["Shelf Execution Score", execution_score],
+        ["Shelf Health Score", metrics.get("shelf_health_score", 0)],
+        ["Total Facings", metrics.get("total_facings") or metrics.get("total_products", 0)],
         ["Unique SKUs", metrics.get("unique_skus", 0)],
         ["Unique Brands", metrics.get("unique_brands", 0)],
+        ["Recognition Coverage %", metrics.get("recognition_coverage_percent", 0)],
+        ["On-Shelf Availability %", metrics.get("availability_percent") or metrics.get("osa_percent", 0)],
+        ["Facing Compliance %", metrics.get("facing_compliance_percent", 0)],
+        ["Placement Compliance %", metrics.get("placement_compliance_percent", 0)],
+        ["Planogram Compliance %", metrics.get("planogram_sku_match_percent") or metrics.get("planogram_compliance_percent", 0)],
+        ["Share of Shelf %", metrics.get("share_of_shelf_percent", metrics.get("shelf_utilization_percent", 0))],
         ["Low Stock SKUs", metrics.get("low_stock_products", 0)],
+        ["Possible OOS / Low Stock", metrics.get("possible_oos_count", 0)],
         ["Misplaced / Wrong Sub-category", metrics.get("misplaced_products", 0)],
-        ["Shelf Utilization %", metrics.get("shelf_utilization_percent", metrics.get("share_of_shelf_percent", 0))],
-        ["On-Shelf Availability %", metrics.get("osa_percent", 0)],
         ["Average Confidence", f"{metrics.get('average_confidence', 0) * 100:.1f}%"],
-        ["Shelf Health Score", metrics.get("shelf_health_score", 0)],
     ]
+    financial = metrics.get("financial_impact") or {}
+    if financial:
+        summary.extend(
+            [
+                ["Est. Daily Lost Sales (INR)", financial.get("estimated_daily_lost_sales_inr", 0)],
+                ["Est. Weekly Lost Sales (INR)", financial.get("estimated_weekly_lost_sales_inr", 0)],
+                ["OOS SKU Count", financial.get("oos_sku_count", 0)],
+                ["At-Risk SKU Count", financial.get("at_risk_sku_count", 0)],
+            ]
+        )
     table = Table(summary, colWidths=[2.8 * inch, 2.2 * inch])
     table.setStyle(
         TableStyle(
