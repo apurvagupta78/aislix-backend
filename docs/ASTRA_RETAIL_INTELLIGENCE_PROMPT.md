@@ -38,10 +38,10 @@ CUSTOMER & SCAN CONTEXT (JSON)
 
 {{metadata}}
 
-Use customer_type, role_family, brand_config, planogram_expected_skus, and scan context to tailor:
+Use customer_type, role_family, brand_config, planogram_expected_skus, audit_brand, known_category_competitors, and scan context to tailor:
 - role_summaries (execution / merchandising / brand / executive)
 - recommended_actions (prioritized, evidence-backed)
-- competitive_insights (only when multiple brands visible or competitor list provided)
+- competitive_insights (REQUIRED when planogram or audit_brand names a brand — see COMPETITOR ANALYSIS below)
 
 =========================
 DETECTION RULES
@@ -77,6 +77,25 @@ qty = YOUR visual count for THAT SKU only.
 planogram expected_qty is for downstream compliance ONLY — NEVER copy expected_qty into qty.
 
 If planogram is absent from metadata, set retail_intelligence.planogram_analysis.status = "not_configured".
+
+=========================
+COMPETITOR ANALYSIS (WHEN planogram_expected_skus OR audit_brand IN METADATA)
+=========================
+
+When the planogram or audit_brand identifies a primary brand (e.g. Colgate toothpaste), you MUST:
+
+1. Detect ALL visible competitor brands in the same category on the shelf (e.g. Sensodyne, Oral-B, Pepsodent, Closeup for toothpaste).
+2. Populate competitive_insights with at least 3 entries when competitors are visible — include the primary brand AND each detected competitor.
+3. For each entry, share_note must cite approximate facing share from visible evidence (count facings / total category facings).
+4. When a competitor has MORE facings or better placement than the primary brand, action must state the specific merchandising gap (e.g. "Sensodyne has 2× facings at eye level — add Colgate Max Fresh facings to close gap").
+5. In role_summaries.brand and role_summaries.executive, explicitly call out where competitors have upper hand vs the planogram brand.
+6. In executive_summary, include: primary brand share, key competitor shares, and the top competitive risk.
+
+Use known_category_competitors from metadata as hints — but only report competitors you can actually see in the image.
+
+Do NOT skip competitive_insights when planogram names Colgate, HUL, Nestlé, etc. and other brands are visible on shelf.
+
+Separate brand share (all SKUs of that brand) from product share (one planogram SKU only) in summaries when a specific product_name is in planogram_expected_skus.
 
 =========================
 QTY COUNTING
@@ -138,9 +157,9 @@ Return ONLY valid JSON. No markdown. No prose outside JSON.
   ],
   "competitive_insights": [
     {
-      "brand": "Competitor or own brand",
-      "share_note": "Approximate facing share from visible evidence only",
-      "action": "One merchandising action to close a gap"
+      "brand": "Primary or competitor brand name",
+      "share_note": "Approximate facing share from visible evidence — cite facing counts",
+      "action": "Merchandising action; when competitor leads, state where they have upper hand (facings, placement, eye level)"
     }
   ],
   "retail_intelligence": {
@@ -178,7 +197,7 @@ FINAL CHECKLIST
 4. role_summaries: four distinct views — not copy-paste of executive_summary
 5. recommended_actions: prioritized, tied to findings, max 12
 6. Never invent sales numbers, planogram %, or competitor data without evidence
-7. competitive_insights: only when multiple brands visible on shelf
+7. competitive_insights: REQUIRED when planogram_expected_skus or audit_brand present and category competitors visible
 8. Return ONLY valid JSON
 
 Return ONLY valid JSON.

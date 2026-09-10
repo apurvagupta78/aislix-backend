@@ -107,6 +107,12 @@ def build_scan_metadata_payload(metadata: dict[str, Any]) -> dict[str, Any]:
         ),
     }
 
+    _CATEGORY_COMPETITORS: dict[str, list[str]] = {
+        "toothpaste": ["Sensodyne", "Oral-B", "Pepsodent", "Closeup", "Dabur Red", "Meswak"],
+        "mouthwash": ["Listerine", "Colgate", "Sensodyne", "Closeup"],
+        "shampoo": ["Pantene", "Head & Shoulders", "Dove", "Sunsilk", "Clinic Plus"],
+    }
+
     planogram_items = metadata.get("planogram_items") or []
     if planogram_items:
         from app.planogram_compliance import _aggregate_planogram_by_product
@@ -118,12 +124,29 @@ def build_scan_metadata_payload(metadata: dict[str, Any]) -> dict[str, Any]:
                 "product_name": row.get("product_name"),
                 "variant": row.get("variant") or "",
                 "expected_qty": int(row.get("expected_qty") or 0),
+                "category": row.get("category"),
+                "sub_category": row.get("sub_category"),
+                "location": row.get("location"),
+                "mrp_inr": row.get("mrp_inr"),
+                "avg_daily_sales": row.get("avg_daily_sales"),
             }
             for row in expected_skus
         ]
+        first_brand = (expected_skus[0].get("brand") or "").strip() if expected_skus else ""
+        first_product = (expected_skus[0].get("product_name") or "").strip() if expected_skus else ""
+        if first_brand:
+            payload_metadata["audit_brand"] = first_brand
+            payload_metadata["audit_product"] = first_product
+        sub = (expected_skus[0].get("sub_category") or audit_sub or "").lower() if expected_skus else audit_sub.lower()
+        for key, rivals in _CATEGORY_COMPETITORS.items():
+            if key in sub:
+                payload_metadata["known_category_competitors"] = rivals
+                break
         payload_metadata["audit_instructions"] += (
             " planogram_expected_skus in this metadata lists required SKUs — return a separate products[] "
             "row for EACH expected SKU with matching product_name/variant; do not merge flavors."
+            " When audit_brand is set, populate competitive_insights with visible category competitors"
+            " and call out where competitors have more facings or better placement than the audit brand."
         )
 
     brand_guide = metadata.get("shelf_brand_guide")
