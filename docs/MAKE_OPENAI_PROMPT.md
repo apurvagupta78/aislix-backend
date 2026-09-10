@@ -371,7 +371,14 @@ No markdown. No ```json. No text outside JSON.
       "bbox_2d": [0, 0, 0, 0]
     }
   ],
-  "executive_summary": "One short paragraph: shelf health, key brands, planogram gaps, misplaced products."
+  "executive_summary": "One short paragraph: shelf health, key brands, planogram gaps, misplaced products, and competitive shelf-share context (which brands lead facings vs rivals on this bay).",
+  "competitive_insights": [
+    {
+      "brand": "Leading competitor brand on shelf",
+      "share_note": "Approximate facing share vs your focus brand if metadata includes brand focus",
+      "action": "One merchandising action to close the gap"
+    }
+  ]
 }
 
 Field rules:
@@ -424,6 +431,8 @@ FINAL CHECKLIST (ALL MUST PASS)
 9. Variant strings follow VARIANT NAMING rules (no "Regular, 2 L" AND "2 L" for same SKU)
 10. If planogram_expected_skus present: len(products[]) matches expected SKU count
 11. executive_summary mentions planogram qty gaps if any
+12. executive_summary names top 2–3 brands by facing count and notes competitive gaps (who leads shelf share on this bay)
+13. competitive_insights: 1–3 rows when multiple brands visible — flag rivals with more facings than the audit brand
 
 Return ONLY valid JSON.
 ```

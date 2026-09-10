@@ -290,6 +290,8 @@ def landing_scan_response(
         or full.get("metrics", {}).get("brand_share_denominator"),
         "compliance_alerts": full.get("compliance_alerts") or [],
         "subcategory_mismatches": full.get("subcategory_mismatches") or [],
+        "recommendations": full.get("recommendations") or [],
+        "alerts": full.get("alerts") or [],
         "executive_summary": full.get("executive_summary") or full.get("summary_text"),
         "annotated_image_base64": full.get("annotated_image_base64"),
         "annotated_image_mime": full.get("annotated_image_mime", "image/jpeg"),
