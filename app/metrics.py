@@ -397,6 +397,90 @@ def build_recommendations(
     return recs
 
 
+def build_next_best_actions(
+    metrics: dict,
+    inventory: list[dict],
+    compliance_alerts: list[dict] | None = None,
+    planogram_compliance: dict | None = None,
+) -> list[dict]:
+    """Structured next-best-actions for the Action Center (when GPT does not supply them)."""
+    actions: list[dict] = []
+    threshold = int(metrics.get("low_stock_threshold") or LOW_STOCK_THRESHOLD)
+    fi = metrics.get("financial_impact") or {}
+    daily_impact = int(fi.get("estimated_daily_lost_sales_inr") or 0) if isinstance(fi, dict) else 0
+
+    oos = int(metrics.get("confirmed_oos_count") or metrics.get("out_of_stock_products") or 0)
+    if oos > 0:
+        actions.append(
+            {
+                "action_id": "nba-oos",
+                "issue_type": "oos",
+                "priority": "critical",
+                "severity": "critical",
+                "title": f"Replenish {oos} out-of-stock SKU(s)",
+                "reason": "Expected products were not detected on the shelf.",
+                "recommended_action": "Restock missing SKUs and rescan to verify availability.",
+                "expected_state": f"≥{threshold} facings per priority SKU",
+                "actual_state": "0 or below threshold",
+                "estimated_daily_impact_inr": daily_impact if daily_impact else None,
+                "status": "open",
+            }
+        )
+
+    low = int(metrics.get("low_stock_products") or 0)
+    if low > 0:
+        actions.append(
+            {
+                "action_id": "nba-low-stock",
+                "issue_type": "low_stock",
+                "priority": "high",
+                "severity": "high",
+                "title": f"Replenish {low} low-stock SKU(s)",
+                "reason": f"Facings at or below {threshold} units detected.",
+                "recommended_action": "Add facings to reach minimum threshold, then rescan.",
+                "status": "open",
+            }
+        )
+
+    placement = int(metrics.get("placement_issue_count") or metrics.get("misplaced_products") or 0)
+    if placement > 0:
+        actions.append(
+            {
+                "action_id": "nba-placement",
+                "issue_type": "placement",
+                "priority": "high",
+                "severity": "high",
+                "title": f"Fix {placement} placement issue(s)",
+                "reason": "Products appear outside expected category or shelf position.",
+                "recommended_action": "Move products to correct section and rescan.",
+                "status": "open",
+            }
+        )
+
+    for line in (planogram_compliance or {}).get("lines") or []:
+        issue = str(line.get("issue_type") or "")
+        if issue in {"correct", "ok"}:
+            continue
+        brand = line.get("expected_brand") or ""
+        product = line.get("expected_product") or ""
+        actions.append(
+            {
+                "action_id": f"nba-plan-{brand}-{product}".lower().replace(" ", "-")[:48],
+                "issue_type": issue or "planogram",
+                "priority": "critical" if issue in {"missing", "wrong_product"} else "high",
+                "severity": "critical" if issue in {"missing", "wrong_product"} else "high",
+                "title": f"Planogram: {brand} {product}".strip(),
+                "reason": line.get("detail") or f"Expected {line.get('expected_qty')} facings.",
+                "recommended_action": "Replenish or replace SKU per planogram, then rescan.",
+                "expected_state": str(line.get("expected_qty") or ""),
+                "actual_state": str(line.get("actual_qty") or 0),
+                "status": "open",
+            }
+        )
+
+    return actions[:12]
+
+
 # Indicative FMCG defaults when SKU price is unknown (INR).
 _DEFAULT_ASP_INR = 75.0
 _UNITS_PER_DAY = 4.0

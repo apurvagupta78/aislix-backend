@@ -276,6 +276,17 @@ def finalize_make_scan(
     competitive_insights = parsed.get("competitive_insights") or raw.get("competitive_insights")
     if isinstance(competitive_insights, list) and competitive_insights:
         retail_intelligence = {**retail_intelligence, "competitive_insights": competitive_insights}
+    from app.metrics import build_next_best_actions
+
+    if not retail_intelligence.get("next_best_actions"):
+        nba = build_next_best_actions(
+            metrics,
+            inventory,
+            compliance_alerts=compliance_alerts,
+            planogram_compliance=planogram_compliance,
+        )
+        if nba:
+            retail_intelligence = {**retail_intelligence, "next_best_actions": nba}
     if role_summaries:
         metrics["role_summaries"] = role_summaries
     if retail_intelligence:

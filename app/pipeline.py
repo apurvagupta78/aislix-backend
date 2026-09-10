@@ -435,6 +435,16 @@ def run_scan_from_image(
         categories = category_breakdown(inventory_counted_rows(inventory))
         alerts = build_alerts(metrics, compliance_alerts=compliance_alerts)
         recommendations = build_recommendations(metrics, inventory, compliance_alerts=compliance_alerts)
+        from app.metrics import build_next_best_actions
+
+        nba = build_next_best_actions(
+            metrics,
+            inventory,
+            compliance_alerts=compliance_alerts,
+            planogram_compliance=planogram_compliance,
+        )
+        if nba:
+            metrics["retail_intelligence"] = {"next_best_actions": nba}
         summary_text = executive_summary(metrics, compliance_alerts=compliance_alerts)
 
         from app.learned_catalog import count_learned, flush_learned, pop_learned_updates
