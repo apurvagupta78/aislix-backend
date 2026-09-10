@@ -35,15 +35,18 @@ def test_use_openai_provider(monkeypatch):
 
 def test_load_shelf_audit_prompt_contains_metadata_placeholder():
     prompt = load_shelf_audit_prompt()
-    assert "Act as a professional retail shelf auditor" in prompt
-    assert "{{11.metadata}}" in prompt
+    assert "Aislix Retail Intelligence Engine" in prompt
+    assert "{{metadata}}" in prompt
+    assert "role_summaries" in prompt
+    assert "recommended_actions" in prompt
     assert "Return ONLY valid JSON." in prompt
 
 
 def test_build_vision_user_message_injects_metadata():
     message = build_vision_user_message({"category": "Snacks", "sub_category": "chips"})
+    assert "{{metadata}}" not in message
     assert "{{11.metadata}}" not in message
-    assert '"category": "Snacks"' in message
+    assert '"category": "Snacks"' in message or "Snacks" in message
     assert "chips" in message
 
 

@@ -19,8 +19,10 @@ from app.make_scan import (
 from app.scan_post_process import finalize_make_scan
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-PROMPT_PATH = BASE_DIR / "docs" / "MAKE_OPENAI_PROMPT.md"
-METADATA_PLACEHOLDER = "{{11.metadata}}"
+# Direct OpenAI / Astra API prompt (not Make.com).
+PROMPT_PATH = BASE_DIR / "docs" / "ASTRA_RETAIL_INTELLIGENCE_PROMPT.md"
+METADATA_PLACEHOLDER = "{{metadata}}"
+LEGACY_METADATA_PLACEHOLDER = "{{11.metadata}}"
 
 _cached_prompt: str | None = None
 
@@ -122,6 +124,8 @@ def build_vision_user_message(metadata: dict[str, Any]) -> str:
     metadata_json = json.dumps(build_scan_metadata_payload(metadata), ensure_ascii=False)
     if METADATA_PLACEHOLDER in prompt:
         return prompt.replace(METADATA_PLACEHOLDER, metadata_json)
+    if LEGACY_METADATA_PLACEHOLDER in prompt:
+        return prompt.replace(LEGACY_METADATA_PLACEHOLDER, metadata_json)
     return f"{prompt}\n\nAudit context (JSON):\n{metadata_json}"
 
 

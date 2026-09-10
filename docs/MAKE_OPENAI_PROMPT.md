@@ -1,3 +1,8 @@
+# Make.com OpenAI — Legacy Prompt (Make.com webhook only)
+
+> **API / Astra scans:** Edit `docs/ASTRA_RETAIL_INTELLIGENCE_PROMPT.md` instead.  
+> Loaded by `app/openai_vision_scan.py` when `SCAN_PROVIDER=openai`.
+
 # Make.com OpenAI — Final Prompt (copy/paste)
 
 **Make wiring:** User message → paste block below. Text prompt: `{{11.metadata}}`. Image: `11.image:data` + `11.image:name` (webhook module **11**, not 1).
