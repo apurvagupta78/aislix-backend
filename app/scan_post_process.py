@@ -220,7 +220,11 @@ def finalize_make_scan(
     from app.metrics import compute_financial_impact, finalize_execution_score
 
     finalize_execution_score(metrics)
-    metrics["financial_impact"] = compute_financial_impact(inventory, metrics)
+    metrics["financial_impact"] = compute_financial_impact(
+        inventory,
+        metrics,
+        planogram_items=scan_context.get("planogram_items") or metadata.get("planogram_items"),
+    )
     if scan_context.get("planogram_yolo_qty"):
         metrics["planogram_yolo_qty"] = True
     if scan_context.get("yolo_row_counts"):

@@ -403,24 +403,63 @@ _UNITS_PER_DAY = 4.0
 _LOW_STOCK_RISK_FACTOR = 0.35
 
 
-def compute_financial_impact(inventory: list[dict], metrics: dict) -> dict:
+def _planogram_pricing_lookup(planogram_items: list[dict] | None) -> dict[str, dict]:
+    lookup: dict[str, dict] = {}
+    for item in planogram_items or []:
+        key = str(item.get("match_key") or "").strip().lower()
+        if not key:
+            brand = str(item.get("brand") or "").strip().lower()
+            product = str(item.get("product_name") or "").strip().lower()
+            variant = str(item.get("variant") or "").strip().lower()
+            key = "|".join(p for p in (brand, product, variant) if p)
+        if key:
+            lookup[key] = item
+    return lookup
+
+
+def _row_planogram_key(row: dict) -> str:
+    key = str(row.get("match_key") or "").strip().lower()
+    if key:
+        return key
+    brand = str(row.get("brand") or "").strip().lower()
+    product = str(row.get("product") or row.get("product_name") or "").strip().lower()
+    variant = str(row.get("variant") or "").strip().lower()
+    return "|".join(p for p in (brand, product, variant) if p)
+
+
+def compute_financial_impact(
+    inventory: list[dict],
+    metrics: dict,
+    planogram_items: list[dict] | None = None,
+) -> dict:
     """Estimate daily / weekly lost sales from OOS and low-stock SKUs."""
     counted = [row for row in inventory if row.get("counted_in_totals", True)]
+    plano_lookup = _planogram_pricing_lookup(planogram_items)
     oos_daily = 0.0
     at_risk_daily = 0.0
     oos_skus = 0
     at_risk_skus = 0
     threshold = int(metrics.get("low_stock_threshold") or LOW_STOCK_THRESHOLD)
+    used_planogram_pricing = False
 
     for row in counted:
         qty = int(row.get("quantity") or 0)
         asp = float(row.get("price_inr") or row.get("avg_price_inr") or _DEFAULT_ASP_INR)
+        velocity = _UNITS_PER_DAY
+        plano = plano_lookup.get(_row_planogram_key(row))
+        if plano:
+            if plano.get("mrp_inr") not in (None, ""):
+                asp = float(plano["mrp_inr"])
+                used_planogram_pricing = True
+            if plano.get("avg_daily_sales") not in (None, ""):
+                velocity = float(plano["avg_daily_sales"])
+                used_planogram_pricing = True
         if qty <= 0:
-            oos_daily += _UNITS_PER_DAY * asp
+            oos_daily += velocity * asp
             oos_skus += 1
         elif qty <= threshold:
             gap = max(0, threshold - qty)
-            at_risk_daily += gap * _UNITS_PER_DAY * asp * _LOW_STOCK_RISK_FACTOR
+            at_risk_daily += gap * velocity * asp * _LOW_STOCK_RISK_FACTOR
             at_risk_skus += 1
 
     daily = round(oos_daily + at_risk_daily)
@@ -437,17 +476,22 @@ def compute_financial_impact(inventory: list[dict], metrics: dict) -> dict:
             "confidence": "indicative",
         }
 
+    methodology = (
+        "Uses planogram MRP and daily sales velocity per SKU where provided."
+        if used_planogram_pricing
+        else (
+            "Indicative estimate using category ASP defaults (₹75 when price unknown) "
+            f"and {_UNITS_PER_DAY:.0f} units/day velocity per at-risk SKU."
+        )
+    )
     return {
         "estimated_daily_lost_sales_inr": daily,
         "estimated_weekly_lost_sales_inr": daily * 7,
         "estimated_monthly_lost_sales_inr": daily * 30,
         "oos_sku_count": oos_skus,
         "at_risk_sku_count": at_risk_skus,
-        "methodology": (
-            "Indicative estimate using category ASP defaults (₹75 when price unknown) "
-            f"and {_UNITS_PER_DAY:.0f} units/day velocity per at-risk SKU."
-        ),
-        "confidence": "indicative",
+        "methodology": methodology,
+        "confidence": "planogram" if used_planogram_pricing else "indicative",
     }
 
 

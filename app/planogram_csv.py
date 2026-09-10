@@ -32,6 +32,15 @@ HEADER_ALIASES: dict[str, str] = {
     "sku": "sku",
     "shelf position": "shelf_position",
     "position": "shelf_position",
+    "mrp": "mrp_inr",
+    "mrp inr": "mrp_inr",
+    "price": "mrp_inr",
+    "price inr": "mrp_inr",
+    "daily sales": "avg_daily_sales",
+    "avg daily sales": "avg_daily_sales",
+    "sales": "avg_daily_sales",
+    "velocity": "avg_daily_sales",
+    "units per day": "avg_daily_sales",
 }
 
 
@@ -39,7 +48,7 @@ def csv_template_header() -> str:
     """Canonical planogram CSV header for downloads and docs."""
     return (
         "location,category,sub_category,brand,product_name,variant,"
-        "expected_qty,sku,shelf_position"
+        "expected_qty,mrp_inr,avg_daily_sales,sku,shelf_position"
     )
 
 
@@ -101,6 +110,30 @@ def normalize_planogram_row(row: dict[str, Any], row_num: int = 0) -> tuple[dict
     sub_category = normalize_sub_category_id(sub_category, category)
     variant = str(row.get("variant") or "").strip()
     sku = str(row.get("sku") or "").strip()
+
+    mrp_inr: float | None = None
+    mrp_raw = row.get("mrp_inr", row.get("mrp"))
+    if mrp_raw not in (None, ""):
+        try:
+            mrp_inr = float(mrp_raw)
+            if mrp_inr < 0:
+                errors.append(f"{prefix}mrp_inr must be >= 0")
+        except (TypeError, ValueError):
+            errors.append(f"{prefix}mrp_inr must be a number")
+
+    avg_daily_sales: float | None = None
+    sales_raw = row.get("avg_daily_sales", row.get("sales"))
+    if sales_raw not in (None, ""):
+        try:
+            avg_daily_sales = float(sales_raw)
+            if avg_daily_sales < 0:
+                errors.append(f"{prefix}avg_daily_sales must be >= 0")
+        except (TypeError, ValueError):
+            errors.append(f"{prefix}avg_daily_sales must be a number")
+
+    if errors:
+        return None, errors
+
     normalized = {
         "location": location,
         "aisle": str(row.get("aisle") or "").strip(),
@@ -114,6 +147,10 @@ def normalize_planogram_row(row: dict[str, Any], row_num: int = 0) -> tuple[dict
         "shelf_position": str(row.get("shelf_position") or "").strip(),
         "match_key": build_match_key(brand, product_name, sku, sub_category, variant),
     }
+    if mrp_inr is not None:
+        normalized["mrp_inr"] = round(mrp_inr, 2)
+    if avg_daily_sales is not None:
+        normalized["avg_daily_sales"] = round(avg_daily_sales, 2)
     return normalized, []
 
 

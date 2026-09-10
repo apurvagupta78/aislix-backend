@@ -407,7 +407,9 @@ def run_scan_from_image(
         from app.metrics import compute_financial_impact, finalize_execution_score
 
         finalize_execution_score(metrics)
-        metrics["financial_impact"] = compute_financial_impact(inventory, metrics)
+        metrics["financial_impact"] = compute_financial_impact(
+            inventory, metrics, planogram_items=planogram_items or None
+        )
         share_payload = build_brand_share_payload(
             inventory,
             audit_sub_category=scan_context.get("sub_category"),
