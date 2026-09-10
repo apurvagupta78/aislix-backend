@@ -408,7 +408,10 @@ def run_scan_from_image(
 
         finalize_execution_score(metrics)
         metrics["financial_impact"] = compute_financial_impact(
-            inventory, metrics, planogram_items=planogram_items or None
+            inventory,
+            metrics,
+            planogram_items=planogram_items or None,
+            planogram_compliance=planogram_compliance,
         )
         share_payload = build_brand_share_payload(
             inventory,

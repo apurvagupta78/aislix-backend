@@ -293,6 +293,8 @@ def landing_scan_response(
         "recommendations": full.get("recommendations") or [],
         "alerts": full.get("alerts") or [],
         "executive_summary": full.get("executive_summary") or full.get("summary_text"),
+        "role_summaries": full.get("role_summaries"),
+        "retail_intelligence": full.get("retail_intelligence"),
         "annotated_image_base64": full.get("annotated_image_base64"),
         "annotated_image_mime": full.get("annotated_image_mime", "image/jpeg"),
         "annotated_image_width": full.get("annotated_image_width"),

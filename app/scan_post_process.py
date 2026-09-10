@@ -224,6 +224,7 @@ def finalize_make_scan(
         inventory,
         metrics,
         planogram_items=scan_context.get("planogram_items") or metadata.get("planogram_items"),
+        planogram_compliance=planogram_compliance,
     )
     if scan_context.get("planogram_yolo_qty"):
         metrics["planogram_yolo_qty"] = True
@@ -247,6 +248,38 @@ def finalize_make_scan(
     categories = category_breakdown(inventory_counted_rows(inventory))
     alerts = build_alerts(metrics, compliance_alerts=compliance_alerts)
     recommendations = build_recommendations(metrics, inventory, compliance_alerts=compliance_alerts)
+    gpt_actions = parsed.get("recommended_actions") or raw.get("recommended_actions") or []
+    if isinstance(gpt_actions, list):
+        for idx, action in enumerate(gpt_actions):
+            if not isinstance(action, dict):
+                continue
+            title = str(action.get("title") or action.get("recommended_action") or "").strip()
+            if not title:
+                continue
+            recommendations.append(
+                {
+                    "id": str(action.get("action_id") or f"gpt-action-{idx}"),
+                    "title": title,
+                    "detail": str(action.get("detail") or action.get("reason") or "").strip() or None,
+                    "category": str(action.get("issue_type") or action.get("category") or "Retail execution"),
+                    "impact": str(action.get("priority") or action.get("severity") or "medium").lower(),
+                }
+            )
+    role_summaries = parsed.get("role_summaries") or raw.get("role_summaries")
+    if not isinstance(role_summaries, dict):
+        role_summaries = {}
+    retail_intelligence = parsed.get("retail_intelligence") or raw.get("retail_intelligence") or {}
+    if not isinstance(retail_intelligence, dict):
+        retail_intelligence = {}
+    if role_summaries:
+        retail_intelligence = {**retail_intelligence, "role_summaries": role_summaries}
+    competitive_insights = parsed.get("competitive_insights") or raw.get("competitive_insights")
+    if isinstance(competitive_insights, list) and competitive_insights:
+        retail_intelligence = {**retail_intelligence, "competitive_insights": competitive_insights}
+    if role_summaries:
+        metrics["role_summaries"] = role_summaries
+    if retail_intelligence:
+        metrics["retail_intelligence"] = retail_intelligence
     summary_text = parsed.get("executive_summary") or raw.get("summary_text") or executive_summary(
         metrics, compliance_alerts=compliance_alerts
     )
@@ -351,6 +384,8 @@ def finalize_make_scan(
         "compliance_alerts": compliance_alerts,
         "subcategory_mismatches": subcategory_mismatches,
         "recommendations": recommendations,
+        "role_summaries": role_summaries or None,
+        "retail_intelligence": retail_intelligence or None,
         "annotated_image_base64": annotated_b64,
         "annotated_image_mime": "image/jpeg",
         "annotated_image_width": annotated_dims["width"],

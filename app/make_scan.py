@@ -863,6 +863,19 @@ def parse_make_response(raw: Any) -> dict[str, Any]:
         and bool(summary or data.get("summary_text"))
     )
 
+    role_summaries = data.get("role_summaries")
+    if not isinstance(role_summaries, dict):
+        role_summaries = None
+    recommended_actions = data.get("recommended_actions")
+    if not isinstance(recommended_actions, list):
+        recommended_actions = None
+    competitive_insights = data.get("competitive_insights")
+    if not isinstance(competitive_insights, list):
+        competitive_insights = None
+    retail_intelligence = data.get("retail_intelligence")
+    if not isinstance(retail_intelligence, dict):
+        retail_intelligence = None
+
     return {
         "is_full": is_full,
         "raw": data,
@@ -871,6 +884,10 @@ def parse_make_response(raw: Any) -> dict[str, Any]:
         "product_rows": _raw_product_rows(data),
         "annotated_image_base64": annotated_image_base64 if isinstance(annotated_image_base64, str) else None,
         "executive_summary": summary if isinstance(summary, str) else None,
+        "role_summaries": role_summaries,
+        "recommended_actions": recommended_actions,
+        "competitive_insights": competitive_insights,
+        "retail_intelligence": retail_intelligence,
     }
 
 

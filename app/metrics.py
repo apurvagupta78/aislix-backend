@@ -427,10 +427,18 @@ def _row_planogram_key(row: dict) -> str:
     return "|".join(p for p in (brand, product, variant) if p)
 
 
+def _pricing_for_planogram_row(row: dict) -> tuple[float, float, bool]:
+    asp = float(row.get("mrp_inr") or row.get("price_inr") or _DEFAULT_ASP_INR)
+    velocity = float(row.get("avg_daily_sales") or _UNITS_PER_DAY)
+    priced = bool(row.get("mrp_inr") or row.get("avg_daily_sales"))
+    return asp, velocity, priced
+
+
 def compute_financial_impact(
     inventory: list[dict],
     metrics: dict,
     planogram_items: list[dict] | None = None,
+    planogram_compliance: dict | None = None,
 ) -> dict:
     """Estimate daily / weekly lost sales from OOS and low-stock SKUs."""
     counted = [row for row in inventory if row.get("counted_in_totals", True)]
@@ -442,25 +450,74 @@ def compute_financial_impact(
     threshold = int(metrics.get("low_stock_threshold") or LOW_STOCK_THRESHOLD)
     used_planogram_pricing = False
 
-    for row in counted:
-        qty = int(row.get("quantity") or 0)
-        asp = float(row.get("price_inr") or row.get("avg_price_inr") or _DEFAULT_ASP_INR)
-        velocity = _UNITS_PER_DAY
-        plano = plano_lookup.get(_row_planogram_key(row))
-        if plano:
-            if plano.get("mrp_inr") not in (None, ""):
-                asp = float(plano["mrp_inr"])
+    compliance_lines = (planogram_compliance or {}).get("lines") or []
+    if planogram_items and compliance_lines:
+        plano_by_key = {
+            _row_planogram_key(item): item for item in planogram_items if _row_planogram_key(item)
+        }
+        for line in compliance_lines:
+            issue = str(line.get("issue_type") or "")
+            if issue in {"correct", "ok"}:
+                continue
+            exp_brand = str(line.get("expected_brand") or "").strip().lower()
+            exp_product = str(line.get("expected_product") or "").strip().lower()
+            key = "|".join(p for p in (exp_brand, exp_product) if p)
+            plano = plano_by_key.get(key) or {}
+            asp, velocity, priced = _pricing_for_planogram_row(plano)
+            if priced:
                 used_planogram_pricing = True
-            if plano.get("avg_daily_sales") not in (None, ""):
-                velocity = float(plano["avg_daily_sales"])
+            exp_qty = int(line.get("expected_qty") or 1)
+            act_qty = int(line.get("actual_qty") or 0)
+            if issue in {"missing", "wrong_product", "wrong_category", "wrong_location"}:
+                oos_daily += velocity * asp * max(exp_qty, 1)
+                oos_skus += 1
+            elif issue in {"qty_mismatch", "qty_issue"} and act_qty < exp_qty:
+                gap = exp_qty - act_qty
+                at_risk_daily += gap * velocity * asp * _LOW_STOCK_RISK_FACTOR
+                at_risk_skus += 1
+    elif planogram_items:
+        for plan in planogram_items:
+            asp, velocity, priced = _pricing_for_planogram_row(plan)
+            if priced:
                 used_planogram_pricing = True
-        if qty <= 0:
-            oos_daily += velocity * asp
-            oos_skus += 1
-        elif qty <= threshold:
-            gap = max(0, threshold - qty)
-            at_risk_daily += gap * velocity * asp * _LOW_STOCK_RISK_FACTOR
-            at_risk_skus += 1
+            exp_qty = max(1, int(plan.get("expected_qty") or 1))
+            key = _row_planogram_key(plan)
+            detected = 0
+            for row in counted:
+                if _row_planogram_key(row) == key:
+                    detected = int(row.get("quantity") or 0)
+                    break
+            if detected <= 0:
+                oos_daily += velocity * asp * exp_qty
+                oos_skus += 1
+            elif detected < exp_qty:
+                gap = exp_qty - detected
+                at_risk_daily += gap * velocity * asp * _LOW_STOCK_RISK_FACTOR
+                at_risk_skus += 1
+            elif detected < threshold:
+                gap = max(0, threshold - detected)
+                at_risk_daily += gap * velocity * asp
+                at_risk_skus += 1
+    else:
+        for row in counted:
+            qty = int(row.get("quantity") or 0)
+            asp = float(row.get("price_inr") or row.get("avg_price_inr") or _DEFAULT_ASP_INR)
+            velocity = _UNITS_PER_DAY
+            plano = plano_lookup.get(_row_planogram_key(row))
+            if plano:
+                if plano.get("mrp_inr") not in (None, ""):
+                    asp = float(plano["mrp_inr"])
+                    used_planogram_pricing = True
+                if plano.get("avg_daily_sales") not in (None, ""):
+                    velocity = float(plano["avg_daily_sales"])
+                    used_planogram_pricing = True
+            if qty <= 0:
+                oos_daily += velocity * asp
+                oos_skus += 1
+            elif qty <= threshold:
+                gap = max(0, threshold - qty)
+                at_risk_daily += gap * velocity * asp * _LOW_STOCK_RISK_FACTOR
+                at_risk_skus += 1
 
     daily = round(oos_daily + at_risk_daily)
     if daily <= 0 and oos_skus == 0 and at_risk_skus == 0:
