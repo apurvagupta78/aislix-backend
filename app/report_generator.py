@@ -28,6 +28,16 @@ PDF_PAGE_MARGIN = 0.75 * inch
 PDF_SUMMARY_IMAGE_WIDTH = 6.0 * inch
 PDF_SUMMARY_IMAGE_MAX_HEIGHT = 3.25 * inch
 
+REPORT_SPEC_VERSION = "1.0"
+REPORT_TITLE = "RETAIL SHELF AI ANALYSIS REPORT"
+
+_CAPTURE_LIMITATIONS = [
+    "Single front-facing photos show visible facings only — not hidden depth, backroom stock, or store-wide inventory.",
+    "Shelf absence in-frame is not confirmed inventory stockout without operational verification.",
+    "Financial impact figures are indicative estimates when user-supplied prices and demand are configured.",
+    "Linear shelf share and physical centimeters require calibration not available from photo alone.",
+    "Execution score is withheld when assessed KPI coverage is below 80%.",
+]
 
 import unicodedata
 
@@ -207,6 +217,287 @@ def _csv_section(title: str, rows: list[list]) -> list[str]:
     return lines
 
 
+def _na(value) -> str:
+    if value is None or value == "":
+        return "N/A"
+    return str(value)
+
+
+def _metric_state(metrics: dict, key: str) -> str:
+    retail = metrics.get("retail_execution_score") or {}
+    if key == "shelf_execution_score" and retail.get("withhold_reason"):
+        return "withheld"
+    intel = metrics.get("retail_intelligence") or {}
+    block = intel.get(key)
+    if isinstance(block, dict) and block.get("state"):
+        return str(block["state"])
+    return "ready" if metrics.get(key) is not None else "not_configured"
+
+
+def build_report_context(
+    *,
+    scan_id: str,
+    metrics: dict | None = None,
+    model_version: str | None = None,
+    store_id: str | None = None,
+    store_label: str | None = None,
+    location: str | None = None,
+    category: str | None = None,
+    sub_category: str | None = None,
+    customer_type: str | None = None,
+    status: str = "DRAFT",
+) -> dict:
+    """Context block for eight-section exports — see docs/retail-shelf-ai-analysis-report-spec.md."""
+    metrics = metrics or {}
+    audit = metrics.get("audit_scope") or {}
+    intel = metrics.get("retail_intelligence") or {}
+    iq = intel.get("image_quality") or {}
+    iq_score_block = iq.get("audit_image_quality_score") or {}
+    iq_score = (
+        iq_score_block.get("value")
+        if isinstance(iq_score_block, dict)
+        else iq_score_block
+    )
+    boundary_parts = [p for p in [category, sub_category, location] if p]
+    enabled: list[str] = ["Photo detection", "Facing counts", "Brand share (scoped)"]
+    omitted: list[str] = []
+    if metrics.get("planogram_sku_match_percent") is not None or metrics.get("planogram_compliance_percent") is not None:
+        enabled.append("Planogram compliance")
+    else:
+        omitted.append("Planogram compliance — no reference planogram")
+    if metrics.get("financial_impact"):
+        enabled.append("Financial impact (indicative)")
+    else:
+        omitted.append("Financial impact — prices/demand not configured")
+    omitted.append("Linear shelf share — geometry not calibrated")
+    omitted.append("POS/WMS inventory — Tier D not connected")
+    recapture = "YES" if iq.get("rescan_recommended") or float(iq_score or 100) < 60 else "NO"
+    return {
+        "report_id": scan_id,
+        "status": status,
+        "spec_version": REPORT_SPEC_VERSION,
+        "model_version": model_version or metrics.get("model_version") or "aislix-pipeline",
+        "store_id": store_id,
+        "store_label": store_label or store_id,
+        "location": location,
+        "category": category,
+        "sub_category": sub_category,
+        "customer_type": customer_type or "retail",
+        "analysis_boundary": " · ".join(boundary_parts) if boundary_parts else "Photographed shelf area",
+        "audit_scope": audit,
+        "image_quality": iq,
+        "recapture_required": recapture,
+        "detection_mode": metrics.get("detection_mode") or "vision_pipeline",
+        "enabled_modules": enabled,
+        "omitted_modules": omitted,
+    }
+
+
+def _kpi_export_rows(metrics: dict) -> list[list]:
+    """KPI rows: name, value, numerator, denominator, coverage, state, scope note."""
+    scope = metrics.get("brand_share_scope") or metrics.get("brand_share_denominator") or ""
+    denom_note = f"scope={scope}" if scope else ""
+    retail = metrics.get("retail_execution_score") or {}
+    exec_val = metrics.get("shelf_execution_score")
+    if retail.get("withhold_reason"):
+        exec_display = f"withheld ({retail['withhold_reason']})"
+    else:
+        exec_display = _na(exec_val)
+
+    def row(name, value, num="", den="", cov="", state_key=""):
+        return [
+            name,
+            _na(value),
+            _na(num),
+            _na(den),
+            _na(cov),
+            _metric_state(metrics, state_key) if state_key else "ready",
+            denom_note if "share" in name.lower() else "",
+        ]
+
+    total_facings = metrics.get("total_facings") or metrics.get("total_products")
+    rec_cov = metrics.get("recognition_coverage_percent")
+    rows = [
+        ["KPI", "Value", "Numerator", "Denominator", "Coverage", "State", "Scope"],
+        row("Shelf execution score", exec_display, state_key="shelf_execution_score"),
+        row("Visible facings", total_facings, total_facings, "assessed image", rec_cov),
+        row("Unique SKUs", metrics.get("unique_skus"), metrics.get("unique_skus"), total_facings),
+        row("Unique brands", metrics.get("unique_brands"), metrics.get("unique_brands"), total_facings),
+        row("Recognition coverage %", rec_cov, "", "", rec_cov),
+        row(
+            "On-shelf availability %",
+            metrics.get("availability_percent") or metrics.get("osa_percent"),
+            "",
+            "",
+            "",
+            "planogram_sku_match_percent",
+        ),
+        row("Facing compliance %", metrics.get("facing_compliance_percent")),
+        row("Placement compliance %", metrics.get("placement_compliance_percent")),
+        row(
+            "Planogram compliance %",
+            metrics.get("planogram_sku_match_percent") or metrics.get("planogram_compliance_percent"),
+        ),
+        row("Share of shelf %", metrics.get("share_of_shelf_percent")),
+        row("Confirmed shelf absence count", metrics.get("confirmed_oos_count") or metrics.get("out_of_stock_products")),
+        row("Low stock / suspected gaps", metrics.get("possible_oos_count") or metrics.get("low_stock_products")),
+        row("Placement issues", metrics.get("placement_issue_count") or metrics.get("misplaced_products")),
+        row("Avg confidence %", round(float(metrics.get("average_confidence") or 0) * 100, 1)),
+    ]
+    return rows
+
+
+def _section1_rows(ctx: dict, executive_summary: str | None) -> list[list]:
+    facility = (ctx.get("customer_type") or "retail").replace("_", " ").title()
+    return [
+        ["Field", "Value"],
+        ["Business / site", _na(ctx.get("store_label") or ctx.get("store_id"))],
+        ["Facility type", facility],
+        ["Location", _na(ctx.get("location"))],
+        ["Category / sub-category", _na(f"{ctx.get('category') or ''} / {ctx.get('sub_category') or ''}".strip(" /"))],
+        ["Analysis boundary", _na(ctx.get("analysis_boundary"))],
+        ["Executive summary", _na(executive_summary)],
+    ]
+
+
+def _image_quality_score(iq: dict) -> str:
+    block = iq.get("audit_image_quality_score")
+    if isinstance(block, dict):
+        return _na(block.get("value"))
+    return _na(block)
+
+
+def _section2_rows(ctx: dict, metrics: dict) -> list[list]:
+    iq = ctx.get("image_quality") or {}
+    audit = ctx.get("audit_scope") or {}
+    return [
+        ["Field", "Value"],
+        ["Photo reference", "Embedded annotated image (Section 8)"],
+        ["Site ID", _na(ctx.get("store_id"))],
+        ["Location ID", _na(ctx.get("location"))],
+        ["Category scope", _na(ctx.get("category"))],
+        ["Image quality score", _image_quality_score(iq)],
+        ["Assessable facings in scope", _na(audit.get("in_scope_facings"))],
+        ["Recapture required", _na(ctx.get("recapture_required"))],
+        ["Detection mode", _na(ctx.get("detection_mode"))],
+        ["Model / system version", _na(ctx.get("model_version"))],
+        ["Evidence convention", "PHOTO-DETECTED unless marked USER-SUPPLIED"],
+        ["Missing-data rule", "UNKNOWN/NOT ASSESSABLE — null is not zero"],
+    ]
+
+
+def _section3_rows(ctx: dict, metrics: dict) -> list[list]:
+    audit = ctx.get("audit_scope") or {}
+    return [
+        ["Field", "Value"],
+        ["Location hierarchy", f"Site > {ctx.get('location') or 'bay'} > {ctx.get('category') or 'category'}"],
+        ["Coordinate system", "Normalized image bounding boxes"],
+        ["In-scope facings", _na(audit.get("in_scope_facings"))],
+        ["Adjacent bay exclusions", _na(audit.get("excluded_adjacent_facings"))],
+        ["Planogram reference", "Configured" if metrics.get("planogram_sku_match_percent") is not None else "Not supplied"],
+    ]
+
+
+def _inventory_observation_rows(inventory: list[dict]) -> list[list]:
+    header = [
+        "Brand",
+        "Product",
+        "Variant",
+        "Qty",
+        "Conf %",
+        "BBox",
+        "Evidence",
+        "Stock",
+        "Compliance",
+    ]
+    rows = [header]
+    for row in inventory[:200]:
+        bbox = ""
+        if row.get("x1") is not None:
+            bbox = f"{row.get('x1')},{row.get('y1')}-{row.get('x2')},{row.get('y2')}"
+        conf = float(row.get("confidence") or 0)
+        conf_pct = round(conf * 100, 1) if conf <= 1 else round(conf, 1)
+        evidence = "PHOTO-DETECTED"
+        src = row.get("recognition_source")
+        if src:
+            evidence = f"PHOTO-DETECTED ({src})"
+        compliance = "OK"
+        if row.get("compliance_status") == "category_mismatch":
+            compliance = COMPLIANCE_ALERT_TITLE
+        rows.append(
+            [
+                row.get("brand", ""),
+                row.get("product_name", ""),
+                row.get("variant", "") or "—",
+                str(row.get("quantity", 0)),
+                conf_pct,
+                bbox or "—",
+                evidence,
+                (row.get("stock_status") or "in_stock").replace("_", " "),
+                compliance,
+            ]
+        )
+    return rows
+
+
+def _section6_rows(metrics: dict) -> list[list]:
+    financial = metrics.get("financial_impact") or {}
+    if not financial:
+        return [["Note", "Commercial inventory KPIs not configured (Tier C/D inputs required)"]]
+    return [
+        ["Metric", "Value (INR)", "Evidence"],
+        ["Est. daily lost sales", financial.get("estimated_daily_lost_sales_inr", 0), "ESTIMATED"],
+        ["Est. weekly lost sales", financial.get("estimated_weekly_lost_sales_inr", 0), "ESTIMATED"],
+        ["OOS SKU count", financial.get("oos_sku_count", 0), "PHOTO-DETECTED + USER-SUPPLIED"],
+        ["At-risk SKU count", financial.get("at_risk_sku_count", 0), "PHOTO-DETECTED"],
+        ["Confidence", financial.get("confidence", ""), ""],
+        ["Methodology", financial.get("methodology", ""), ""],
+    ]
+
+
+def _action_rows(metrics: dict, recommendations: list[dict]) -> list[list]:
+    intel = metrics.get("retail_intelligence") or {}
+    ledger = intel.get("opportunity_ledger") or []
+    rows = [["Priority", "Issue", "SKU/Brand", "Evidence", "Action", "Est. daily INR"]]
+    for item in ledger[:15]:
+        if not isinstance(item, dict):
+            continue
+        rows.append(
+            [
+                item.get("severity") or item.get("priority") or "medium",
+                item.get("issue") or "",
+                item.get("sku") or item.get("brand") or "",
+                "PHOTO-DETECTED",
+                item.get("recommended_action") or item.get("title") or "",
+                item.get("estimated_daily_impact_inr") or "",
+            ]
+        )
+    for rec in recommendations[:10]:
+        rows.append(
+            [
+                rec.get("impact") or "medium",
+                rec.get("title") or "Recommendation",
+                "",
+                "PHOTO-DETECTED",
+                rec.get("detail") or "",
+                "",
+            ]
+        )
+    if len(rows) == 1:
+        rows.append(["—", "No critical actions", "", "", "", ""])
+    return rows
+
+
+def _section8_rows(ctx: dict) -> list[list]:
+    rows = [["Item", "Detail"]]
+    for line in _CAPTURE_LIMITATIONS:
+        rows.append(["Limitation", line])
+    rows.append(["Enabled modules", "; ".join(ctx.get("enabled_modules") or [])])
+    rows.append(["Omitted modules", "; ".join(ctx.get("omitted_modules") or [])])
+    rows.append(["Evidence package", "Original photo, annotated image, product table, this report"])
+    return rows
+
+
 def generate_csv_bytes(
     inventory: list[dict],
     *,
@@ -217,6 +508,7 @@ def generate_csv_bytes(
     alerts: list[dict] | None = None,
     compliance_alerts: list[dict] | None = None,
     executive_summary: str | None = None,
+    report_context: dict | None = None,
 ) -> bytes:
     """Inventory-only CSV when metrics is omitted; full multi-section report otherwise."""
     if not metrics:
@@ -257,130 +549,52 @@ def generate_csv_bytes(
             )
         return buffer.getvalue().encode("utf-8")
 
+    ctx = report_context or build_report_context(scan_id=scan_id or "", metrics=metrics)
+    now = datetime.now().strftime("%d-%m-%Y %H:%M")
     lines: list[str] = [
-        "# Aislix Shelf Audit Report",
-        f"# Scan ID,{_csv_escape(scan_id or '')}",
+        f"# {REPORT_TITLE}",
+        f"# Report ID,{_csv_escape(ctx.get('report_id') or scan_id or '')}",
+        f"# Status,{_csv_escape(ctx.get('status', 'DRAFT'))}",
+        f"# Analysis date,{now}",
+        f"# Spec version,{REPORT_SPEC_VERSION}",
     ]
-    execution = metrics.get("shelf_execution_score") or metrics.get("shelf_health_score") or 0
-    lines.extend(
-        _csv_section(
-            "Execution summary",
-            [
-                ["Metric", "Value"],
-                ["Shelf execution score", execution],
-                ["Shelf health score", metrics.get("shelf_health_score", "")],
-                ["Total facings", metrics.get("total_facings") or metrics.get("total_products", 0)],
-                ["Unique SKUs", metrics.get("unique_skus", 0)],
-                ["Unique brands", metrics.get("unique_brands", 0)],
-                ["Recognition coverage %", metrics.get("recognition_coverage_percent", "")],
-                ["Availability %", metrics.get("availability_percent") or metrics.get("osa_percent", "")],
-                ["Facing compliance %", metrics.get("facing_compliance_percent", "")],
-                ["Placement compliance %", metrics.get("placement_compliance_percent", "")],
-                ["Share of shelf %", metrics.get("share_of_shelf_percent", "")],
-                [
-                    "Planogram compliance %",
-                    metrics.get("planogram_sku_match_percent")
-                    or metrics.get("planogram_compliance_percent", ""),
-                ],
-                ["Confirmed OOS", metrics.get("confirmed_oos_count") or metrics.get("out_of_stock_products", 0)],
-                ["Possible OOS / low stock", metrics.get("possible_oos_count") or metrics.get("low_stock_products", 0)],
-                ["Placement issues", metrics.get("placement_issue_count") or metrics.get("misplaced_products", 0)],
-                ["Avg confidence %", round(float(metrics.get("average_confidence") or 0) * 100, 1)],
-            ],
-        )
-    )
-    if executive_summary:
-        lines.extend(["", "# Executive summary", _csv_escape(executive_summary)])
-
-    financial = metrics.get("financial_impact") or {}
-    if financial:
-        lines.extend(
-            _csv_section(
-                "Financial impact (indicative)",
-                [
-                    ["Metric", "Value (INR)"],
-                    ["Estimated daily lost sales", financial.get("estimated_daily_lost_sales_inr", 0)],
-                    ["Estimated weekly lost sales", financial.get("estimated_weekly_lost_sales_inr", 0)],
-                    ["Estimated monthly lost sales", financial.get("estimated_monthly_lost_sales_inr", 0)],
-                    ["OOS SKU count", financial.get("oos_sku_count", 0)],
-                    ["At-risk SKU count", financial.get("at_risk_sku_count", 0)],
-                    ["Confidence", financial.get("confidence", "")],
-                    ["Methodology", financial.get("methodology", "")],
-                ],
-            )
-        )
-
+    lines.extend(_csv_section("Section 1 — Purpose scope and business context", _section1_rows(ctx, executive_summary)))
+    lines.extend(_csv_section("Section 2 — Inputs and analysis method", _section2_rows(ctx, metrics)))
+    lines.extend(_csv_section("Section 3 — Shelf location and reference fields", _section3_rows(ctx, metrics)))
+    lines.extend(_csv_section("Section 4 — Product and observation fields", _inventory_observation_rows(inventory)))
+    lines.extend(_csv_section("Section 5 — Core calculations and KPIs", _kpi_export_rows(metrics)))
     if shares:
         lines.extend(
             _csv_section(
-                "Top brands by shelf share",
-                [["Brand", "Share %"]] + [[row.get("brand", ""), f"{float(row.get('share', 0)):.1f}"] for row in shares[:15]],
+                "Section 5b — Brand facing share",
+                [["Brand", "Share %"]]
+                + [[row.get("brand", ""), f"{float(row.get('share', 0)):.1f}"] for row in shares[:15]],
             )
         )
-
-    if recommendations:
-        lines.extend(
-            _csv_section(
-                "Recommended actions",
-                [["Title", "Impact", "Detail"]]
-                + [[rec.get("title", ""), rec.get("impact", ""), rec.get("detail", "")] for rec in recommendations[:20]],
-            )
+    lines.extend(_csv_section("Section 6 — Optional inventory and commercial KPIs", _section6_rows(metrics)))
+    lines.extend(
+        _csv_section(
+            "Section 7 — Findings and corrective actions",
+            _action_rows(metrics, recommendations or []),
         )
-
+    )
     if compliance_alerts:
         lines.extend(
             _csv_section(
-                "Compliance alerts",
+                "Section 7b — Compliance alerts",
                 [["Severity", "Title", "Detail"]]
                 + [[a.get("severity", ""), a.get("title", ""), a.get("detail", "")] for a in compliance_alerts[:20]],
             )
         )
-
     if alerts:
         lines.extend(
             _csv_section(
-                "Alerts",
+                "Section 7c — Operational alerts",
                 [["Severity", "Title", "Detail"]]
                 + [[a.get("severity", ""), a.get("title", ""), a.get("detail", "")] for a in alerts[:20]],
             )
         )
-
-    inv_buffer = io.StringIO()
-    fieldnames = [
-        "Brand",
-        "Product",
-        "Variant",
-        "Shelf Position",
-        "Category",
-        "Quantity",
-        "Confidence %",
-        "Compliance Alert",
-        "Compliance Note",
-        "Detected Sub-category",
-        "Audit Sub-category",
-        "Stock Status",
-    ]
-    writer = csv.DictWriter(inv_buffer, fieldnames=fieldnames)
-    writer.writeheader()
-    for row in inventory:
-        conf = float(row.get("confidence") or 0)
-        writer.writerow(
-            {
-                "Brand": row.get("brand", ""),
-                "Product": row.get("product_name", ""),
-                "Variant": row.get("variant", ""),
-                "Shelf Position": row.get("shelf_position") or row.get("location") or "",
-                "Category": row.get("category", ""),
-                "Quantity": row.get("quantity", 0),
-                "Confidence %": round(conf * 100, 1),
-                "Compliance Alert": row.get("compliance_alert") or "OK",
-                "Compliance Note": row.get("compliance_interpretation") or "",
-                "Detected Sub-category": row.get("detected_sub_category_label") or "",
-                "Audit Sub-category": row.get("expected_sub_category_label") or "",
-                "Stock Status": (row.get("stock_status") or "in_stock").replace("_", " "),
-            }
-        )
-    lines.extend(["", "# Complete inventory", inv_buffer.getvalue()])
+    lines.extend(_csv_section("Section 8 — Validation limitations and evidence", _section8_rows(ctx)))
     return "\n".join(lines).encode("utf-8")
 
 
@@ -421,12 +635,12 @@ def _annotated_image_flowable(
     return RLImage(bio, width=width, height=height)
 
 
-def _append_annotated_shelf_section(story: list, styles, annotated_jpeg: bytes) -> None:
-    """Insert annotated shelf image in the summary section (same JPEG as scan result download)."""
+def _append_annotated_shelf_section(story: list, styles, annotated_jpeg: bytes, *, heading: str = "Annotated shelf image") -> None:
+    """Insert annotated shelf image (same JPEG as scan result download)."""
     section = [
-        Paragraph("<b>Annotated Shelf Image</b>", styles["Heading3"]),
+        Paragraph(f"<b>{heading}</b>", styles["Heading3"]),
         Paragraph(
-            "<i>Detections rendered by the vision model (green = OK, red = mismatch).</i>",
+            "<i>PHOTO-DETECTED evidence — green = OK, red = mismatch. Not an approved planogram.</i>",
             styles["Normal"],
         ),
         Spacer(1, 0.08 * inch),
@@ -434,6 +648,29 @@ def _append_annotated_shelf_section(story: list, styles, annotated_jpeg: bytes) 
     ]
     story.append(KeepTogether(section))
     story.append(Spacer(1, 0.2 * inch))
+
+
+def _styled_table(rows: list[list], col_widths: list[float] | None = None) -> Table:
+    table = Table(rows, colWidths=col_widths)
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#09283e")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+    return table
+
+
+def _append_pdf_section(story: list, styles, title: str, rows: list[list], col_widths: list[float] | None = None) -> None:
+    story.append(Paragraph(f"<b>{title}</b>", styles["Heading2"]))
+    if rows:
+        story.append(_styled_table(rows, col_widths))
+    story.append(Spacer(1, 0.15 * inch))
 
 
 def generate_pdf_bytes(
@@ -449,6 +686,7 @@ def generate_pdf_bytes(
     logo_path=None,
     annotated_jpeg: bytes | None = None,
     annotated_image: np.ndarray | None = None,
+    report_context: dict | None = None,
 ) -> str:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -464,82 +702,85 @@ def generate_pdf_bytes(
     alerts = alerts or []
     compliance_alerts = compliance_alerts or []
     subcategory_mismatches = subcategory_mismatches or []
+    ctx = report_context or build_report_context(scan_id=scan_id, metrics=metrics)
+    now = datetime.now()
 
     if logo_path and logo_path.exists():
         story.append(_logo_flowable(logo_path))
         story.append(Spacer(1, 0.15 * inch))
 
-    story.append(Paragraph("<b>Aislix AI Shelf Audit Report</b>", styles["Title"]))
+    story.append(Paragraph(f"<b>{REPORT_TITLE}</b>", styles["Title"]))
+    story.append(Spacer(1, 0.1 * inch))
+    story.append(Paragraph(f"<b>Report ID:</b> {scan_id}", styles["Normal"]))
+    story.append(Paragraph(f"<b>Status:</b> {ctx.get('status', 'DRAFT')}", styles["Normal"]))
+    story.append(Paragraph(f"<b>Analysis date:</b> {now.strftime('%d-%m-%Y %H:%M')}", styles["Normal"]))
+    story.append(Paragraph(f"<b>System version:</b> {ctx.get('model_version', 'aislix')}", styles["Normal"]))
     story.append(Spacer(1, 0.15 * inch))
-    now = datetime.now()
-    story.append(Paragraph(f"<b>Scan ID:</b> {scan_id}", styles["Normal"]))
-    story.append(Paragraph(f"<b>Date:</b> {now.strftime('%d-%m-%Y %H:%M')}", styles["Normal"]))
-    story.append(Spacer(1, 0.15 * inch))
 
-    if executive_summary:
-        story.append(Paragraph(f"<b>Executive Summary</b>", styles["Heading3"]))
-        story.append(Paragraph(executive_summary, styles["Normal"]))
-        story.append(Spacer(1, 0.15 * inch))
-
-    if annotated_jpeg is None and annotated_image is not None and annotated_image.size > 0:
-        annotated_jpeg = encode_annotated_image_bytes(annotated_image)
-
-    if annotated_jpeg:
-        _append_annotated_shelf_section(story, styles, annotated_jpeg)
-
-    execution_score = metrics.get("shelf_execution_score") or metrics.get("shelf_health_score") or 0
-    summary = [
-        ["Metric", "Value"],
-        ["Shelf Execution Score", execution_score],
-        ["Shelf Health Score", metrics.get("shelf_health_score", 0)],
-        ["Total Facings", metrics.get("total_facings") or metrics.get("total_products", 0)],
-        ["Unique SKUs", metrics.get("unique_skus", 0)],
-        ["Unique Brands", metrics.get("unique_brands", 0)],
-        ["Recognition Coverage %", metrics.get("recognition_coverage_percent", 0)],
-        ["On-Shelf Availability %", metrics.get("availability_percent") or metrics.get("osa_percent", 0)],
-        ["Facing Compliance %", metrics.get("facing_compliance_percent", 0)],
-        ["Placement Compliance %", metrics.get("placement_compliance_percent", 0)],
-        ["Planogram Compliance %", metrics.get("planogram_sku_match_percent") or metrics.get("planogram_compliance_percent", 0)],
-        ["Share of Shelf %", metrics.get("share_of_shelf_percent", metrics.get("shelf_utilization_percent", 0))],
-        ["Low Stock SKUs", metrics.get("low_stock_products", 0)],
-        ["Possible OOS / Low Stock", metrics.get("possible_oos_count", 0)],
-        ["Misplaced / Wrong Sub-category", metrics.get("misplaced_products", 0)],
-        ["Average Confidence", f"{metrics.get('average_confidence', 0) * 100:.1f}%"],
-    ]
-    financial = metrics.get("financial_impact") or {}
-    if financial:
-        summary.extend(
-            [
-                ["Est. Daily Lost Sales (INR)", financial.get("estimated_daily_lost_sales_inr", 0)],
-                ["Est. Weekly Lost Sales (INR)", financial.get("estimated_weekly_lost_sales_inr", 0)],
-                ["OOS SKU Count", financial.get("oos_sku_count", 0)],
-                ["At-Risk SKU Count", financial.get("at_risk_sku_count", 0)],
-            ]
-        )
-    table = Table(summary, colWidths=[2.8 * inch, 2.2 * inch])
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#09283e")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
-            ]
-        )
+    _append_pdf_section(
+        story,
+        styles,
+        "Section 1 — Purpose, scope and business context",
+        _section1_rows(ctx, executive_summary),
+        [1.6 * inch, 3.4 * inch],
     )
-    story.append(table)
-    story.append(Spacer(1, 0.2 * inch))
+    _append_pdf_section(
+        story,
+        styles,
+        "Section 2 — Inputs and analysis method",
+        _section2_rows(ctx, metrics),
+        [1.8 * inch, 3.2 * inch],
+    )
+    _append_pdf_section(
+        story,
+        styles,
+        "Section 3 — Shelf, location and reference fields",
+        _section3_rows(ctx, metrics),
+        [1.8 * inch, 3.2 * inch],
+    )
+
+    obs_rows = _inventory_observation_rows(inventory)
+    _append_pdf_section(
+        story,
+        styles,
+        "Section 4 — Product and observation fields",
+        [[str(c)[:32] for c in row] for row in obs_rows[:35]],
+        [0.6 * inch, 0.9 * inch, 0.55 * inch, 0.35 * inch, 0.4 * inch, 0.7 * inch, 0.75 * inch, 0.5 * inch, 0.55 * inch],
+    )
+
+    kpi_rows = _kpi_export_rows(metrics)
+    _append_pdf_section(
+        story,
+        styles,
+        "Section 5 — Core calculations and KPIs",
+        [[str(c) for c in row] for row in kpi_rows],
+        [1.3 * inch, 0.7 * inch, 0.55 * inch, 0.55 * inch, 0.55 * inch, 0.55 * inch, 0.8 * inch],
+    )
+    if shares:
+        brand_rows = [["Brand", "Share %"]] + [[row["brand"], f"{row['share']:.1f}"] for row in shares[:10]]
+        _append_pdf_section(story, styles, "Section 5b — Brand facing share", brand_rows, [3 * inch, 1.2 * inch])
+
+    _append_pdf_section(
+        story,
+        styles,
+        "Section 6 — Optional inventory and commercial KPIs",
+        _section6_rows(metrics),
+        [1.8 * inch, 1.2 * inch, 1.5 * inch],
+    )
+
+    action_rows = _action_rows(metrics, recommendations)
+    _append_pdf_section(
+        story,
+        styles,
+        "Section 7 — Findings and corrective actions",
+        [[str(c)[:40] for c in row] for row in action_rows[:18]],
+        [0.55 * inch, 1.0 * inch, 0.85 * inch, 0.75 * inch, 1.35 * inch, 0.7 * inch],
+    )
 
     if compliance_alerts:
         story.append(Paragraph(f"<b>{COMPLIANCE_ALERT_TITLE}</b>", styles["Heading3"]))
-        story.append(
-            Paragraph(
-                f"<i>{COMPLIANCE_ALERT_INTERPRETATION}</i>",
-                styles["Normal"],
-            )
-        )
-        story.append(Spacer(1, 0.08 * inch))
-        for alert in compliance_alerts[:8]:
+        story.append(Paragraph(f"<i>{COMPLIANCE_ALERT_INTERPRETATION}</i>", styles["Normal"]))
+        for alert in compliance_alerts[:6]:
             severity = (alert.get("severity") or "medium").upper()
             detail = alert.get("detail") or ""
             line = f"<b>[{severity}]</b> {alert.get('title') or COMPLIANCE_ALERT_TITLE}"
@@ -547,7 +788,6 @@ def generate_pdf_bytes(
                 line += f" — {detail}"
             story.append(Paragraph(line, styles["Normal"]))
         if subcategory_mismatches:
-            story.append(Spacer(1, 0.1 * inch))
             mismatch_rows = [["Brand", "Product", "Detected", "Expected", "Qty"]] + [
                 [
                     row.get("brand", ""),
@@ -556,81 +796,34 @@ def generate_pdf_bytes(
                     row.get("expected_sub_category_label", ""),
                     str(row.get("quantity", 0)),
                 ]
-                for row in subcategory_mismatches[:12]
+                for row in subcategory_mismatches[:10]
             ]
-            mismatch_table = Table(
-                mismatch_rows,
-                colWidths=[0.85 * inch, 1.35 * inch, 0.85 * inch, 0.85 * inch, 0.4 * inch],
-            )
-            mismatch_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.grey)]))
-            story.append(mismatch_table)
-        story.append(Spacer(1, 0.2 * inch))
+            story.append(_styled_table(mismatch_rows, [0.85 * inch, 1.35 * inch, 0.85 * inch, 0.85 * inch, 0.4 * inch]))
+        story.append(Spacer(1, 0.15 * inch))
 
     other_alerts = [a for a in alerts if a.get("category") != "compliance"]
-    if other_alerts:
-        story.append(Paragraph("<b>Critical Alerts</b>", styles["Heading3"]))
-        for alert in other_alerts[:8]:
-            severity = (alert.get("severity") or "medium").upper()
-            title = alert.get("title") or "Alert"
-            detail = alert.get("detail") or ""
-            line = f"<b>[{severity}]</b> {title}"
-            if detail:
-                line += f" — {detail}"
-            story.append(Paragraph(line, styles["Normal"]))
-        story.append(Spacer(1, 0.2 * inch))
-    elif alerts and not compliance_alerts:
-        story.append(Paragraph("<b>Critical Alerts</b>", styles["Heading3"]))
-        for alert in alerts[:8]:
-            severity = (alert.get("severity") or "medium").upper()
-            title = alert.get("title") or "Alert"
-            detail = alert.get("detail") or ""
-            line = f"<b>[{severity}]</b> {title}"
-            if detail:
-                line += f" — {detail}"
-            story.append(Paragraph(line, styles["Normal"]))
-        story.append(Spacer(1, 0.2 * inch))
+    for alert in (other_alerts or alerts)[:6]:
+        severity = (alert.get("severity") or "medium").upper()
+        title = alert.get("title") or "Alert"
+        detail = alert.get("detail") or ""
+        line = f"<b>[{severity}]</b> {title}"
+        if detail:
+            line += f" — {detail}"
+        story.append(Paragraph(line, styles["Normal"]))
+    story.append(Spacer(1, 0.15 * inch))
 
-    if shares:
-        story.append(Paragraph("<b>Top Brands by Shelf Share</b>", styles["Heading3"]))
-        brand_rows = [["Brand", "Share %"]] + [
-            [row["brand"], f"{row['share']:.1f}"] for row in shares[:10]
-        ]
-        brand_table = Table(brand_rows, colWidths=[3 * inch, 1.5 * inch])
-        brand_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.grey)]))
-        story.append(brand_table)
-        story.append(Spacer(1, 0.2 * inch))
+    _append_pdf_section(
+        story,
+        styles,
+        "Section 8 — Validation, limitations and supporting evidence",
+        _section8_rows(ctx),
+        [1.4 * inch, 3.6 * inch],
+    )
 
-    story.append(Paragraph("<b>Complete Inventory</b>", styles["Heading3"]))
-    inv_rows = [["Brand", "Product", "Variant", "Qty", "Conf.", "Compliance"]] + [
-        [
-            row.get("brand", ""),
-            row.get("product_name", "")[:28],
-            row.get("variant", "")[:18] or "—",
-            str(row.get("quantity", 0)),
-            f"{float(row.get('confidence', 0)) * 100:.0f}%",
-            (
-                COMPLIANCE_ALERT_TITLE
-                if row.get("compliance_status") == "category_mismatch"
-                else "OK"
-            ),
-        ]
-        for row in inventory
-    ]
-    inv_table = Table(inv_rows, colWidths=[0.85 * inch, 1.35 * inch, 0.85 * inch, 0.45 * inch, 0.55 * inch, 1.0 * inch])
-    inv_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.grey)]))
-    story.append(inv_table)
-
-    if recommendations:
-        story.append(Spacer(1, 0.2 * inch))
-        story.append(Paragraph("<b>Recommendations</b>", styles["Heading3"]))
-        for rec in recommendations[:8]:
-            title = rec.get("title") or "Recommendation"
-            detail = rec.get("detail") or ""
-            impact = rec.get("impact") or ""
-            suffix = f" ({impact} impact)" if impact else ""
-            story.append(Paragraph(f"• <b>{title}</b>{suffix}", styles["Normal"]))
-            if detail:
-                story.append(Paragraph(f"&nbsp;&nbsp;{detail}", styles["Normal"]))
+    if annotated_jpeg is None and annotated_image is not None and annotated_image.size > 0:
+        annotated_jpeg = encode_annotated_image_bytes(annotated_image)
+    if annotated_jpeg:
+        _append_annotated_shelf_section(story, styles, annotated_jpeg, heading="Supporting evidence — annotated shelf image")
 
     doc.build(story)
     return base64.b64encode(buffer.getvalue()).decode("utf-8")

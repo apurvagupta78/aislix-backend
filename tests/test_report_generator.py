@@ -10,11 +10,14 @@ import numpy as np
 from app.report_generator import (
     PDF_SUMMARY_IMAGE_MAX_HEIGHT,
     PDF_SUMMARY_IMAGE_WIDTH,
+    REPORT_TITLE,
     _annotation_label,
     _fit_image_size,
+    build_report_context,
     encode_annotated_image_bytes,
     encode_shelf_image_bytes,
     generate_annotated_image,
+    generate_csv_bytes,
     generate_pdf_bytes,
 )
 
@@ -201,3 +204,77 @@ def test_pdf_summary_image_fits_fixed_slot():
     )
     assert landscape_w == PDF_SUMMARY_IMAGE_WIDTH
     assert landscape_h < PDF_SUMMARY_IMAGE_MAX_HEIGHT
+
+
+def test_csv_eight_section_structure():
+    metrics = {
+        "total_facings": 12,
+        "unique_skus": 4,
+        "unique_brands": 3,
+        "recognition_coverage_percent": 88.0,
+        "shelf_execution_score": 72.0,
+        "average_confidence": 0.86,
+    }
+    inventory = [
+        {
+            "brand": "Colgate",
+            "product_name": "MaxFresh",
+            "quantity": 3,
+            "confidence": 0.9,
+            "x1": 10,
+            "y1": 20,
+            "x2": 80,
+            "y2": 120,
+            "recognition_source": "vision",
+        }
+    ]
+    ctx = build_report_context(
+        scan_id="scan-abc",
+        metrics=metrics,
+        location="A-1",
+        category="Personal Care",
+        sub_category="Toothpaste",
+    )
+    csv_text = generate_csv_bytes(
+        inventory,
+        scan_id="scan-abc",
+        metrics=metrics,
+        shares=[{"brand": "Colgate", "share": 40.0}],
+        recommendations=[{"title": "Refill gap", "impact": "high", "detail": "Restock shelf"}],
+        executive_summary="Toothpaste bay audited.",
+        report_context=ctx,
+    ).decode("utf-8")
+    assert REPORT_TITLE in csv_text
+    assert "Section 1" in csv_text
+    assert "Section 8" in csv_text
+    assert "PHOTO-DETECTED" in csv_text
+    assert "Colgate" in csv_text
+
+
+def test_pdf_eight_section_header():
+    metrics = {
+        "total_products": 1,
+        "unique_skus": 1,
+        "unique_brands": 1,
+        "low_stock_products": 0,
+        "misplaced_products": 0,
+        "shelf_utilization_percent": 50.0,
+        "osa_percent": 100.0,
+        "average_confidence": 0.9,
+        "shelf_health_score": 85.0,
+        "total_facings": 1,
+    }
+    ctx = build_report_context(scan_id="scan-pdf-8", metrics=metrics, location="B-2")
+    pdf = base64.b64decode(
+        generate_pdf_bytes(
+            "scan-pdf-8",
+            metrics,
+            [{"brand": "Lipton", "product_name": "Green Tea", "quantity": 1, "confidence": 0.9}],
+            [],
+            [],
+            executive_summary="Test summary.",
+            report_context=ctx,
+        )
+    )
+    assert pdf.startswith(b"%PDF")
+    assert len(pdf) > 3000

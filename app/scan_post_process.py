@@ -27,6 +27,7 @@ from app.metrics import (
 )
 from app.report_generator import (
     annotated_image_dimensions,
+    build_report_context,
     encode_annotated_image_bytes,
     encode_shelf_image_bytes,
     generate_annotated_image,
@@ -420,6 +421,16 @@ def finalize_make_scan(
     metrics["original_image_width"] = annotated_dims["width"]
     metrics["original_image_height"] = annotated_dims["height"]
 
+    report_ctx = build_report_context(
+        scan_id=scan_id,
+        metrics=metrics,
+        model_version=MODEL_VERSION,
+        store_id=scan_context.get("store_id"),
+        location=scan_context.get("shelf_label") or metadata.get("shelf_label"),
+        category=scan_context.get("aislix_category") or metadata.get("category"),
+        sub_category=scan_context.get("sub_category") or metadata.get("sub_category"),
+        customer_type=customer_type,
+    )
     pdf_b64 = generate_pdf_bytes(
         scan_id=scan_id,
         metrics=metrics,
@@ -432,6 +443,7 @@ def finalize_make_scan(
         executive_summary=summary_text,
         logo_path=LOGO_PATH if LOGO_PATH.exists() else None,
         annotated_jpeg=annotated_jpeg,
+        report_context=report_ctx,
     )
     csv_b64 = base64.b64encode(
         generate_csv_bytes(
@@ -443,6 +455,7 @@ def finalize_make_scan(
             alerts=alerts,
             compliance_alerts=compliance_alerts,
             executive_summary=summary_text,
+            report_context=report_ctx,
         )
     ).decode("utf-8")
 
