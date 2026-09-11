@@ -45,21 +45,19 @@
 
 ---
 
-## Phase 2 — Expectation & input contract
+## Phase 2 — Expectation & input contract (in progress)
 
-1. **Separate fields** in planogram/product forms:
-   - `expected_distinct_products`
-   - `target_facings`, `min_facings`, `max_facings`
-   - `target_on_shelf_units` (legacy `expected_qty` documented)
-   - `mrp_inr` vs `authorized_shelf_price`
+| Item | Status |
+|------|--------|
+| CSV parses `expected_facings`, `min/max_facings`, `expected_shelf_units` | Done |
+| DB migration `audit_package` + extended planogram columns | Done |
+| Role-based 5-KPI audit engine (`app/audit_kpi_engine.py`) | Done |
+| Frontend role KPI strip with coverage badges | Done |
+| Separate `authorized_shelf_price` vs MRP in UI forms | Pending |
+| Full planogram editor tabs (assortment, promotions, scoring) | Pending |
+| JSON import/export for complete planogram package | Pending |
 
-2. **CSV import parity** with manual entry — row-level validation preview.
-
-3. **Identity level** on targets: exact SKU vs product family vs brand.
-
-4. **Trace test:** saved quantity 15 remains 15 as target units (never 1 facing).
-
-**Files:** `app/planogram*.py`, frontend `PlanogramBuilder.tsx`, `scan-pipeline.server.ts`
+**Files:** `app/planogram*.py`, `app/audit_kpi_*.py`, frontend `role-kpi-config.ts`, `execution-metrics.ts`
 
 ---
 

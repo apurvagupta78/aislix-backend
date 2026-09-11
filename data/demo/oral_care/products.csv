@@ -1,0 +1,8 @@
+location,category,sub_category,brand,product_name,variant,expected_facings,min_facings,max_facings,expected_shelf_units,mrp_inr,avg_daily_sales,sku,shelf_position
+Oral Care Aisle,Oral Care,Toothpaste,Colgate,MaxFresh,150g,4,3,5,12,99,6,COL-MAX-150,S1-L1
+Oral Care Aisle,Oral Care,Toothpaste,Colgate,Visible White,100g,3,2,4,9,85,4,COL-VW-100,S1-L2
+Oral Care Aisle,Oral Care,Toothpaste,Pepsodent,Germicheck,150g,3,2,4,9,75,3,PEP-GER-150,S1-L3
+Oral Care Aisle,Oral Care,Toothpaste,Sensodyne,Repair,70g,2,1,3,6,120,2,SEN-REP-70,S1-L4
+Oral Care Aisle,Oral Care,Toothpaste,Closeup,Everfresh,150g,2,1,3,6,65,2,CLO-EVF-150,S1-L5
+Oral Care Aisle,Oral Care,Mouthwash,Listerine,Cool Mint,250ml,2,1,3,4,180,1,LIS-CM-250,S2-L1
+Oral Care Aisle,Oral Care,Mouthwash,Colgate,Plax,250ml,1,1,2,2,160,1,COL-PLX-250,S2-L2

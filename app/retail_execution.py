@@ -481,4 +481,20 @@ def build_retail_intelligence(
         if gpt.get(key):
             intel[key] = gpt[key]
 
+    from app.audit_kpi_engine import compute_role_audit_dashboard
+    from app.price_compliance import compute_price_compliance
+
+    planogram_package = (ctx.get("planogram_package") or {}) if isinstance(ctx.get("planogram_package"), dict) else {}
+    price_raw = compute_price_compliance(classified, planogram_items)
+    intel["audit_kpi_dashboard"] = compute_role_audit_dashboard(
+        customer_type=customer_type,
+        planogram_items=planogram_items,
+        planogram_compliance=planogram_compliance,
+        inventory=inventory,
+        classified=classified,
+        price_compliance=price_raw,
+        planogram_package=planogram_package,
+        scan_context=ctx,
+    )
+
     return intel

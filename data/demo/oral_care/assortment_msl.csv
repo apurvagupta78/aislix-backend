@@ -1,0 +1,8 @@
+sku,list_type,outlet_scope,valid_from,valid_to,substitution_allowed
+COL-MAX-150,mandatory_assortment,all,2026-01-01,2026-12-31,false
+COL-VW-100,mandatory_assortment,all,2026-01-01,2026-12-31,false
+PEP-GER-150,mandatory_assortment,all,2026-01-01,2026-12-31,false
+SEN-REP-70,mandatory_assortment,all,2026-01-01,2026-12-31,true
+COL-MAX-150,msl,distributor_outlet_a,2026-01-01,2026-12-31,false
+PEP-GER-150,msl,distributor_outlet_a,2026-01-01,2026-12-31,false
+LIS-CM-250,msl,distributor_outlet_a,2026-01-01,2026-12-31,false

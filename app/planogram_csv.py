@@ -9,7 +9,7 @@ from typing import Any
 
 from app.scan_context import normalize_planogram_category, normalize_sub_category_id
 
-REQUIRED_FIELDS = ("location", "category", "sub_category", "brand", "product_name", "expected_qty")
+REQUIRED_FIELDS = ("location", "category", "sub_category", "brand", "product_name")
 
 HEADER_ALIASES: dict[str, str] = {
     "location": "location",
@@ -28,8 +28,14 @@ HEADER_ALIASES: dict[str, str] = {
     "expected facings": "expected_facings",
     "expected_facings": "expected_facings",
     "facings": "expected_facings",
+    "target facings": "expected_facings",
     "min facings": "min_facings",
+    "min_facings": "min_facings",
     "max facings": "max_facings",
+    "max_facings": "max_facings",
+    "expected shelf units": "expected_shelf_units",
+    "expected_shelf_units": "expected_shelf_units",
+    "shelf units": "expected_shelf_units",
     "expected qty": "expected_qty",
     "expected quantity": "expected_qty",
     "qty": "expected_qty",
@@ -101,14 +107,31 @@ def normalize_planogram_row(row: dict[str, Any], row_num: int = 0) -> tuple[dict
     if not sub_category:
         errors.append(f"{prefix}sub_category is required")
 
-    qty_raw = row.get("expected_qty", row.get("quantity", 1))
-    try:
-        expected_qty = int(qty_raw)
-        if expected_qty < 0:
-            errors.append(f"{prefix}expected_qty must be >= 0")
-    except (TypeError, ValueError):
-        errors.append(f"{prefix}expected_qty must be a number")
-        expected_qty = 0
+    def _parse_int_field(name: str, raw: Any, *, required: bool = False) -> int | None:
+        if raw in (None, ""):
+            if required:
+                errors.append(f"{prefix}{name} is required")
+            return None
+        try:
+            val = int(raw)
+            if val < 0:
+                errors.append(f"{prefix}{name} must be >= 0")
+            return val
+        except (TypeError, ValueError):
+            errors.append(f"{prefix}{name} must be a number")
+            return None
+
+    expected_facings = _parse_int_field("expected_facings", row.get("expected_facings"))
+    min_facings = _parse_int_field("min_facings", row.get("min_facings"))
+    max_facings = _parse_int_field("max_facings", row.get("max_facings"))
+    expected_shelf_units = _parse_int_field("expected_shelf_units", row.get("expected_shelf_units"))
+    expected_qty = _parse_int_field("expected_qty", row.get("expected_qty", row.get("quantity")))
+
+    if expected_facings is None and expected_qty is None:
+        errors.append(f"{prefix}expected_facings or expected_qty is required")
+
+    if min_facings is not None and max_facings is not None and min_facings > max_facings:
+        errors.append(f"{prefix}min_facings cannot exceed max_facings")
 
     if errors:
         return None, errors
@@ -149,10 +172,18 @@ def normalize_planogram_row(row: dict[str, Any], row_num: int = 0) -> tuple[dict
         "product_name": product_name,
         "variant": variant,
         "sku": sku,
-        "expected_qty": expected_qty,
+        "expected_qty": expected_qty if expected_qty is not None else (expected_facings or 0),
         "shelf_position": str(row.get("shelf_position") or "").strip(),
         "match_key": build_match_key(brand, product_name, sku, sub_category, variant),
     }
+    if expected_facings is not None:
+        normalized["expected_facings"] = expected_facings
+    if min_facings is not None:
+        normalized["min_facings"] = min_facings
+    if max_facings is not None:
+        normalized["max_facings"] = max_facings
+    if expected_shelf_units is not None:
+        normalized["expected_shelf_units"] = expected_shelf_units
     if mrp_inr is not None:
         normalized["mrp_inr"] = round(mrp_inr, 2)
     if avg_daily_sales is not None:
@@ -181,16 +212,12 @@ def parse_csv_text(content: str, delimiter: str | None = None) -> dict[str, Any]
         "sub_category": "sub_category",
         "brand": "brand",
         "product_name": "product / product_name",
-        "expected_qty": "expected_qty / qty / quantity",
     }
     for canon, label in required_headers.items():
         if canon not in field_map and not (canon == "product_name" and "product" in field_map):
-            if canon == "expected_qty" and not any(
-                k in field_map for k in ("expected_qty", "qty", "quantity")
-            ):
-                header_errors.append(f"Missing required column: {label}")
-            elif canon != "expected_qty":
-                header_errors.append(f"Missing required column: {label}")
+            header_errors.append(f"Missing required column: {label}")
+    if not any(k in field_map for k in ("expected_facings", "expected_qty", "qty", "quantity", "facings")):
+        header_errors.append("Missing required column: expected_facings or expected_qty")
     if header_errors:
         return {"rows": [], "errors": header_errors, "valid_count": 0, "error_count": len(header_errors)}
 
@@ -202,9 +229,6 @@ def parse_csv_text(content: str, delimiter: str | None = None) -> dict[str, Any]
         mapped: dict[str, Any] = {}
         for canon, original in field_map.items():
             mapped[canon] = raw.get(original, "")
-        if "expected_qty" not in mapped or str(mapped.get("expected_qty", "")).strip() == "":
-            mapped["expected_qty"] = 1
-
         normalized, row_errors = normalize_planogram_row(mapped, row_num=idx)
         if row_errors:
             all_errors.extend(row_errors)
