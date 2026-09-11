@@ -278,14 +278,20 @@ def finalize_make_scan(
     if scan_context.get("yolo_row_imputed"):
         metrics["yolo_row_imputed"] = True
 
+    from app.metrics import apply_brand_share_to_metrics
+
     share_payload = build_brand_share_payload(
         inventory,
         audit_sub_category=scan_context.get("sub_category"),
     )
     shares = share_payload["brand_share"]
     metrics["top_brands"] = share_payload["top_brands"]
-    metrics["brand_share_scope"] = share_payload["brand_share_scope"]
-    metrics["brand_share_denominator"] = share_payload["brand_share_denominator"]
+    apply_brand_share_to_metrics(
+        metrics,
+        share_payload,
+        primary_brand=str(scan_context.get("primary_brand") or metadata.get("primary_brand") or "")
+        or None,
+    )
     categories = category_breakdown(inventory_counted_rows(inventory))
     alerts = build_alerts(metrics, compliance_alerts=compliance_alerts)
     recommendations = build_recommendations(metrics, inventory, compliance_alerts=compliance_alerts)

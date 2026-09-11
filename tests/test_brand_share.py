@@ -45,7 +45,8 @@ def test_brand_share_all_visible_includes_mismatches():
     shares = brand_share(_toothpaste_inventory(), exclude_category_mismatch=False)
     by_brand = {row["brand"]: row for row in shares}
     assert by_brand["Colgate"]["share"] == 36.2
-    assert by_brand["Unknown"]["share"] == 5.2
+    assert by_brand["Unclassified"]["share"] == 5.2
+    assert by_brand["Unclassified"].get("is_unclassified")
     assert by_brand["Frau"]["share"] == 5.2
     assert sum(row["quantity"] for row in shares) == 116
 
@@ -62,7 +63,7 @@ def test_brand_share_in_audit_excludes_mismatches():
 
 def test_build_brand_share_payload_uses_in_audit_when_sub_category_set():
     payload = build_brand_share_payload(_toothpaste_inventory(), audit_sub_category="toothpaste")
-    assert payload["brand_share_scope"] == "in_audit"
+    assert payload["brand_share_scope"] == "eligible_category"
     assert payload["brand_share_denominator"] == 104
     assert payload["top_brands"][0]["brand"] == "Colgate"
     assert payload["top_brands"][0]["share"] == 40.4

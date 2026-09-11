@@ -450,17 +450,20 @@ def run_scan_from_image(
             planogram_items=planogram_items or None,
             planogram_compliance=planogram_compliance,
         )
+        from app.metrics import apply_brand_share_to_metrics, compute_competitor_intel
+
         share_payload = build_brand_share_payload(
             inventory,
             audit_sub_category=scan_context.get("sub_category"),
         )
         shares = share_payload["brand_share"]
         metrics["top_brands"] = share_payload["top_brands"]
-        metrics["brand_share_scope"] = share_payload["brand_share_scope"]
-        metrics["brand_share_denominator"] = share_payload["brand_share_denominator"]
-        from app.metrics import compute_competitor_intel
-
         primary_brand = metadata.get("primary_brand") or scan_context.get("primary_brand")
+        apply_brand_share_to_metrics(
+            metrics,
+            share_payload,
+            primary_brand=str(primary_brand) if primary_brand else None,
+        )
         competitor_brands = metadata.get("competitor_brands") or scan_context.get("competitor_brands")
         competitor_intel = compute_competitor_intel(
             shares,

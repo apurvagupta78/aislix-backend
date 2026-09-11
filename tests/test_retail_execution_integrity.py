@@ -56,6 +56,9 @@ def test_execution_score_renormalizes_available_kpis():
         {"key": "planogram", "label": "Planogram SKU presence", "score": 0.0, "state": "available", "weight": 20},
         {"key": "share", "label": "Share of facings", "score": 36.2, "state": "available", "weight": 10},
     ]
-    score = compute_shelf_execution_score_from_components(components)
+    score = compute_shelf_execution_score_from_components(
+        components,
+        planned_total_weight=55.0,
+    )
     assert score is not None
     assert score < 20
