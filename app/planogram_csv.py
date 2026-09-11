@@ -53,7 +53,8 @@ def csv_template_header() -> str:
     """Canonical planogram CSV header for downloads and docs."""
     return (
         "location,category,sub_category,brand,product_name,variant,"
-        "expected_qty,mrp_inr,avg_daily_sales,sku,shelf_position"
+        "expected_facings,min_facings,max_facings,expected_shelf_units,"
+        "mrp_inr,avg_daily_sales,sku,shelf_position"
     )
 
 

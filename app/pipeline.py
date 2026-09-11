@@ -336,14 +336,36 @@ def run_scan_from_image(
         classified, top_partial_excluded = mark_top_partial_exclusions(classified, image, scan_context)
         if top_partial_excluded:
             recognition_engine_stats["top_partial_excluded"] = top_partial_excluded
+        from app.multi_photo_merge import extract_photo_batches_from_metadata, merge_classified_photos
+
+        merge_meta = {**metadata, "classified": classified}
+        photo_batches = extract_photo_batches_from_metadata(merge_meta)
+        if photo_batches:
+            merged = merge_classified_photos(photo_batches)
+            classified = merged["classified"]
+            scan_context["multi_photo"] = {
+                "photo_count": merged["photo_count"],
+                "merged_facings": merged["merged_facings"],
+                "facings_per_photo": merged["facings_per_photo"],
+            }
+
         compliance = analyze_subcategory_compliance(classified, scan_context)
         classified = compliance["classified"]
         subcategory_mismatches = compliance["subcategory_mismatches"]
         compliance_alerts = compliance["compliance_alerts"]
-        misplaced_facings = compliance["misplaced_facings"]
 
         inventory = aggregate_inventory(classified)
         inventory = apply_compliance_to_inventory(inventory, subcategory_mismatches)
+
+        from app.audit_scope import adjacent_category_findings, apply_audit_scope_after_compliance
+
+        classified, inventory, misplaced_facings, audit_scope = apply_audit_scope_after_compliance(
+            classified,
+            inventory,
+            image_shape=image.shape,
+            scan_context=scan_context,
+        )
+        scan_context["audit_scope"] = audit_scope
 
         planogram_compliance = None
         if planogram_items:
@@ -370,7 +392,12 @@ def run_scan_from_image(
             image.shape,
             processing_ms,
             misplaced_facings=misplaced_facings,
+            placement_total_facings=audit_scope.get("in_scope_facings"),
         )
+        metrics["audit_scope"] = audit_scope
+        metrics["adjacent_category_findings"] = adjacent_category_findings(classified)
+        if scan_context.get("multi_photo"):
+            metrics["multi_photo"] = scan_context["multi_photo"]
         recognition_stats = _recognition_stats(classified)
         metrics.update(recognition_stats)
         from app.recognizer import active_recognition_mode
@@ -453,8 +480,22 @@ def run_scan_from_image(
             compliance_alerts=compliance_alerts,
             planogram_compliance=planogram_compliance,
         )
-        if nba:
-            metrics["retail_intelligence"] = {"next_best_actions": nba}
+
+        from app.retail_execution import build_retail_intelligence
+
+        customer_type = metadata.get("customer_type") or scan_context.get("customer_type")
+        retail_intelligence = build_retail_intelligence(
+            metrics=metrics,
+            inventory=inventory,
+            classified=classified,
+            planogram_compliance=planogram_compliance,
+            planogram_items=planogram_items or None,
+            scan_context=scan_context,
+            gpt_intel=metrics.get("retail_intelligence"),
+            next_best_actions=nba if isinstance(nba, list) else None,
+            customer_type=customer_type,
+        )
+        metrics["retail_intelligence"] = retail_intelligence
         summary_text = executive_summary(metrics, compliance_alerts=compliance_alerts)
 
         from app.learned_catalog import count_learned, flush_learned, pop_learned_updates

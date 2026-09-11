@@ -214,9 +214,11 @@ def compute_metrics(
     processing_ms: int,
     *,
     misplaced_facings: int = 0,
+    placement_total_facings: int | None = None,
     planogram_compliance_percent: float | None = None,
 ) -> dict:
     total_facings = len(classified)
+    placement_denominator = placement_total_facings if placement_total_facings is not None else total_facings
     counted_inventory = [row for row in inventory if row.get("counted_in_totals", True)]
     unique_skus = len(counted_inventory)
     brands = {row["brand"] for row in counted_inventory if row.get("brand")}
@@ -241,7 +243,7 @@ def compute_metrics(
     availability = round(max(0.0, min(100.0, 100.0 - low_stock_penalty * 0.6 - confirmed_oos * 5)), 1)
 
     placement_compliance = round(
-        max(0.0, 100.0 - (misplaced_facings / max(total_facings, 1)) * 100),
+        max(0.0, 100.0 - (misplaced_facings / max(placement_denominator, 1)) * 100),
         1,
     )
     facing_compliance = placement_compliance
@@ -260,8 +262,8 @@ def compute_metrics(
 
     # Legacy health score (kept for backward compatibility on old dashboards).
     health = round(osa := availability, 2)
-    if misplaced_facings > 0 and total_facings > 0:
-        penalty = min(10.0, (misplaced_facings / total_facings) * 100 * 0.1)
+    if misplaced_facings > 0 and placement_denominator > 0:
+        penalty = min(10.0, (misplaced_facings / placement_denominator) * 100 * 0.1)
         health = round(max(0.0, health - penalty), 2)
 
     mismatch_skus = sum(1 for row in inventory if row.get("compliance_status") == "category_mismatch")
@@ -300,6 +302,16 @@ def compute_metrics(
     }
 
 
+_UNCLASSIFIED_COMPETITOR_BRANDS = {
+    "",
+    "unknown",
+    "unidentified",
+    "unclassified",
+    "n/a",
+    "unidentified sku",
+}
+
+
 def compute_competitor_intel(
     brand_share_rows: list[dict],
     *,
@@ -311,11 +323,15 @@ def compute_competitor_intel(
     if not primary or not brand_share_rows:
         return None
 
-    competitors = [b.strip() for b in (competitor_brands or []) if b and str(b).strip()]
+    competitors = [
+        b.strip()
+        for b in (competitor_brands or [])
+        if b and str(b).strip() and str(b).strip().lower() not in _UNCLASSIFIED_COMPETITOR_BRANDS
+    ]
     by_key: dict[str, dict] = {}
     for row in brand_share_rows:
         brand = (row.get("brand") or "").strip()
-        if not brand:
+        if not brand or brand.lower() in _UNCLASSIFIED_COMPETITOR_BRANDS:
             continue
         by_key[brand.lower()] = row
 

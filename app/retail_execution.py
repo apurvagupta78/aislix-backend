@@ -260,6 +260,36 @@ def build_opportunity_ledger(
     return ledger[:25]
 
 
+def build_pricing(
+    classified: list[dict],
+    planogram_items: list[dict] | None,
+) -> dict:
+    from app.price_compliance import compute_price_compliance
+
+    payload = compute_price_compliance(classified, planogram_items)
+    state = payload.get("state") or "not_configured"
+    if state == "not_configured":
+        return {
+            "compliance_percent": not_configured("Price rules not configured"),
+            "state": "not_configured",
+        }
+    if state == "not_observable":
+        return {
+            "compliance_percent": insufficient(payload.get("methodology") or "Price tags not readable"),
+            "state": "not_observable",
+            "lines": payload.get("lines") or [],
+            "methodology": payload.get("methodology"),
+        }
+    return {
+        "compliance_percent": metric_value(payload.get("compliance_percent"), "available"),
+        "checked_tags": metric_value(payload.get("checked_tags"), "available"),
+        "compliant_tags": metric_value(payload.get("compliant_tags"), "available"),
+        "lines": payload.get("lines") or [],
+        "state": "available",
+        "methodology": payload.get("methodology"),
+    }
+
+
 def build_presentability(metrics: dict, inventory: list[dict]) -> dict:
     """Presentability requires dedicated visual QA — do not infer from gaps/placement."""
     return {
@@ -370,7 +400,10 @@ def build_retail_intelligence(
         "share_of_facings": share_of_facings,
         "linear_shelf_share": not_configured("Shelf geometry not calibrated"),
         "presentability": build_presentability(metrics, inventory),
-        "pricing": not_configured("Price rules not configured"),
+        "pricing": build_pricing(classified, planogram_items),
+        "audit_scope": metrics.get("audit_scope"),
+        "adjacent_category_findings": metrics.get("adjacent_category_findings") or [],
+        "multi_photo": metrics.get("multi_photo"),
         "promotions": not_configured("Promotion rules not configured"),
         "posm": not_configured("POSM rules not configured"),
         "freshness": not_configured("Freshness rules not configured"),

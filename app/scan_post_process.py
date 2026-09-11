@@ -179,12 +179,37 @@ def finalize_make_scan(
 
         raise ValueError(make_missing_products_message(raw))
 
+    from app.multi_photo_merge import extract_photo_batches_from_metadata, merge_classified_photos
+
+    merge_meta = {**metadata, "classified": classified}
+    photo_batches = extract_photo_batches_from_metadata(merge_meta)
+    if photo_batches:
+        merged = merge_classified_photos(photo_batches)
+        classified = merged["classified"]
+        from app.inventory import aggregate_inventory
+
+        inventory = aggregate_inventory(classified)
+        scan_context["multi_photo"] = {
+            "photo_count": merged["photo_count"],
+            "merged_facings": merged["merged_facings"],
+            "facings_per_photo": merged["facings_per_photo"],
+        }
+
     compliance = analyze_subcategory_compliance(classified, scan_context)
     classified = compliance["classified"]
     subcategory_mismatches = compliance["subcategory_mismatches"]
     compliance_alerts = compliance["compliance_alerts"]
-    misplaced_facings = compliance["misplaced_facings"]
     inventory = apply_compliance_to_inventory(inventory, subcategory_mismatches)
+
+    from app.audit_scope import adjacent_category_findings, apply_audit_scope_after_compliance
+
+    classified, inventory, misplaced_facings, audit_scope = apply_audit_scope_after_compliance(
+        classified,
+        inventory,
+        image_shape=image.shape,
+        scan_context=scan_context,
+    )
+    scan_context["audit_scope"] = audit_scope
 
     planogram_compliance = None
     if planogram_items:
@@ -209,7 +234,12 @@ def finalize_make_scan(
         image.shape,
         processing_ms,
         misplaced_facings=misplaced_facings,
+        placement_total_facings=audit_scope.get("in_scope_facings"),
     )
+    metrics["audit_scope"] = audit_scope
+    metrics["adjacent_category_findings"] = adjacent_category_findings(classified)
+    if scan_context.get("multi_photo"):
+        metrics["multi_photo"] = scan_context["multi_photo"]
     metrics["recognition_mode"] = "make.com"
     metrics["detection_mode"] = "make.com"
     if planogram_compliance:
