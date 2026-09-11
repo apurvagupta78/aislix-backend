@@ -278,7 +278,8 @@ def finalize_make_scan(
         retail_intelligence = {**retail_intelligence, "competitive_insights": competitive_insights}
     from app.metrics import build_next_best_actions
 
-    if not retail_intelligence.get("next_best_actions"):
+    nba = retail_intelligence.get("next_best_actions")
+    if not nba:
         nba = build_next_best_actions(
             metrics,
             inventory,
@@ -287,10 +288,26 @@ def finalize_make_scan(
         )
         if nba:
             retail_intelligence = {**retail_intelligence, "next_best_actions": nba}
+
+    from app.retail_execution import build_retail_intelligence
+
+    customer_type = metadata.get("customer_type") or scan_context.get("customer_type")
+    computed_intel = build_retail_intelligence(
+        metrics=metrics,
+        inventory=inventory,
+        classified=classified,
+        planogram_compliance=planogram_compliance,
+        planogram_items=scan_context.get("planogram_items") or metadata.get("planogram_items"),
+        scan_context=scan_context,
+        gpt_intel=retail_intelligence,
+        next_best_actions=nba if isinstance(nba, list) else None,
+        customer_type=customer_type,
+    )
+    retail_intelligence = {**computed_intel, **{k: v for k, v in retail_intelligence.items() if k not in computed_intel}}
     if role_summaries:
+        retail_intelligence["role_summaries"] = role_summaries
         metrics["role_summaries"] = role_summaries
-    if retail_intelligence:
-        metrics["retail_intelligence"] = retail_intelligence
+    metrics["retail_intelligence"] = retail_intelligence
     summary_text = parsed.get("executive_summary") or raw.get("summary_text") or executive_summary(
         metrics, compliance_alerts=compliance_alerts
     )

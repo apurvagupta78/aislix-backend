@@ -45,16 +45,145 @@ def shelf_utilization(classified: list[dict], image_shape: tuple[int, int, int])
     return round(min(100.0, (box_area / image_area) * 100), 2)
 
 
+_SCORE_WEIGHTS_WITH_PLANO = {
+    "availability": 30,
+    "planogram": 25,
+    "facing": 25,
+    "placement": 20,
+}
+_SCORE_WEIGHTS_NO_PLANO = {
+    "availability": 35,
+    "facing": 35,
+    "placement": 30,
+}
+
+
+def _metric_state(value: float | None, *, configured: bool) -> str:
+    if not configured:
+        return "not_configured"
+    if value is None:
+        return "insufficient_evidence"
+    return "available"
+
+
+def build_score_components(
+    *,
+    availability_percent: float | None,
+    planogram_percent: float | None,
+    facing_compliance_percent: float | None,
+    placement_compliance_percent: float | None,
+    planogram_configured: bool,
+    has_facings: bool,
+) -> list[dict]:
+    """Score components with explicit states — missing KPIs are excluded from weighting."""
+    weights = _SCORE_WEIGHTS_WITH_PLANO if planogram_configured else _SCORE_WEIGHTS_NO_PLANO
+    components: list[dict] = []
+
+    if availability_percent is not None:
+        components.append(
+            {
+                "key": "availability",
+                "label": "Availability",
+                "score": round(float(availability_percent), 1),
+                "state": "available",
+                "weight": weights["availability"],
+            }
+        )
+
+    if planogram_configured:
+        components.append(
+            {
+                "key": "planogram",
+                "label": "Planogram",
+                "score": round(float(planogram_percent), 1) if planogram_percent is not None else None,
+                "state": _metric_state(planogram_percent, configured=True),
+                "weight": weights["planogram"],
+            }
+        )
+
+    if has_facings and facing_compliance_percent is not None:
+        components.append(
+            {
+                "key": "facing",
+                "label": "Facing compliance",
+                "score": round(float(facing_compliance_percent), 1),
+                "state": "available",
+                "weight": weights["facing"],
+            }
+        )
+
+    if has_facings and placement_compliance_percent is not None:
+        components.append(
+            {
+                "key": "placement",
+                "label": "Placement",
+                "score": round(float(placement_compliance_percent), 1),
+                "state": "available",
+                "weight": weights["placement"],
+            }
+        )
+
+    return components
+
+
+def compute_shelf_execution_score_from_components(components: list[dict]) -> float | None:
+    """Renormalize weights across available components only."""
+    scorable = [
+        c
+        for c in components
+        if c.get("state") == "available" and c.get("score") is not None
+    ]
+    if not scorable:
+        return None
+    total_weight = sum(float(c.get("weight") or 0) for c in scorable)
+    if total_weight <= 0:
+        return None
+    score = sum(float(c["score"]) * float(c.get("weight") or 0) / total_weight for c in scorable)
+    return round(score, 1)
+
+
 def finalize_execution_score(metrics: dict) -> None:
     """Recompute shelf execution after planogram fields are merged into metrics."""
     planogram = metrics.get("planogram_compliance_percent")
     planogram_val = float(planogram) if planogram is not None else None
-    metrics["shelf_execution_score"] = compute_shelf_execution_score(
-        availability_percent=float(metrics.get("availability_percent") or metrics.get("osa_percent") or 0),
-        planogram_percent=planogram_val,
-        facing_compliance_percent=float(metrics.get("facing_compliance_percent") or 0),
-        placement_compliance_percent=float(metrics.get("placement_compliance_percent") or 0),
+    planogram_configured = bool(
+        metrics.get("planogram_sku_match_percent") is not None
+        or planogram_val is not None
+        or metrics.get("planogram_summary")
     )
+    availability = metrics.get("availability_percent")
+    if availability is None:
+        availability = metrics.get("osa_percent")
+    availability_val = float(availability) if availability is not None else None
+    facing_val = (
+        float(metrics["facing_compliance_percent"])
+        if metrics.get("facing_compliance_percent") is not None
+        else None
+    )
+    placement_val = (
+        float(metrics["placement_compliance_percent"])
+        if metrics.get("placement_compliance_percent") is not None
+        else None
+    )
+    has_facings = bool(metrics.get("total_facings") or metrics.get("total_products"))
+
+    components = build_score_components(
+        availability_percent=availability_val,
+        planogram_percent=planogram_val,
+        facing_compliance_percent=facing_val,
+        placement_compliance_percent=placement_val,
+        planogram_configured=planogram_configured,
+        has_facings=has_facings,
+    )
+    metrics["score_components"] = components
+    execution = compute_shelf_execution_score_from_components(components)
+    if execution is not None:
+        metrics["shelf_execution_score"] = execution
+    metrics["retail_execution_score"] = {
+        "overall": execution,
+        "state": "available" if execution is not None else "not_configured",
+        "components": components,
+    }
 
 
 def compute_shelf_execution_score(
@@ -64,21 +193,16 @@ def compute_shelf_execution_score(
     facing_compliance_percent: float,
     placement_compliance_percent: float,
 ) -> float:
-    """Retail execution score — excludes model confidence."""
-    if planogram_percent is not None:
-        return round(
-            availability_percent * 0.30
-            + planogram_percent * 0.25
-            + facing_compliance_percent * 0.25
-            + placement_compliance_percent * 0.20,
-            1,
-        )
-    return round(
-        availability_percent * 0.35
-        + facing_compliance_percent * 0.35
-        + placement_compliance_percent * 0.30,
-        1,
+    """Retail execution score — excludes model confidence. Legacy wrapper."""
+    components = build_score_components(
+        availability_percent=availability_percent,
+        planogram_percent=planogram_percent,
+        facing_compliance_percent=facing_compliance_percent,
+        placement_compliance_percent=placement_compliance_percent,
+        planogram_configured=planogram_percent is not None,
+        has_facings=True,
     )
+    return compute_shelf_execution_score_from_components(components) or 0.0
 
 
 def compute_metrics(
@@ -552,12 +676,14 @@ def compute_financial_impact(
                 used_planogram_pricing = True
             exp_qty = int(line.get("expected_qty") or 1)
             act_qty = int(line.get("actual_qty") or 0)
+            gap_units = max(0, exp_qty - act_qty)
             if issue in {"missing", "wrong_product", "wrong_category", "wrong_location"}:
-                oos_daily += velocity * asp * max(exp_qty, 1)
+                if priced:
+                    oos_daily += asp * max(exp_qty, 1)
                 oos_skus += 1
-            elif issue in {"qty_mismatch", "qty_issue"} and act_qty < exp_qty:
-                gap = exp_qty - act_qty
-                at_risk_daily += gap * velocity * asp * _LOW_STOCK_RISK_FACTOR
+            elif issue in {"qty_mismatch", "qty_issue"} and gap_units > 0:
+                if priced:
+                    at_risk_daily += asp * gap_units
                 at_risk_skus += 1
     elif planogram_items:
         for plan in planogram_items:
@@ -571,16 +697,19 @@ def compute_financial_impact(
                 if _row_planogram_key(row) == key:
                     detected = int(row.get("quantity") or 0)
                     break
+            gap_units = max(0, exp_qty - detected)
             if detected <= 0:
-                oos_daily += velocity * asp * exp_qty
+                if priced:
+                    oos_daily += asp * exp_qty
                 oos_skus += 1
-            elif detected < exp_qty:
-                gap = exp_qty - detected
-                at_risk_daily += gap * velocity * asp * _LOW_STOCK_RISK_FACTOR
+            elif gap_units > 0:
+                if priced:
+                    at_risk_daily += asp * gap_units
                 at_risk_skus += 1
             elif detected < threshold:
                 gap = max(0, threshold - detected)
-                at_risk_daily += gap * velocity * asp
+                if priced:
+                    at_risk_daily += asp * gap
                 at_risk_skus += 1
     else:
         for row in counted:
@@ -606,19 +735,39 @@ def compute_financial_impact(
     daily = round(oos_daily + at_risk_daily)
     if daily <= 0 and oos_skus == 0 and at_risk_skus == 0:
         return {
+            "level": 1,
+            "commercial_risk": "low",
             "estimated_daily_lost_sales_inr": 0,
             "estimated_weekly_lost_sales_inr": 0,
             "estimated_monthly_lost_sales_inr": 0,
             "oos_sku_count": 0,
             "at_risk_sku_count": 0,
             "methodology": (
-                "Indicative estimate using category ASP defaults and typical daily velocity."
+                "Financial impact cannot be estimated until sales velocity and price data are configured."
             ),
             "confidence": "indicative",
+            "source": "image_only",
+        }
+
+    if not used_planogram_pricing and (oos_skus > 0 or at_risk_skus > 0):
+        risk = "high" if oos_skus > 0 else "medium"
+        return {
+            "level": 1,
+            "commercial_risk": risk,
+            "estimated_daily_lost_sales_inr": 0,
+            "estimated_weekly_lost_sales_inr": 0,
+            "estimated_monthly_lost_sales_inr": 0,
+            "oos_sku_count": oos_skus,
+            "at_risk_sku_count": at_risk_skus,
+            "methodology": (
+                "Commercial risk detected. Configure SKU price and velocity to quantify revenue at risk."
+            ),
+            "confidence": "indicative",
+            "source": "image_only",
         }
 
     methodology = (
-        "Uses planogram MRP and daily sales velocity per SKU where provided."
+        "Estimated revenue at risk: price × quantity gap (expected minus actual facings) per planogram SKU."
         if used_planogram_pricing
         else (
             "Indicative estimate using category ASP defaults (₹75 when price unknown) "
@@ -626,13 +775,16 @@ def compute_financial_impact(
         )
     )
     return {
+        "level": 2,
         "estimated_daily_lost_sales_inr": daily,
         "estimated_weekly_lost_sales_inr": daily * 7,
         "estimated_monthly_lost_sales_inr": daily * 30,
         "oos_sku_count": oos_skus,
         "at_risk_sku_count": at_risk_skus,
         "methodology": methodology,
-        "confidence": "planogram" if used_planogram_pricing else "indicative",
+        "confidence": "priced" if used_planogram_pricing else "indicative",
+        "source": "customer_provided_velocity" if used_planogram_pricing else "default_assumption",
+        "assumption": "1 day exposure" if used_planogram_pricing else None,
     }
 
 
