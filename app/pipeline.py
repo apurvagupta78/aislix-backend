@@ -406,6 +406,16 @@ def run_scan_from_image(
             metrics["planogram_summary"] = planogram_compliance.get("summary")
         from app.metrics import compute_financial_impact, finalize_execution_score
 
+        if planogram_items:
+            has_expected_facings = any(
+                item.get("expected_facings") not in (None, "") for item in planogram_items
+            )
+            has_placement_rules = any(str(item.get("shelf_position") or "").strip() for item in planogram_items)
+            if not has_expected_facings:
+                metrics["facing_compliance_percent"] = None
+            if not has_placement_rules:
+                metrics["placement_compliance_percent"] = None
+
         finalize_execution_score(metrics)
         metrics["financial_impact"] = compute_financial_impact(
             inventory,

@@ -46,16 +46,18 @@ def shelf_utilization(classified: list[dict], image_shape: tuple[int, int, int])
 
 
 _SCORE_WEIGHTS_WITH_PLANO = {
-    "availability": 30,
-    "planogram": 25,
-    "facing": 25,
-    "placement": 20,
+    "availability": 25,
+    "planogram": 20,
+    "facing": 15,
+    "placement": 15,
+    "share_of_facings": 10,
 }
 _SCORE_WEIGHTS_NO_PLANO = {
     "availability": 35,
     "facing": 35,
     "placement": 30,
 }
+_MIN_SCORE_COVERAGE_WEIGHT = 25
 
 
 def _metric_state(value: float | None, *, configured: bool) -> str:
@@ -131,12 +133,12 @@ def compute_shelf_execution_score_from_components(components: list[dict]) -> flo
     scorable = [
         c
         for c in components
-        if c.get("state") == "available" and c.get("score") is not None
+        if c.get("state") in {"available", "estimated", "calculated"} and c.get("score") is not None
     ]
     if not scorable:
         return None
     total_weight = sum(float(c.get("weight") or 0) for c in scorable)
-    if total_weight <= 0:
+    if total_weight < _MIN_SCORE_COVERAGE_WEIGHT:
         return None
     score = sum(float(c["score"]) * float(c.get("weight") or 0) / total_weight for c in scorable)
     return round(score, 1)
@@ -671,6 +673,13 @@ def compute_financial_impact(
             exp_product = str(line.get("expected_product") or "").strip().lower()
             key = "|".join(p for p in (exp_brand, exp_product) if p)
             plano = plano_by_key.get(key) or {}
+            if not plano and exp_brand and exp_product:
+                for item in planogram_items:
+                    ib = str(item.get("brand") or "").strip().lower()
+                    ip = str(item.get("product_name") or item.get("product") or "").strip().lower()
+                    if ib == exp_brand and ip == exp_product:
+                        plano = item
+                        break
             asp, velocity, priced = _pricing_for_planogram_row(plano)
             if priced:
                 used_planogram_pricing = True
@@ -679,11 +688,11 @@ def compute_financial_impact(
             gap_units = max(0, exp_qty - act_qty)
             if issue in {"missing", "wrong_product", "wrong_category", "wrong_location"}:
                 if priced:
-                    oos_daily += asp * max(exp_qty, 1)
+                    oos_daily += velocity * asp
                 oos_skus += 1
             elif issue in {"qty_mismatch", "qty_issue"} and gap_units > 0:
                 if priced:
-                    at_risk_daily += asp * gap_units
+                    at_risk_daily += velocity * asp * (gap_units / max(exp_qty, 1))
                 at_risk_skus += 1
     elif planogram_items:
         for plan in planogram_items:
@@ -700,11 +709,11 @@ def compute_financial_impact(
             gap_units = max(0, exp_qty - detected)
             if detected <= 0:
                 if priced:
-                    oos_daily += asp * exp_qty
+                    oos_daily += velocity * asp
                 oos_skus += 1
             elif gap_units > 0:
                 if priced:
-                    at_risk_daily += asp * gap_units
+                    at_risk_daily += velocity * asp * (gap_units / max(exp_qty, 1))
                 at_risk_skus += 1
             elif detected < threshold:
                 gap = max(0, threshold - detected)
@@ -767,7 +776,8 @@ def compute_financial_impact(
         }
 
     methodology = (
-        "Estimated revenue at risk: price × quantity gap (expected minus actual facings) per planogram SKU."
+        "Revenue at risk: average daily sales units × selling price per at-risk SKU. "
+        "30-day figure is an illustrative run-rate, not confirmed historical lost sales."
         if used_planogram_pricing
         else (
             "Indicative estimate using category ASP defaults (₹75 when price unknown) "
@@ -784,7 +794,7 @@ def compute_financial_impact(
         "methodology": methodology,
         "confidence": "priced" if used_planogram_pricing else "indicative",
         "source": "customer_provided_velocity" if used_planogram_pricing else "default_assumption",
-        "assumption": "1 day exposure" if used_planogram_pricing else None,
+        "assumption": "1-day exposure; OOS duration unknown" if used_planogram_pricing else None,
     }
 
 

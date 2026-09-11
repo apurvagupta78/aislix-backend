@@ -128,10 +128,24 @@ def build_availability(metrics: dict, inventory: list[dict], planogram_items: li
     }
 
 
-def build_facings(planogram_compliance: dict | None, metrics: dict) -> dict:
+def _planogram_has_expected_facings(planogram_items: list[dict] | None) -> bool:
+    return any(item.get("expected_facings") not in (None, "") for item in (planogram_items or []))
+
+
+def build_facings(
+    planogram_compliance: dict | None,
+    metrics: dict,
+    planogram_items: list[dict] | None = None,
+) -> dict:
     if not planogram_compliance:
         return {
             "facing_compliance": not_configured("Planogram not configured"),
+            "facing_gap": not_configured(),
+            "state": "not_configured",
+        }
+    if not _planogram_has_expected_facings(planogram_items):
+        return {
+            "facing_compliance": not_configured("Expected facings not configured on planogram"),
             "facing_gap": not_configured(),
             "state": "not_configured",
         }
@@ -140,14 +154,21 @@ def build_facings(planogram_compliance: dict | None, metrics: dict) -> dict:
     act_sum = 0
     gap_sum = 0
     for line in lines:
-        exp = int(line.get("expected_qty") or 0)
+        exp = int(line.get("expected_facings") or line.get("expected_qty") or 0)
         act = int(line.get("actual_qty") or line.get("detected_qty") or 0)
         exp_sum += exp
         act_sum += min(act, exp)
         gap_sum += max(0, exp - act)
     compliance = round(act_sum / max(exp_sum, 1) * 100, 1) if exp_sum else None
     if compliance is None:
-        compliance = float(metrics.get("facing_compliance_percent") or 0)
+        raw = metrics.get("facing_compliance_percent")
+        compliance = float(raw) if raw is not None else None
+    if compliance is None:
+        return {
+            "facing_compliance": insufficient("Facing compliance could not be calculated"),
+            "facing_gap": not_configured(),
+            "state": "insufficient_evidence",
+        }
     return {
         "expected_facings": metric_value(exp_sum, "available"),
         "actual_facings": metric_value(act_sum, "available"),
@@ -232,19 +253,13 @@ def build_opportunity_ledger(
 
 
 def build_presentability(metrics: dict, inventory: list[dict]) -> dict:
-    gaps = int(metrics.get("shelf_gap_count") or 0)
-    misplaced = int(metrics.get("misplaced_products") or metrics.get("placement_issue_count") or 0)
-    total = int(metrics.get("total_facings") or 1)
-    if total <= 0:
-        return {"score": insufficient(), "state": "insufficient_evidence"}
-    clutter = round((gaps + misplaced) / total * 100, 1)
-    score = max(0, min(100, round(100 - clutter * 1.2)))
+    """Presentability requires dedicated visual QA — do not infer from gaps/placement."""
     return {
-        "score": metric_value(score, "estimated"),
-        "empty_space": metric_value(gaps, "available"),
-        "mixed_products": metric_value(misplaced, "available"),
-        "state": "estimated",
-        "methodology": "Heuristic from shelf gaps and placement issues; not a substitute for visual QA.",
+        "score": not_configured("Presentability not assessed"),
+        "state": "not_configured",
+        "methodology": (
+            "Presentability requires visual analysis of alignment, orientation, and packaging condition."
+        ),
     }
 
 
@@ -321,7 +336,7 @@ def build_retail_intelligence(
         "shelf_structure": build_shelf_structure(metrics),
         "assortment": build_assortment(inventory, planogram_items, planogram_compliance),
         "availability": build_availability(metrics, inventory, planogram_items),
-        "facings": build_facings(planogram_compliance, metrics),
+        "facings": build_facings(planogram_compliance, metrics, planogram_items),
         "placement_compliance": merge_gpt_metric(
             metric_value(metrics.get("placement_compliance_percent"), "available")
             if metrics.get("placement_compliance_percent") is not None
