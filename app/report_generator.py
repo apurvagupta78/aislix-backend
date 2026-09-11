@@ -293,6 +293,83 @@ def build_report_context(
     }
 
 
+def _audit_kpi_pdf_rows(metrics: dict) -> list[list]:
+    """Role-specific five KPI dashboard for PDF section 5a."""
+    intel = metrics.get("retail_intelligence") or {}
+    dashboard = intel.get("audit_kpi_dashboard") or {}
+    kpis = dashboard.get("primary_kpis") or []
+    if not kpis:
+        return [["KPI", "Value", "Coverage", "Status", "Numerator", "Denominator"]]
+    rows = [["KPI", "Value", "Coverage", "Status", "Numerator", "Denominator"]]
+    for kpi in kpis[:5]:
+        value = kpi.get("value")
+        if kpi.get("unit") == "count" and value is not None:
+            display = str(value)
+            if kpi.get("denominator") is not None:
+                display = f"{value} / {kpi.get('denominator')} planned"
+        elif value is not None:
+            display = f"{round(float(value), 1)}%"
+        else:
+            display = (kpi.get("status") or "n/a").replace("_", " ")
+        cov = kpi.get("coverage_percent")
+        rows.append(
+            [
+                _ascii_label(kpi.get("label") or kpi.get("kpi_id") or ""),
+                display,
+                f"{round(float(cov), 1)}%" if cov is not None else "—",
+                _ascii_label(str(kpi.get("status") or "")),
+                _na(kpi.get("numerator")),
+                _na(kpi.get("denominator")),
+            ]
+        )
+    return rows
+
+
+def _price_exception_pdf_rows(metrics: dict) -> list[list]:
+    intel = metrics.get("retail_intelligence") or {}
+    pricing = intel.get("pricing") or {}
+    lines = pricing.get("lines") if isinstance(pricing, dict) else []
+    if not lines:
+        return []
+    rows = [["Product", "Expected INR", "Detected INR", "Variance", "Status"]]
+    for line in lines[:20]:
+        if not isinstance(line, dict):
+            continue
+        rows.append(
+            [
+                _ascii_label(f"{line.get('brand', '')} {line.get('product', '')}".strip())[:32],
+                _na(line.get("expected_price_inr")),
+                _na(line.get("detected_price_inr")),
+                _na(line.get("variance_inr")),
+                _ascii_label(str(line.get("status") or "")),
+            ]
+        )
+    return rows
+
+
+def _planogram_exception_pdf_rows(metrics: dict) -> list[list]:
+    compliance = metrics.get("planogram_compliance") or {}
+    lines = compliance.get("lines") if isinstance(compliance, dict) else []
+    if not lines:
+        return []
+    rows = [["Expected", "Actual", "Issue", "Severity", "Detail"]]
+    for line in lines[:25]:
+        if not isinstance(line, dict):
+            continue
+        if line.get("issue_type") == "correct":
+            continue
+        rows.append(
+            [
+                _ascii_label(f"{line.get('expected_brand', '')} {line.get('expected_product', '')}".strip())[:28],
+                _ascii_label(f"{line.get('actual_brand', '')} {line.get('actual_product', '')}".strip())[:28],
+                _ascii_label(str(line.get("issue_type") or "")),
+                _ascii_label(str(line.get("severity") or "")),
+                _ascii_label(str(line.get("detail") or ""))[:40],
+            ]
+        )
+    return rows
+
+
 def _kpi_export_rows(metrics: dict) -> list[list]:
     """KPI rows: name, value, numerator, denominator, coverage, state, scope note."""
     scope = metrics.get("brand_share_scope") or metrics.get("brand_share_denominator") or ""
@@ -756,9 +833,41 @@ def generate_pdf_bytes(
         [[str(c) for c in row] for row in kpi_rows],
         [1.3 * inch, 0.7 * inch, 0.55 * inch, 0.55 * inch, 0.55 * inch, 0.55 * inch, 0.8 * inch],
     )
+
+    intel = metrics.get("retail_intelligence") or {}
+    dashboard = intel.get("audit_kpi_dashboard") or {}
+    if dashboard.get("primary_kpis"):
+        role_label = dashboard.get("role_label") or dashboard.get("role_id") or "Audit"
+        story.append(Paragraph(f"<b>Section 5a — {role_label} primary KPIs (five-card audit)</b>", styles["Heading2"]))
+        if dashboard.get("introduction"):
+            story.append(Paragraph(_ascii_label(str(dashboard["introduction"])), styles["Normal"]))
+        audit_rows = _audit_kpi_pdf_rows(metrics)
+        story.append(_styled_table(audit_rows, [1.45 * inch, 0.75 * inch, 0.65 * inch, 0.75 * inch, 0.55 * inch, 0.55 * inch]))
+        story.append(Spacer(1, 0.15 * inch))
+
+    plano_exc = _planogram_exception_pdf_rows(metrics)
+    if plano_exc:
+        _append_pdf_section(
+            story,
+            styles,
+            "Section 5b — Planogram exceptions",
+            plano_exc,
+            [1.1 * inch, 1.1 * inch, 0.75 * inch, 0.55 * inch, 1.0 * inch],
+        )
+
+    price_exc = _price_exception_pdf_rows(metrics)
+    if price_exc:
+        _append_pdf_section(
+            story,
+            styles,
+            "Section 5c — Price label exceptions",
+            price_exc,
+            [1.4 * inch, 0.75 * inch, 0.75 * inch, 0.6 * inch, 0.75 * inch],
+        )
+
     if shares:
         brand_rows = [["Brand", "Share %"]] + [[row["brand"], f"{row['share']:.1f}"] for row in shares[:10]]
-        _append_pdf_section(story, styles, "Section 5b — Brand facing share", brand_rows, [3 * inch, 1.2 * inch])
+        _append_pdf_section(story, styles, "Section 5d — Brand facing share", brand_rows, [3 * inch, 1.2 * inch])
 
     _append_pdf_section(
         story,

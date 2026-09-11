@@ -244,6 +244,7 @@ def finalize_make_scan(
     metrics["recognition_mode"] = "make.com"
     metrics["detection_mode"] = "make.com"
     if planogram_compliance:
+        metrics["planogram_compliance"] = planogram_compliance
         metrics["planogram_compliance_percent"] = planogram_compliance.get("compliance_percent")
         metrics["planogram_sku_match_percent"] = planogram_compliance.get("planogram_sku_match_percent")
         metrics["planogram_qty_compliance_percent"] = planogram_compliance.get("planogram_qty_compliance_percent")

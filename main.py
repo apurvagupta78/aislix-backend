@@ -347,7 +347,7 @@ async def planogram_csv_template():
 
     header = csv_template_header()
     example = (
-        "A-1-Z,Personal Care,Shampoo,Dove,Intense Repair Shampoo,340ml,1,,1"
+        "A-1-Z,Personal Care,Shampoo,Dove,Intense Repair Shampoo,340ml,4,2,6,12,299,6,DOVE-IR-340,1"
     )
     return {
         "header": header,
@@ -359,10 +359,50 @@ async def planogram_csv_template():
             "sub_category",
             "brand",
             "product_name",
-            "expected_qty",
+            "expected_facings or expected_qty",
         ],
-        "optional_columns": ["variant", "sku", "shelf_position"],
+        "optional_columns": [
+            "variant",
+            "min_facings",
+            "max_facings",
+            "expected_shelf_units",
+            "mrp_inr",
+            "avg_daily_sales",
+            "sku",
+            "shelf_position",
+        ],
     }
+
+
+@app.get("/planogram/csv-template/{kind}")
+async def planogram_supplement_csv_template(kind: str):
+    """Download CSV template for assortment, prices, or promotions."""
+    from app.planogram_package_csv import template_csv
+
+    try:
+        payload = template_csv(kind)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"kind": kind, **payload}
+
+
+@app.post("/planogram/parse-package-csv")
+async def planogram_parse_package_csv(request: Request):
+    """Validate assortment, prices, or promotions CSV."""
+    from app.planogram_package_csv import parse_assortment_csv, parse_prices_csv, parse_promotions_csv
+
+    body = await request.json()
+    kind = str(body.get("kind") or "").strip().lower()
+    content = body.get("content") or body.get("csv") or ""
+    parsers = {
+        "assortment": parse_assortment_csv,
+        "prices": parse_prices_csv,
+        "promotions": parse_promotions_csv,
+    }
+    parser = parsers.get(kind)
+    if not parser:
+        raise HTTPException(status_code=400, detail="kind must be assortment, prices, or promotions")
+    return parser(content)
 
 
 def _client_ip(request: Request) -> str | None:

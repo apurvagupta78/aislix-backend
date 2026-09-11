@@ -426,6 +426,7 @@ def run_scan_from_image(
             elif gap_stats.get("detection_mode"):
                 metrics["detection_mode"] = gap_stats["detection_mode"]
         if planogram_compliance:
+            metrics["planogram_compliance"] = planogram_compliance
             metrics["planogram_compliance_percent"] = planogram_compliance.get("compliance_percent")
             metrics["planogram_sku_match_percent"] = planogram_compliance.get("planogram_sku_match_percent")
             metrics["planogram_qty_compliance_percent"] = planogram_compliance.get(
