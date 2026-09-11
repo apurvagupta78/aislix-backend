@@ -272,8 +272,10 @@ def compute_metrics(
         for row in counted_inventory
         if row.get("brand") and not is_unclassified_brand(row.get("brand"))
     }
-    low_stock = sum(1 for row in counted_inventory if row["quantity"] <= LOW_STOCK_THRESHOLD)
-    confirmed_oos = sum(1 for row in counted_inventory if int(row.get("quantity") or 0) == 0)
+    low_stock = sum(1 for row in counted_inventory if 0 < int(row.get("quantity") or 0) <= LOW_STOCK_THRESHOLD)
+    zero_qty = sum(1 for row in counted_inventory if int(row.get("quantity") or 0) == 0)
+    confirmed_oos = 0
+    suspected_gaps = zero_qty
     confidences = [float(row.get("confidence") or 0.0) for row in counted_inventory]
     avg_conf = sum(confidences) / max(len(confidences), 1)
     utilization = shelf_utilization(classified, image_shape)
@@ -326,8 +328,9 @@ def compute_metrics(
         "unique_skus": unique_skus,
         "unique_brands": len(brands),
         "low_stock_products": low_stock,
-        "out_of_stock_products": confirmed_oos,
+        "out_of_stock_products": zero_qty,
         "confirmed_oos_count": confirmed_oos,
+        "suspected_shelf_gap_count": suspected_gaps,
         "possible_oos_count": possible_oos,
         "shelf_gap_count": shelf_gap_count,
         "misplaced_products": misplaced_facings,
@@ -542,13 +545,16 @@ def build_alerts(
     for alert in compliance_alerts:
         alerts.append({**alert})
 
-    if metrics.get("confirmed_oos_count", 0) > 0:
+    verified_absence = int(metrics.get("verified_shelf_absence_count") or 0)
+    confirmed_oos = int(metrics.get("confirmed_oos_count") or 0)
+    if verified_absence > 0 or confirmed_oos > 0:
+        count = verified_absence or confirmed_oos
         alerts.append(
             {
                 "id": "oos",
                 "severity": "high",
-                "title": f"{metrics['confirmed_oos_count']} confirmed out-of-stock SKUs",
-                "detail": "Expected assortment items were not detected on the shelf.",
+                "title": f"{count} verified shelf absence(s)",
+                "detail": "Expected products not detected with adequate photo coverage — not confirmed store inventory stockout.",
             }
         )
     if metrics["low_stock_products"] > 0:
@@ -581,12 +587,13 @@ def build_recommendations(
     compliance_alerts = compliance_alerts or []
     threshold = int(metrics.get("low_stock_threshold") or LOW_STOCK_THRESHOLD)
 
-    if metrics.get("confirmed_oos_count", 0) > 0:
+    verified = int(metrics.get("verified_shelf_absence_count") or metrics.get("confirmed_oos_count") or 0)
+    if verified > 0:
         recs.append(
             {
                 "id": "replenish-oos",
-                "title": f"Replenish {metrics['confirmed_oos_count']} out-of-stock SKUs",
-                "detail": "Priority items from your assortment are missing from the shelf.",
+                "title": f"Review {verified} verified shelf absence(s)",
+                "detail": "Expected products not detected — verify identity and shelf coverage before replenishment.",
                 "category": "Replenishment",
                 "impact": "high",
                 "priority": "high",
@@ -860,7 +867,6 @@ def compute_financial_impact(
     if daily <= 0 and oos_skus == 0 and at_risk_skus == 0:
         return {
             "level": 1,
-            "commercial_risk": "low",
             "estimated_daily_lost_sales_inr": 0,
             "estimated_weekly_lost_sales_inr": 0,
             "estimated_monthly_lost_sales_inr": 0,
@@ -871,23 +877,25 @@ def compute_financial_impact(
             ),
             "confidence": "indicative",
             "source": "image_only",
+            "estimate_status": "not_estimated",
         }
 
     if not used_planogram_pricing and (oos_skus > 0 or at_risk_skus > 0):
-        risk = "high" if oos_skus > 0 else "medium"
         return {
             "level": 1,
-            "commercial_risk": risk,
+            "operational_priority": "high" if oos_skus > 0 else "medium",
             "estimated_daily_lost_sales_inr": 0,
             "estimated_weekly_lost_sales_inr": 0,
             "estimated_monthly_lost_sales_inr": 0,
             "oos_sku_count": oos_skus,
             "at_risk_sku_count": at_risk_skus,
             "methodology": (
-                "Commercial risk detected. Configure SKU price and velocity to quantify revenue at risk."
+                "Operational issue detected. Configure SKU price and velocity to quantify revenue exposure."
             ),
             "confidence": "indicative",
             "source": "image_only",
+            "estimate_status": "not_estimated",
+            "missing_prerequisites": ["selling_price", "demand_velocity"],
         }
 
     methodology = (

@@ -260,6 +260,13 @@ def finalize_make_scan(
         if not has_placement_rules:
             metrics["placement_compliance_percent"] = None
 
+    from app.stockout_evidence import apply_stockout_evidence_to_metrics
+
+    apply_stockout_evidence_to_metrics(
+        metrics,
+        planogram_compliance=planogram_compliance,
+        planogram_items=scan_context.get("planogram_items") or metadata.get("planogram_items"),
+    )
     finalize_execution_score(metrics)
     metrics["financial_impact"] = compute_financial_impact(
         inventory,

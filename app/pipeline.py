@@ -443,6 +443,13 @@ def run_scan_from_image(
             if not has_placement_rules:
                 metrics["placement_compliance_percent"] = None
 
+        from app.stockout_evidence import apply_stockout_evidence_to_metrics
+
+        apply_stockout_evidence_to_metrics(
+            metrics,
+            planogram_compliance=planogram_compliance,
+            planogram_items=planogram_items or None,
+        )
         finalize_execution_score(metrics)
         metrics["financial_impact"] = compute_financial_impact(
             inventory,

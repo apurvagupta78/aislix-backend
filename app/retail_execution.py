@@ -26,17 +26,23 @@ def _commercial_impact_score(
 def build_image_quality(metrics: dict, gpt: dict | None) -> dict:
     ocr_empty = int(metrics.get("ocr_empty_facings") or 0)
     ocr_low = int(metrics.get("ocr_low_confidence_facings") or 0)
+    ocr_avg = float(metrics.get("ocr_avg_confidence") or 0)
     total = int(metrics.get("total_facings") or 0)
     coverage = float(metrics.get("recognition_coverage_percent") or 0)
     gpt_iq = (gpt or {}).get("image_quality") if isinstance(gpt, dict) else None
+    ocr_assessed = bool(metrics.get("ocr_assessed")) or ocr_avg > 0 or (ocr_empty + ocr_low) > 0
 
     if total <= 0:
         base = {"overall_state": "insufficient_evidence", "rescan_recommended": True, "notes": "No facings detected."}
     else:
-        blur_risk = ocr_low / max(total, 1) > 0.35
-        empty_risk = ocr_empty / max(total, 1) > 0.25
+        blur_risk = ocr_assessed and ocr_low / max(total, 1) > 0.35
+        empty_risk = ocr_assessed and ocr_empty / max(total, 1) > 0.25
         rescan = blur_risk or empty_risk or coverage < 50
-        score = max(0, min(100, round(100 - ocr_empty * 2 - ocr_low * 1.5 - max(0, 50 - coverage))))
+        detection_score = max(0, min(100, round(100 - max(0, 50 - coverage))))
+        if ocr_assessed:
+            score = max(0, min(100, round(detection_score - ocr_empty * 2 - ocr_low * 1.5)))
+        else:
+            score = min(detection_score, 85)
         status = "retake_required" if rescan else ("acceptable" if score < 85 else "good")
         notes = []
         if blur_risk:
@@ -45,12 +51,19 @@ def build_image_quality(metrics: dict, gpt: dict | None) -> dict:
             notes.append("Many facings lack readable pack text.")
         if coverage < 50:
             notes.append("Recognition coverage is low — move closer or improve lighting.")
+        if not ocr_assessed:
+            notes.append(
+                "OCR/price-tag quality not assessed — score reflects detection coverage only, not measured accuracy."
+            )
+        iq_state = "partial" if not ocr_assessed else "available"
         base = {
-            "audit_image_quality_score": metric_value(score, "available"),
+            "audit_image_quality_score": metric_value(score, iq_state),
+            "detection_quality_score": metric_value(detection_score, "available"),
+            "ocr_quality_assessed": ocr_assessed,
             "status": status,
-            "overall_state": "available",
+            "overall_state": iq_state,
             "rescan_recommended": rescan,
-            "notes": " ".join(notes) if notes else "Image quality acceptable for shelf audit.",
+            "notes": " ".join(notes) if notes else "Detection coverage acceptable for facing counts.",
         }
 
     if isinstance(gpt_iq, dict):
@@ -91,8 +104,14 @@ def build_assortment(
 
 
 def build_availability(metrics: dict, inventory: list[dict], planogram_items: list[dict] | None) -> dict:
-    confirmed_oos = int(metrics.get("confirmed_oos_count") or metrics.get("out_of_stock_products") or 0)
-    possible_oos = int(metrics.get("possible_oos_count") or metrics.get("low_stock_products") or 0)
+    verified_absence = int(metrics.get("verified_shelf_absence_count") or 0)
+    confirmed_inventory = int(metrics.get("confirmed_inventory_stockout_count") or 0)
+    confirmed_oos = int(
+        metrics.get("confirmed_oos_count") or verified_absence + confirmed_inventory or 0
+    )
+    suspected_gaps = int(metrics.get("suspected_shelf_gap_count") or 0)
+    low_stock = int(metrics.get("low_stock_products") or 0)
+    possible_oos = int(metrics.get("possible_oos_count") or low_stock or 0)
     shelf_gaps = int(metrics.get("shelf_gap_count") or metrics.get("needs_review_facings") or 0)
     expected = len(planogram_items) if planogram_items else len(inventory)
 
@@ -117,9 +136,12 @@ def build_availability(metrics: dict, inventory: list[dict], planogram_items: li
         }
 
     return {
-        "confirmed_oos": metric_value(confirmed_oos, "available"),
+        "confirmed_oos": metric_value(confirmed_oos, "available" if confirmed_oos else "available"),
+        "verified_shelf_absence": metric_value(verified_absence, "available"),
+        "confirmed_inventory_stockout": metric_value(confirmed_inventory, "available"),
+        "suspected_shelf_gaps": metric_value(suspected_gaps, "available"),
         "possible_oos": metric_value(possible_oos, "available"),
-        "low_stock": metric_value(possible_oos, "available"),
+        "low_stock": metric_value(low_stock, "available"),
         "shelf_gaps": metric_value(shelf_gaps, "available"),
         "oos_rate_percent": metric_value(oos_rate, "available" if planogram_items else "estimated"),
         "low_stock_rate_percent": metric_value(low_stock_rate, "available" if planogram_items else "estimated"),
@@ -256,8 +278,35 @@ def build_opportunity_ledger(
                 }
             )
 
+    ledger = _dedupe_opportunity_ledger(ledger)
     ledger.sort(key=lambda row: float(row.get("commercial_impact_score") or 0), reverse=True)
     return ledger[:25]
+
+
+def _dedupe_opportunity_ledger(ledger: list[dict]) -> list[dict]:
+    """One root cause per brand/SKU — prefer higher impact and stronger evidence."""
+    by_key: dict[str, dict] = {}
+    issue_root = {
+        "missing": "availability",
+        "wrong_product": "availability",
+        "oos": "availability",
+        "low_stock": "availability",
+        "qty_mismatch": "facing",
+        "qty_issue": "facing",
+        "placement": "placement",
+    }
+    for row in ledger:
+        issue = str(row.get("issue") or "").lower()
+        root = issue_root.get(issue, issue or "execution")
+        brand = str(row.get("brand") or "").strip().lower()
+        sku = str(row.get("sku") or "").strip().lower()
+        key = f"{brand}|{sku}|{root}"
+        existing = by_key.get(key)
+        if existing is None or float(row.get("commercial_impact_score") or 0) > float(
+            existing.get("commercial_impact_score") or 0
+        ):
+            by_key[key] = row
+    return list(by_key.values())
 
 
 def build_pricing(
