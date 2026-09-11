@@ -205,6 +205,9 @@ def build_opportunity_ledger(
                 "brand": action.get("brand"),
                 "severity": str(action.get("severity") or priority),
                 "priority": priority,
+                "expected": action.get("expected_state"),
+                "actual": action.get("actual_state"),
+                "gap": action.get("gap"),
                 "revenue_at_risk_inr": impact_inr if level >= 2 else None,
                 "commercial_risk": fi.get("commercial_risk") if level < 2 else None,
                 "source": fi.get("source") or "scan_analysis",
@@ -225,6 +228,8 @@ def build_opportunity_ledger(
             issue = str(line.get("issue_type") or "")
             if issue in {"correct", "ok"}:
                 continue
+            exp_qty = int(line.get("expected_facings") or line.get("expected_qty") or 0)
+            act_qty = int(line.get("actual_qty") or line.get("detected_qty") or 0)
             ledger.append(
                 {
                     "id": f"plano-{idx}",
@@ -233,6 +238,9 @@ def build_opportunity_ledger(
                     "brand": line.get("expected_brand") or line.get("brand"),
                     "severity": "high" if issue == "missing" else "medium",
                     "priority": "high" if issue == "missing" else "medium",
+                    "expected": str(exp_qty) if exp_qty else None,
+                    "actual": str(act_qty),
+                    "gap": str(act_qty - exp_qty) if exp_qty else None,
                     "revenue_at_risk_inr": daily / max(len(planogram_compliance.get("lines") or [1]), 1) if level >= 2 else None,
                     "commercial_risk": fi.get("commercial_risk") if level < 2 else None,
                     "source": fi.get("source") or "planogram_match",
