@@ -481,13 +481,13 @@ def build_retail_intelligence(
         if gpt.get(key):
             intel[key] = gpt[key]
 
-    from app.audit_kpi_engine import compute_role_audit_dashboard
+    from app.audit_kpi_engine import compute_all_role_audit_dashboards, compute_role_audit_dashboard
     from app.price_compliance import compute_price_compliance
+    from app.role_kpi_config import normalize_role_id
 
     planogram_package = (ctx.get("planogram_package") or {}) if isinstance(ctx.get("planogram_package"), dict) else {}
     price_raw = compute_price_compliance(classified, planogram_items)
-    intel["audit_kpi_dashboard"] = compute_role_audit_dashboard(
-        customer_type=customer_type,
+    dashboard_kwargs = dict(
         planogram_items=planogram_items,
         planogram_compliance=planogram_compliance,
         inventory=inventory,
@@ -495,6 +495,11 @@ def build_retail_intelligence(
         price_compliance=price_raw,
         planogram_package=planogram_package,
         scan_context=ctx,
+    )
+    intel["audit_kpi_dashboards"] = compute_all_role_audit_dashboards(**dashboard_kwargs)
+    intel["audit_kpi_dashboard"] = intel["audit_kpi_dashboards"].get(
+        normalize_role_id(customer_type),
+        compute_role_audit_dashboard(customer_type=customer_type, **dashboard_kwargs),
     )
 
     return intel

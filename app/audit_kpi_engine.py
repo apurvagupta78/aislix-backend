@@ -17,7 +17,7 @@ from app.audit_kpi_calculators import (
     not_configured_kpi,
 )
 from app.kpi_result import KpiResult
-from app.role_kpi_config import get_role_profile, normalize_role_id
+from app.role_kpi_config import ROLE_PROFILES, get_role_profile, normalize_role_id
 
 
 def _match_key(item: dict) -> str:
@@ -500,3 +500,29 @@ def _readiness_checklist(
         ("msl_compliance", bool(package.get("msl_skus")), "Must-stock list"),
     ]
     return [{"kpi_id": kid, "ready": ready, "label": label} for kid, ready, label in checks]
+
+
+def compute_all_role_audit_dashboards(
+    *,
+    planogram_items: list[dict] | None,
+    planogram_compliance: dict | None,
+    inventory: list[dict],
+    classified: list[dict],
+    price_compliance: dict | None = None,
+    planogram_package: dict | None = None,
+    scan_context: dict | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Deterministic KPI dashboards for all five customer roles (tab switching)."""
+    out: dict[str, dict[str, Any]] = {}
+    for role_id in ROLE_PROFILES:
+        out[role_id] = compute_role_audit_dashboard(
+            customer_type=role_id,
+            planogram_items=planogram_items,
+            planogram_compliance=planogram_compliance,
+            inventory=inventory,
+            classified=classified,
+            price_compliance=price_compliance,
+            planogram_package=planogram_package,
+            scan_context=scan_context,
+        )
+    return out
