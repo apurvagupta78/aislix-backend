@@ -1,0 +1,21 @@
+location,category,sub_category,brand,product_name,variant,expected_facings,min_facings,max_facings,expected_shelf_units,mrp_inr,avg_daily_sales,sku,shelf_position
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Colgate,MaxFresh,150g,5,4,6,15,3.59,6,SKU-COL-001,S1-P01
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Colgate,Total,150g,5,4,6,15,4.29,5,SKU-COL-003,S1-P02
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Colgate,Strong Teeth,150g,5,4,6,15,3.49,5,SKU-COL-004,S1-P03
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Colgate,Herbal,150g,4,3,5,12,3.39,4,SKU-COL-005,S1-P04
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Colgate,MaxFresh,150g,5,4,6,15,3.59,6,SKU-COL-001,S2-P01
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Colgate,MaxFresh,100g,4,3,5,12,2.79,5,SKU-COL-002,S2-P02
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Colgate,Strong Teeth,150g,4,3,5,12,3.49,4,SKU-COL-004,S2-P03
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Odol,Odol,75g,4,3,5,12,2.99,3,SKU-ODO-001,S2-P04
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Odol,Odol Dental,100g,3,2,4,9,3.49,3,SKU-ODO-002,S2-P05
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Doctor,Doctor Toothpaste,100g,5,4,6,15,2.49,4,SKU-DOC-001,S3-P01
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Doctor,Doctor Herbal,100g,4,3,5,12,2.59,3,SKU-DOC-002,S3-P02
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Colgate,Herbal,150g,4,3,5,12,3.39,4,SKU-COL-005,S3-P03
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Colgate,Sensitive,70g,4,3,5,12,3.89,3,SKU-COL-006,S3-P04
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Oral-B,Oral-B Toothpaste,100g,5,4,6,15,3.99,4,SKU-ORB-001,S4-P01
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Oral-B,Oral-B Gum Care,100g,5,4,6,15,4.29,4,SKU-ORB-002,S4-P02
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Colgate,Kids,80g,4,3,5,12,3.29,3,SKU-COL-007,S4-P03
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Sensodyne,Sensodyne,100g,5,4,6,15,5.49,3,SKU-SEN-001,S5-P01
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Sensodyne,Sensodyne Fresh,100g,4,3,5,12,5.29,3,SKU-SEN-002,S5-P02
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Closeup,Closeup,150g,4,3,5,12,2.99,3,SKU-CLU-001,S5-P03
+G01 – Oral Care Gondola,Oral Care,Toothpaste & Oral Hygiene,Kolynos,Kolynos,90g,4,3,5,12,2.39,2,SKU-KOL-001,S5-P04

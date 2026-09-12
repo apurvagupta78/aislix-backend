@@ -28,6 +28,11 @@ SAMPLE_IMAGES: dict[str, Path] = {
 
 SAMPLE_PLANOGRAMS: dict[str, Path] = {
     "lays-a1l": BASE_DIR / "data" / "fixtures" / "planogram_lays_a1l.csv",
+    "toothpaste-a1l": BASE_DIR / "data" / "fixtures" / "planogram_toothpaste_a1l.csv",
+}
+
+SAMPLE_AUDIT_PACKAGES: dict[str, Path] = {
+    "toothpaste-a1l": BASE_DIR / "data" / "demo" / "oral_care" / "audit_package.json",
 }
 
 LAYS_SHELF_BRAND_GUIDE = (
@@ -614,6 +619,15 @@ def load_sample_planogram(sample_id: str) -> list[dict[str, Any]]:
     return [row["data"] for row in parsed.get("rows", []) if row.get("valid") and row.get("data")]
 
 
+def load_sample_audit_package(sample_id: str) -> dict[str, Any]:
+    path = SAMPLE_AUDIT_PACKAGES.get(sample_id)
+    if path is None or not path.exists():
+        return {}
+    import json
+
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def landing_metadata(
     category: str | None,
     location: str | None,
@@ -664,12 +678,20 @@ def landing_metadata(
         if planogram_items:
             meta["planogram_items"] = planogram_items
             meta["planogram_items_full"] = planogram_items
+        audit_pkg = load_sample_audit_package(effective_sample_id)
+        if audit_pkg:
+            meta["audit_package"] = audit_pkg
+            meta["demo_planogram"] = True
     elif user_upload and detected_sample_id:
         meta["reference_sample_id"] = detected_sample_id
         planogram_items = load_sample_planogram(detected_sample_id)
         if planogram_items:
             meta["planogram_items"] = planogram_items
             meta["planogram_items_full"] = planogram_items
+        audit_pkg = load_sample_audit_package(detected_sample_id)
+        if audit_pkg:
+            meta["audit_package"] = audit_pkg
+            meta["demo_planogram"] = True
     ref_for_cache = effective_sample_id or (detected_sample_id if user_upload else None)
     if landing_skip_reference_cache(reference_sample_id=ref_for_cache):
         meta["skip_reference_cache"] = True

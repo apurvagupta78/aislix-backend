@@ -1,0 +1,84 @@
+{
+  "planogram_id": "POG-ORAL-001",
+  "name": "Oral Care – Main Gondola Demo",
+  "version": "v1.0",
+  "is_demo": true,
+  "primary_brand": "Colgate",
+  "fixture_id": "G01",
+  "store_timezone": "America/Bogota",
+  "assortment_skus": [
+    {"sku": "SKU-COL-001", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-COL-003", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-COL-004", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-COL-005", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-COL-002", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-ODO-001", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-ODO-002", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-DOC-001", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-DOC-002", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-COL-006", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-ORB-001", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-ORB-002", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-COL-007", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-SEN-001", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-SEN-002", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-CLU-001", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-KOL-001", "list_type": "mandatory_assortment", "outlet_scope": "Demo Supermarket – Store 101"},
+    {"sku": "SKU-COL-008", "list_type": "optional", "outlet_scope": "Demo Supermarket – Store 101", "optional": true}
+  ],
+  "msl_skus": [
+    {"sku": "SKU-COL-001", "list_type": "msl", "outlet_scope": "Demo Distribution Co."},
+    {"sku": "SKU-COL-004", "list_type": "msl", "outlet_scope": "Demo Distribution Co."},
+    {"sku": "SKU-COL-005", "list_type": "msl", "outlet_scope": "Demo Distribution Co."},
+    {"sku": "SKU-COL-003", "list_type": "msl", "outlet_scope": "Demo Distribution Co."},
+    {"sku": "SKU-ODO-001", "list_type": "msl", "outlet_scope": "Demo Distribution Co."},
+    {"sku": "SKU-DOC-001", "list_type": "msl", "outlet_scope": "Demo Distribution Co."},
+    {"sku": "SKU-ORB-001", "list_type": "msl", "outlet_scope": "Demo Distribution Co."},
+    {"sku": "SKU-SEN-001", "list_type": "msl", "outlet_scope": "Demo Distribution Co."},
+    {"sku": "SKU-CLU-001", "list_type": "msl", "outlet_scope": "Demo Distribution Co."},
+    {"sku": "SKU-KOL-001", "list_type": "msl", "outlet_scope": "Demo Distribution Co."}
+  ],
+  "promotions": [
+    {
+      "promotion_id": "PROMO-001",
+      "participating_skus": ["SKU-COL-001"],
+      "start_date": "2026-09-01",
+      "end_date": "2026-09-30",
+      "required_location": "S1 / Front Block",
+      "expected_offer_text": "OFERTA – COLGATE MAXFRESH",
+      "expected_promo_price": 3.59,
+      "required_facings": 5
+    }
+  ],
+  "sos_geometry": {
+    "calibrated": false,
+    "basis": "bbox_width_proxy",
+    "target_brand": "Colgate",
+    "target_share_percent": 55,
+    "brand_allocation": {
+      "Colgate": 55,
+      "Odol": 10,
+      "Doctor": 12,
+      "Oral-B": 9,
+      "Sensodyne": 7,
+      "Closeup": 4,
+      "Kolynos": 3
+    }
+  },
+  "dark_store_bins": [
+    "A03-R07-B02-S01",
+    "A03-R07-B02-S02",
+    "A03-R07-B02-S03",
+    "A03-R07-B02-S04",
+    "A03-R07-B02-S05"
+  ],
+  "scoring": {
+    "osa_target": 91,
+    "planogram_target": 84,
+    "assortment_target": 88,
+    "price_target": 90,
+    "promotional_target": 80,
+    "msl_target": 90,
+    "share_of_shelf_target": 55
+  }
+}

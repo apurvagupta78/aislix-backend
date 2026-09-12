@@ -72,6 +72,32 @@ def test_load_sample_planogram_lays():
     assert "Lay's" in brands or "Lays" in brands
 
 
+def test_load_sample_planogram_toothpaste_demo():
+    from app.landing_leads import load_sample_audit_package, load_sample_planogram
+
+    items = load_sample_planogram("toothpaste-a1l")
+    assert len(items) == 20
+    assert any(i.get("sku") == "SKU-COL-001" for i in items)
+    pkg = load_sample_audit_package("toothpaste-a1l")
+    assert pkg.get("planogram_id") == "POG-ORAL-001"
+    assert pkg.get("is_demo") is True
+
+
+def test_landing_metadata_toothpaste_loads_demo_package():
+    from app.landing_leads import SAMPLE_DEFAULTS
+
+    meta = landing_metadata(
+        None,
+        None,
+        None,
+        sample_id="toothpaste-a1l",
+        sample_defaults=SAMPLE_DEFAULTS["toothpaste-a1l"],
+    )
+    assert len(meta.get("planogram_items") or []) == 20
+    assert meta.get("demo_planogram") is True
+    assert meta.get("audit_package", {}).get("primary_brand") == "Colgate"
+
+
 def test_shampoo_sample_defaults():
     from app.landing_leads import DEFAULT_SAMPLE_ID, SAMPLE_DEFAULTS
 
