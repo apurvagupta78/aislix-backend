@@ -194,6 +194,10 @@ async def scan(request: Request):
             "categories": body.get("categories"),
             "planogram_items": body.get("planogram_items"),
             "planogram_items_full": body.get("planogram_items_full"),
+            "audit_package": body.get("audit_package"),
+            "planogram_version_id": body.get("planogram_version_id"),
+            "primary_brand": body.get("primary_brand"),
+            "customer_type": body.get("customer_type"),
         }
 
         from app.scan_context import build_shelf_label, validate_scan_metadata

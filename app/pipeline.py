@@ -432,7 +432,12 @@ def run_scan_from_image(
             metrics["planogram_qty_compliance_percent"] = planogram_compliance.get(
                 "planogram_qty_compliance_percent"
             )
-            metrics["planogram_summary"] = planogram_compliance.get("summary")
+            pg_summary = dict(planogram_compliance.get("summary") or {})
+            if planogram_items:
+                pg_summary["configured_rows"] = planogram_items
+            metrics["planogram_summary"] = pg_summary
+        elif planogram_items:
+            metrics["planogram_summary"] = {"configured_rows": planogram_items}
         from app.metrics import compute_financial_impact, finalize_execution_score
 
         if planogram_items:
@@ -493,7 +498,18 @@ def run_scan_from_image(
             planogram_compliance=planogram_compliance,
         )
 
+        from app.planogram_package import synthesize_planogram_package
         from app.retail_execution import build_retail_intelligence
+
+        audit_raw = metadata.get("audit_package") or scan_context.get("audit_package") or {}
+        if not isinstance(audit_raw, dict):
+            audit_raw = {}
+        scan_context["planogram_package"] = synthesize_planogram_package(
+            planogram_items or None,
+            audit_raw,
+            primary_brand=metadata.get("primary_brand") or scan_context.get("primary_brand"),
+            store_timezone=audit_raw.get("store_timezone"),
+        )
 
         customer_type = metadata.get("customer_type") or scan_context.get("customer_type")
         retail_intelligence = build_retail_intelligence(

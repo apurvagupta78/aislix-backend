@@ -345,7 +345,19 @@ def finalize_make_scan(
         if nba:
             retail_intelligence = {**retail_intelligence, "next_best_actions": nba}
 
+    from app.planogram_package import synthesize_planogram_package
     from app.retail_execution import build_retail_intelligence
+
+    planogram_items_pp = scan_context.get("planogram_items") or metadata.get("planogram_items") or []
+    audit_raw = metadata.get("audit_package") or scan_context.get("audit_package") or {}
+    if not isinstance(audit_raw, dict):
+        audit_raw = {}
+    scan_context["planogram_package"] = synthesize_planogram_package(
+        planogram_items_pp if isinstance(planogram_items_pp, list) else None,
+        audit_raw,
+        primary_brand=metadata.get("primary_brand") or scan_context.get("primary_brand"),
+        store_timezone=audit_raw.get("store_timezone"),
+    )
 
     customer_type = metadata.get("customer_type") or scan_context.get("customer_type")
     computed_intel = build_retail_intelligence(
