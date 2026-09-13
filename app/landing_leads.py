@@ -6,7 +6,7 @@ import base64
 import hashlib
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +17,7 @@ from app.catalog_sync import _headers, is_configured
 BASE_DIR = Path(__file__).resolve().parent.parent
 LANDING_BUCKET = os.getenv("LANDING_SCANS_BUCKET", "landing-scans")
 DAILY_LIMIT = int(os.getenv("LANDING_SCAN_DAILY_LIMIT", "5"))
+DEMO_COOLDOWN_HOURS = int(os.getenv("LANDING_DEMO_COOLDOWN_HOURS", "24"))
 MAX_BYTES = int(os.getenv("LANDING_SCAN_MAX_BYTES", str(10 * 1024 * 1024)))
 ENABLED = os.getenv("LANDING_SCAN_ENABLED", "true").lower() in {"1", "true", "yes"}
 
@@ -103,9 +104,6 @@ SUB_CATEGORY_BRAND_GUIDES: dict[str, str] = {
     "tea": TEA_SHELF_BRAND_GUIDE,
 }
 
-_rate_cache: dict[str, tuple[int, str]] = {}
-
-
 def merge_landing_sample_defaults(
     *,
     sample_id: str | None,
@@ -168,55 +166,106 @@ def hash_ip(ip: str | None) -> str:
     return hashlib.sha256(f"{salt}:{value}".encode()).hexdigest()[:32]
 
 
-def _today_utc() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-
 def _supabase_base() -> str:
     return os.getenv("SUPABASE_URL", "").rstrip("/")
 
 
-def _count_scans_today(ip_hash: str) -> int:
+def _parse_ts(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        text = value.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _fetch_completed_sessions(ip_hash: str) -> list[dict[str, Any]]:
+    """Completed demo audits for this IP hash, oldest first."""
     base = _supabase_base()
     if not base:
-        return 0
-    today = _today_utc()
+        return []
     url = (
         f"{base}/rest/v1/landing_demo_sessions"
-        f"?select=id&ip_hash=eq.{ip_hash}"
+        f"?select=id,updated_at,created_at"
+        f"&ip_hash=eq.{ip_hash}"
         f"&scan_status=eq.completed"
-        f"&created_at=gte.{today}T00:00:00Z"
+        f"&order=updated_at.asc"
     )
-    headers = _headers()
-    headers["Prefer"] = "count=exact"
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=_headers(), timeout=15)
         if response.status_code != 200:
-            return 0
-        content_range = response.headers.get("content-range", "")
-        if "/" in content_range:
-            total = content_range.split("/")[-1]
-            if total.isdigit():
-                return int(total)
+            return []
         rows = response.json()
-        return len(rows) if isinstance(rows, list) else 0
+        return rows if isinstance(rows, list) else []
     except Exception as exc:
-        print(f"landing rate-limit count skipped: {exc}")
-        return 0
+        print(f"landing completed-session fetch skipped: {exc}")
+        return []
+
+
+def get_demo_allowance(ip_hash: str) -> dict[str, Any]:
+    """
+    Authoritative demo allowance for an IP hash.
+
+    Only successfully completed demo audits count. After the 5th completion,
+    access returns exactly 24 hours after that completion timestamp.
+    """
+    limit = DAILY_LIMIT
+    completed = _fetch_completed_sessions(ip_hash)
+    now = datetime.now(timezone.utc)
+
+    while len(completed) >= limit:
+        fifth = completed[limit - 1]
+        fifth_ts = _parse_ts(fifth.get("updated_at") or fifth.get("created_at"))
+        if fifth_ts is None:
+            break
+        cooldown_end = fifth_ts + timedelta(hours=DEMO_COOLDOWN_HOURS)
+        if now < cooldown_end:
+            return {
+                "used": limit,
+                "limit": limit,
+                "remaining": 0,
+                "allowed": False,
+                "next_available_at": cooldown_end.isoformat(),
+            }
+        window_start = cooldown_end
+        completed = [
+            row
+            for row in completed
+            if (_parse_ts(row.get("updated_at") or row.get("created_at")) or now) >= window_start
+        ]
+
+    used = len(completed)
+    remaining = max(0, limit - used)
+    return {
+        "used": used,
+        "limit": limit,
+        "remaining": remaining,
+        "allowed": remaining > 0,
+        "next_available_at": None,
+    }
+
+
+def demo_allowance_response(ip_hash: str) -> dict[str, Any]:
+    """API-friendly allowance payload (backward compatible field names)."""
+    allowance = get_demo_allowance(ip_hash)
+    return {
+        "demo_audits_used": allowance["used"],
+        "demo_audits_limit": allowance["limit"],
+        "demo_audits_remaining": allowance["remaining"],
+        "demo_next_available_at": allowance.get("next_available_at"),
+        "scans_used_today": allowance["used"],
+        "scans_daily_limit": allowance["limit"],
+    }
 
 
 def check_rate_limit(ip_hash: str) -> tuple[bool, int, int]:
-    """Return (allowed, used_today, daily_limit)."""
-    today = _today_utc()
-    cached_count, cached_day = _rate_cache.get(ip_hash, (0, today))
-    if cached_day != today:
-        cached_count = 0
-    db_count = _count_scans_today(ip_hash) if is_configured() else 0
-    used = max(cached_count, db_count)
-    if used >= DAILY_LIMIT:
-        return False, used, DAILY_LIMIT
-    _rate_cache[ip_hash] = (used + 1, today)
-    return True, used + 1, DAILY_LIMIT
+    """Return (allowed, used, limit) — only completed audits count."""
+    allowance = get_demo_allowance(ip_hash)
+    return allowance["allowed"], allowance["used"], allowance["limit"]
 
 
 def resolve_sample_image(sample_id: str) -> tuple[bytes, dict[str, str]]:

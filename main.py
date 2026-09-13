@@ -497,7 +497,6 @@ async def landing_scan(request: Request):
         DEFAULT_SAMPLE_ID,
         ENABLED,
         MAX_BYTES,
-        check_rate_limit,
         create_pending_session,
         hash_ip,
         landing_metadata,
@@ -516,12 +515,18 @@ async def landing_scan(request: Request):
         raise HTTPException(status_code=503, detail="Landing scans are temporarily disabled.")
 
     ip_hash = hash_ip(_client_ip(request))
-    allowed, used, limit = check_rate_limit(ip_hash)
-    if not allowed:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Daily demo scan limit reached ({limit} per day). Sign up for full access.",
+    from app.landing_leads import demo_allowance_response, get_demo_allowance
+
+    allowance = get_demo_allowance(ip_hash)
+    if not allowance["allowed"]:
+        next_at = allowance.get("next_available_at")
+        detail = (
+            f"Free demo limit reached ({allowance['limit']} AI audits). "
+            f"Your next AI audit will be available 24 hours after your last completed demo audit."
         )
+        if next_at:
+            detail += f" Next available: {next_at}."
+        raise HTTPException(status_code=429, detail=detail)
 
     payload = await _parse_landing_scan_payload(request)
     utm = parse_utm(payload)
@@ -628,9 +633,57 @@ async def landing_scan(request: Request):
     )
 
     response = landing_scan_response(result, token, sample_id=effective_sample_id)
-    response["scans_used_today"] = used
-    response["scans_daily_limit"] = limit
+    response.update(demo_allowance_response(ip_hash))
     return response
+
+
+@app.post("/landing/email-report")
+async def landing_email_report(request: Request):
+    """Email a completed demo audit report to a recipient."""
+    from app.landing_leads import get_session_public
+    from app.landing_report_email import send_demo_audit_report_email
+
+    body = await request.json()
+    session_token = (body.get("landing_session_id") or body.get("session_token") or "").strip()
+    recipient = (body.get("recipient") or body.get("email") or "").strip().lower()
+    message = (body.get("message") or "").strip() or None
+    if not session_token:
+        raise HTTPException(status_code=400, detail="Missing demo session.")
+    if not recipient or "@" not in recipient:
+        raise HTTPException(status_code=400, detail="Valid recipient email is required.")
+
+    session = get_session_public(session_token)
+    if not session or session.get("status") != "completed":
+        raise HTTPException(status_code=404, detail="Demo audit not found or not completed.")
+
+    pdf_bytes = None
+    try:
+        from app.report_generator import generate_pdf_bytes
+
+        pdf_bytes = generate_pdf_bytes(session)
+    except Exception as exc:
+        print(f"demo email PDF skipped: {exc}")
+
+    ok, err = send_demo_audit_report_email(
+        recipient=recipient,
+        session_token=session_token,
+        store_name=session.get("shelf_label") or session.get("category"),
+        audit_date=session.get("scanned_at"),
+        message=message,
+        pdf_bytes=pdf_bytes,
+    )
+    if not ok:
+        raise HTTPException(status_code=502, detail=err or "Could not send email.")
+    return {"ok": True, "sent": 1}
+
+
+@app.get("/landing/demo-allowance")
+async def landing_demo_allowance(request: Request):
+    """Authoritative free demo AI audit allowance for the caller IP."""
+    from app.landing_leads import demo_allowance_response, hash_ip
+
+    ip_hash = hash_ip(_client_ip(request))
+    return demo_allowance_response(ip_hash)
 
 
 @app.post("/landing/lead")

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from app.landing_leads import (
+    get_demo_allowance,
     hash_ip,
     landing_metadata,
     landing_scan_response,
@@ -308,3 +311,24 @@ def test_landing_metadata_user_upload_tea_gets_tea_brand_guide():
     assert "Taaza" in meta["shelf_brand_guide"]
     assert "Red Label" in meta["shelf_brand_guide"]
     assert "do NOT return brand Unknown" in meta["shelf_brand_guide"]
+
+
+def test_demo_allowance_empty_ip(monkeypatch):
+    monkeypatch.setattr("app.landing_leads._fetch_completed_sessions", lambda _ip: [])
+    allowance = get_demo_allowance("test-ip-hash")
+    assert allowance["allowed"] is True
+    assert allowance["used"] == 0
+    assert allowance["remaining"] == 5
+
+
+def test_demo_allowance_blocked_after_fifth(monkeypatch):
+    base = datetime(2026, 9, 13, 16, 42, tzinfo=timezone.utc)
+    rows = [
+        {"updated_at": (base + timedelta(minutes=i)).isoformat()}
+        for i in range(5)
+    ]
+    monkeypatch.setattr("app.landing_leads._fetch_completed_sessions", lambda _ip: rows)
+    allowance = get_demo_allowance("test-ip-hash")
+    assert allowance["allowed"] is False
+    assert allowance["remaining"] == 0
+    assert allowance["next_available_at"] is not None
