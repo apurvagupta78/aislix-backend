@@ -316,11 +316,13 @@ CREATE TRIGGER shelf_scans_usage_on_complete
   EXECUTE FUNCTION public.record_audit_usage_on_complete();
 
 -- ============ 6. can_org_start_scan — PAYG always allowed ============
+-- Must keep parameter name `p_org_id` — Postgres rejects CREATE OR REPLACE when
+-- the input parameter name changes (42P13).
 
-CREATE OR REPLACE FUNCTION public.can_org_start_scan(_org_id UUID)
+CREATE OR REPLACE FUNCTION public.can_org_start_scan(p_org_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 SECURITY DEFINER
 SET search_path = public
 AS $$
@@ -330,20 +332,21 @@ DECLARE
   scans_used INT;
   free_status RECORD;
 BEGIN
-  IF public.org_has_platform_bypass(_org_id) THEN
+  IF public.org_has_platform_bypass(p_org_id) THEN
     RETURN TRUE;
   END IF;
 
-  PERFORM public.reset_subscription_period_if_due(_org_id);
+  PERFORM public.ensure_org_free_subscription(p_org_id);
+  PERFORM public.reset_subscription_period_if_due(p_org_id);
 
   SELECT sp.code, sp.scan_quota, s.scans_used
   INTO plan_code, scan_quota, scans_used
   FROM public.subscriptions s
   JOIN public.subscription_plans sp ON sp.id = s.plan_id
-  WHERE s.org_id = _org_id AND s.status IN ('active', 'trialing');
+  WHERE s.org_id = p_org_id AND s.status IN ('active', 'trialing');
 
   IF NOT FOUND THEN
-    RETURN FALSE;
+    plan_code := 'free';
   END IF;
 
   IF plan_code IN ('enterprise', 'payg') OR scan_quota IS NULL THEN
@@ -351,13 +354,16 @@ BEGIN
   END IF;
 
   IF plan_code = 'free' THEN
-    SELECT * INTO free_status FROM public.free_plan_scan_status(_org_id);
+    SELECT * INTO free_status FROM public.free_plan_scan_status(p_org_id);
     RETURN NOT free_status.blocked;
   END IF;
 
-  RETURN scans_used < scan_quota;
+  RETURN COALESCE(scans_used, 0) < scan_quota;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.can_org_start_scan(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.can_org_start_scan(UUID) TO authenticated, service_role;
 
 -- ============ 7. Feature entitlement check ============
 
