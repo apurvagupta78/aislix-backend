@@ -490,6 +490,35 @@ def landing_get_session(session_token: str):
     return session
 
 
+@app.post("/landing/share/persist")
+async def landing_share_persist(request: Request):
+    """Store a demo audit snapshot for public /share/:token links."""
+    from app.landing_email import APP_ORIGIN
+    from app.landing_leads import persist_share_session
+
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Expected JSON body.") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Expected JSON object.")
+
+    session_token = (
+        str(body.get("session_token") or body.get("landing_session_id") or "").strip()
+    )
+    snapshot = body.get("snapshot")
+    if not isinstance(snapshot, dict):
+        snapshot = body
+    if not session_token:
+        raise HTTPException(status_code=400, detail="Missing session token.")
+
+    row = persist_share_session(session_token, snapshot)
+    if not row:
+        raise HTTPException(status_code=503, detail="Could not save share link.")
+    share_url = f"{APP_ORIGIN.rstrip('/')}/share/{session_token}"
+    return {"ok": True, "landing_session_id": session_token, "url": share_url}
+
+
 @app.post("/landing/scan")
 async def landing_scan(request: Request):
     """Anonymous shelf scan for /retail-intelligence — no signup required."""

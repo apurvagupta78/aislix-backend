@@ -277,6 +277,12 @@ def resolve_sample_image(sample_id: str) -> tuple[bytes, dict[str, str]]:
     return path.read_bytes(), dict(defaults)
 
 
+def slim_share_snapshot(full: dict[str, Any]) -> dict[str, Any]:
+    """Landing demo share payload — omit multi-MB image/CSV blobs."""
+    omit = {"annotated_image_base64", "original_image_base64", "csv_base64"}
+    return {key: value for key, value in full.items() if key not in omit}
+
+
 def slim_scan_result(full: dict[str, Any]) -> dict[str, Any]:
     """Persistable summary — omit multi-MB PDF/CSV payloads."""
     keep = (
@@ -591,6 +597,32 @@ def mark_converted(session_token: str, user_id: str) -> dict[str, Any] | None:
             "signed_up_at": now,
             "signup_completed": True,
         },
+    )
+
+
+def persist_share_session(session_token: str, snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    """Upsert a completed demo audit so /share/:token and /landing/session/:token resolve it."""
+    token = (session_token or "").strip()
+    if not token:
+        raise ValueError("Missing session token.")
+    slim = slim_share_snapshot(snapshot)
+    scan_id = str(snapshot.get("scan_id") or slim.get("scan_id") or "demo")
+    patch = {
+        "scan_id": scan_id,
+        "scan_status": "completed",
+        "scan_error": None,
+        "scan_result": slim,
+        "sample_id": snapshot.get("sample_id"),
+        "category": snapshot.get("category") or snapshot.get("scan_category"),
+    }
+    patched = _patch_session(token, patch)
+    if patched:
+        return patched
+    return _upsert_session(
+        {
+            "session_token": token,
+            **patch,
+        }
     )
 
 

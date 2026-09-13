@@ -16,6 +16,7 @@ from app.landing_leads import (
     parse_utm,
     sanitize_landing_inventory,
     slim_scan_result,
+    slim_share_snapshot,
     validate_landing_upload_context,
 )
 
@@ -148,6 +149,22 @@ def test_public_base_url_from_headers_https():
         }
     )
     assert url == "https://aislix-backend-production.up.railway.app"
+
+
+def test_slim_share_snapshot_strips_heavy_fields():
+    full = {
+        "scan_id": "abc123",
+        "landing_session_id": "tok1",
+        "inventory": [{"brand": "Lays", "product_name": "Chips", "quantity": 3}],
+        "annotated_image_base64": "huge",
+        "original_image_base64": "huge",
+        "csv_base64": "huge",
+    }
+    slim = slim_share_snapshot(full)
+    assert slim["scan_id"] == "abc123"
+    assert "annotated_image_base64" not in slim
+    assert "original_image_base64" not in slim
+    assert "csv_base64" not in slim
 
 
 def test_slim_scan_result_strips_heavy_fields():
