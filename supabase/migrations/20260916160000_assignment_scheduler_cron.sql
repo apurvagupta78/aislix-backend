@@ -440,7 +440,7 @@ AS $$
     ON om.org_id = p_org_id
     AND om.status = 'active'
     AND (
-      lower(om.role) IN ('member', 'manager', 'admin', 'owner')
+      lower(om.role::text) IN ('member', 'manager', 'admin', 'owner')
     )
     AND (
       s.metadata->>'employee_id' = om.user_id::TEXT
