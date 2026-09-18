@@ -252,6 +252,7 @@ RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_org UUID := public.aislix_demo_org_id();
+  v_source_org UUID;
   v_store RECORD;
   v_tpl RECORD;
   v_scenario INT;
@@ -306,6 +307,46 @@ BEGIN
       'skipped', true,
       'message', 'Demo audits already exist. Pass p_force=true to reseed.'
     );
+  END IF;
+
+  -- Clone published system templates from owner org when demo org has none
+  IF NOT EXISTS (SELECT 1 FROM public.audit_templates WHERE org_id = v_org AND is_system_template LIMIT 1) THEN
+    SELECT o.id INTO v_source_org
+    FROM public.organizations o
+    WHERE o.owner_id = p_owner_user_id
+      AND o.id <> v_org
+      AND COALESCE(o.is_demo, false) = false
+    ORDER BY o.created_at
+    LIMIT 1;
+
+    IF v_source_org IS NOT NULL THEN
+      INSERT INTO public.audit_templates (
+        org_id, name, description, template_type, audit_mode, scope_type, scope_values,
+        instructions, evidence_required, published, status, category, icon, audit_level,
+        sections, field_definitions, rules, workflow_settings, scoring_config, ai_config,
+        evidence_config, calculated_fields, operating_model, audit_purpose, subject_type,
+        is_system_template, purpose_config, hierarchy_profile_id, hierarchy_bindings,
+        visibility, short_description, version, created_by, is_active
+      )
+      SELECT
+        v_org, t.name, t.description, t.template_type, t.audit_mode, t.scope_type, t.scope_values,
+        t.instructions, t.evidence_required, t.published, t.status, t.category, t.icon, t.audit_level,
+        t.sections, t.field_definitions, t.rules, t.workflow_settings, t.scoring_config, t.ai_config,
+        t.evidence_config, t.calculated_fields, t.operating_model, t.audit_purpose, t.subject_type,
+        t.is_system_template, t.purpose_config,
+        hp_demo.id,
+        t.hierarchy_bindings, t.visibility, t.short_description, t.version, p_owner_user_id, t.is_active
+      FROM public.audit_templates t
+      LEFT JOIN public.hierarchy_profiles hp_src
+        ON hp_src.id = t.hierarchy_profile_id
+      LEFT JOIN public.hierarchy_profiles hp_demo
+        ON hp_demo.org_id = v_org
+       AND hp_demo.operating_model = COALESCE(t.operating_model, hp_src.operating_model)
+       AND hp_demo.is_default = true
+      WHERE t.org_id = v_source_org
+        AND t.is_system_template = true
+        AND t.status = 'published';
+    END IF;
   END IF;
 
   FOR v_tpl IN
