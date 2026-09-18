@@ -1,0 +1,15 @@
+-- Run AFTER applying migration 20260918130000_demo_environment.sql
+-- and AFTER seeding system templates for the demo org (via app: seedSystemTemplatesForOrg).
+--
+-- 1. Switch to demo org in app OR use service role
+-- 2. Seed templates: onboarding / Settings → or call seedSystemTemplatesForOrg in frontend
+-- 3. Run:
+--    SELECT public.seed_aislix_demo_environment('<owner-user-uuid>'::uuid, false);
+--
+-- Re-seed (destructive for demo org audits only):
+--    SELECT public.seed_aislix_demo_environment('<owner-user-uuid>'::uuid, true);
+--
+-- Validate:
+--    SELECT count(*) FROM scan_assignments WHERE org_id = public.aislix_demo_org_id();
+--    SELECT operating_model, count(*) FROM audit_templates
+--      WHERE org_id = public.aislix_demo_org_id() AND is_system_template GROUP BY 1;
