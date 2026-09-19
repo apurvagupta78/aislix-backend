@@ -12,6 +12,16 @@ def test_resolve_analysis_mode_from_expected_products():
     assert mode == "expected_products"
 
 
+def test_resolve_analysis_mode_shelf_only_ignores_planogram_items():
+    mode = resolve_analysis_mode(
+        {
+            "analysis_mode": "shelf_only",
+            "planogram_items": [{"brand": "Lay's", "product_name": "Classic"}],
+        }
+    )
+    assert mode == "shelf_only"
+
+
 def test_build_vision_prompt_strips_preview_footer():
     prompt = build_vision_prompt_text(
         {"vision_prompt": "Analyze shelf\n---\nAislix payload preview\n- mode: x"}

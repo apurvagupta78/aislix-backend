@@ -231,7 +231,17 @@ def _strip_markdown_json_fence(text: str) -> str:
 def _looks_like_product_row(row: Any) -> bool:
     if not isinstance(row, dict):
         return False
-    has_qty = any(k in row for k in ("qty", "quantity", "facings"))
+    has_qty = any(
+        k in row
+        for k in (
+            "qty",
+            "quantity",
+            "facings",
+            "actual_facings",
+            "actual_visible_units",
+            "expected_facings",
+        )
+    )
     has_label = any(k in row for k in ("brand", "product", "product_name", "name"))
     return has_qty and has_label
 
@@ -496,18 +506,36 @@ def _summary_indicates_no_products(summary: str) -> bool:
 def _map_make_products(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     inventory: list[dict[str, Any]] = []
     for row in rows:
-        brand = (row.get("brand") or "Unknown").strip() or "Unknown"
-        product_name = (
+        if not isinstance(row, dict):
+            continue
+        brand = str(row.get("brand") or "Unknown").strip() or "Unknown"
+        product_name = str(
             row.get("product_name")
             or row.get("product")
             or row.get("name")
             or "Unknown"
         ).strip() or "Unknown"
-        variant = (row.get("variant") or "").strip()
-        qty = max(1, int(row.get("qty") or row.get("quantity") or row.get("facings") or 1))
-        confidence = float(row.get("confidence") or 0.0)
-        shelf_position = (row.get("shelf_position") or row.get("position") or row.get("shelf") or "").strip()
-        product_category = (
+        variant = str(row.get("variant") or "").strip()
+        qty_raw = (
+            row.get("qty")
+            or row.get("quantity")
+            or row.get("facings")
+            or row.get("actual_facings")
+            or row.get("actual_visible_units")
+            or 1
+        )
+        try:
+            qty = max(1, int(qty_raw))
+        except (TypeError, ValueError):
+            qty = 1
+        try:
+            confidence = float(row.get("confidence") or 0.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        shelf_position = str(
+            row.get("shelf_position") or row.get("position") or row.get("shelf") or ""
+        ).strip()
+        product_category = str(
             row.get("product_category")
             or row.get("category")
             or row.get("detected_category")
@@ -521,6 +549,8 @@ def _map_make_products(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "variant": variant,
                 "quantity": qty,
                 "facings": qty,
+                "actual_facings": row.get("actual_facings"),
+                "actual_visible_units": row.get("actual_visible_units"),
                 "confidence": confidence,
                 "shelf_position": shelf_position,
                 "location": shelf_position,

@@ -205,6 +205,14 @@ async def scan(request: Request):
             "expected_products": body.get("expected_products") or [],
             "skip_reference_cache": body.get("skip_reference_cache"),
         }
+        # shelf_only must never carry planogram rows — they flip comparison mode
+        # and bloat the vision prompt until Astra returns unparseable JSON.
+        mode = str(metadata.get("analysis_mode") or "").strip().lower()
+        if mode in {"shelf_only", "no_planogram", "image_only_shelf_analysis"}:
+            metadata["planogram_items"] = []
+            metadata["planogram_items_full"] = []
+            metadata.pop("planogram_version_id", None)
+            metadata["expected_products"] = []
 
         from app.scan_context import build_shelf_label, validate_scan_metadata
 
@@ -235,9 +243,8 @@ async def scan(request: Request):
                     status_code=202,
                     content={"scan_id": scan_id, "status": "processing"},
                 )
-            if existing["status"] == "failed":
-                error = existing.get("error") or "Scan failed."
-                raise HTTPException(status_code=422, detail=error)
+            # Failed jobs must be re-runnable (Retry / re-process same scan_id).
+            # Fall through so start_job replaces the failed entry.
 
         image_url = image_urls[0]
         learned_catalog = body.get("learned_catalog") or []

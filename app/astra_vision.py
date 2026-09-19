@@ -9,6 +9,8 @@ COMPARISON_MODES = frozenset({"expected_products", "planogram_comparison"})
 
 def resolve_analysis_mode(metadata: dict[str, Any]) -> str:
     explicit = str(metadata.get("analysis_mode") or "").strip().lower()
+    if explicit in {"shelf_only", "no_planogram", "image_only_shelf_analysis"}:
+        return "shelf_only"
     if explicit:
         return explicit
     if metadata.get("planogram_items"):
