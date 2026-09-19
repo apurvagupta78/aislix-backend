@@ -4,11 +4,27 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.astra_cv_validate import is_shelf_cv_payload
+
 PLANOGRAM_MODE = "planogram_comparison"
 SHELF_MODE = "image_only_shelf_analysis"
+SHELF_CV_TYPE = "shelf_cv"
 
 
 def detect_astra_mode(data: dict[str, Any], metadata: dict[str, Any] | None = None) -> str | None:
+    if is_shelf_cv_payload(data):
+        mode = str(data.get("analysis_mode") or "").strip().lower()
+        if mode in {"with_planogram", "planogram_comparison"}:
+            return PLANOGRAM_MODE
+        if mode in {"no_planogram", "shelf_only", SHELF_MODE}:
+            return SHELF_MODE
+        if metadata:
+            requested = str(metadata.get("analysis_mode") or "").strip().lower()
+            if requested == "planogram_comparison":
+                return PLANOGRAM_MODE
+            if requested == "shelf_only":
+                return SHELF_MODE
+
     mode = str(data.get("mode") or "").strip().lower()
     if mode == PLANOGRAM_MODE:
         return PLANOGRAM_MODE
@@ -28,6 +44,13 @@ def extract_astra_blocks(
     metadata: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str | None]:
     """Return (planogram_block, shelf_block, astra_mode)."""
+    if is_shelf_cv_payload(data):
+        mode = detect_astra_mode(data, metadata)
+        if mode == PLANOGRAM_MODE:
+            return data, None, mode
+        if mode == SHELF_MODE:
+            return None, data, mode
+
     nested_plano = data.get("astra_planogram_analysis")
     nested_shelf = data.get("astra_shelf_analysis")
     if isinstance(nested_plano, dict):
@@ -94,6 +117,9 @@ def astra_products_to_inventory_rows(
 
 
 def astra_executive_summary(data: dict[str, Any], mode: str | None) -> str | None:
+    if is_shelf_cv_payload(data):
+        return None
+
     for key in ("executive_summary", "summary_text"):
         value = data.get(key)
         if isinstance(value, str) and value.strip():
@@ -120,7 +146,7 @@ def astra_executive_summary(data: dict[str, Any], mode: str | None) -> str | Non
 
     if mode == SHELF_MODE:
         identified = summary.get("products_identified")
-        facings = summary.get("visible_facings")
+        facings = summary.get("visible_facings") or summary.get("total_actual_facings")
         parts = ["Shelf analysis complete."]
         if identified is not None:
             parts.append(f"Identified {identified} products.")
@@ -143,6 +169,34 @@ def analysis_mode_label(mode: str | None, metadata: dict[str, Any] | None = None
     return None
 
 
+def _merge_shelf_pipeline(result: dict[str, Any], pipeline: dict[str, Any]) -> None:
+    metrics = result.setdefault("metrics", {})
+    if not isinstance(metrics, dict):
+        return
+
+    for key, value in pipeline.items():
+        if key in {"executive_summary", "executive_summary_sections", "executive_summary_meta"}:
+            continue
+        metrics[key] = value
+
+    if pipeline.get("executive_summary"):
+        result["executive_summary"] = pipeline["executive_summary"]
+        result["summary_text"] = pipeline["executive_summary"]
+        metrics["executive_summary"] = pipeline["executive_summary"]
+        metrics["executive_summary_sections"] = pipeline.get("executive_summary_sections")
+        metrics["executive_summary_meta"] = pipeline.get("executive_summary_meta")
+
+    if pipeline.get("aislix_planogram_analysis"):
+        result["aislix_planogram_analysis"] = pipeline["aislix_planogram_analysis"]
+    if pipeline.get("aislix_shelf_analysis"):
+        result["aislix_shelf_analysis"] = pipeline["aislix_shelf_analysis"]
+
+    if not pipeline.get("scan_complete", True):
+        result["scan_status"] = pipeline.get("scan_status", "needs_review")
+        metrics["scan_status"] = pipeline.get("scan_status", "needs_review")
+        metrics["scan_complete"] = False
+
+
 def attach_astra_to_scan_result(
     result: dict[str, Any],
     *,
@@ -153,6 +207,31 @@ def attach_astra_to_scan_result(
     analysis_mode = analysis_mode_label(mode, metadata)
     if analysis_mode:
         result["analysis_mode"] = analysis_mode
+
+    if is_shelf_cv_payload(raw):
+        metrics = result.get("metrics")
+        if isinstance(metrics, dict) and metrics.get("calc_engine_version"):
+            return result
+
+        from app.luna_vision_scan import luna_required, run_luna_secondary_scan
+        from app.shelf_pipeline import run_shelf_cv_pipeline
+
+        luna_analysis = run_luna_secondary_scan(raw, metadata) if luna_required(metadata) else None
+        legacy_plano = result.get("planogram_compliance")
+        if not isinstance(legacy_plano, dict):
+            metrics = result.get("metrics")
+            if isinstance(metrics, dict) and isinstance(metrics.get("planogram_compliance"), dict):
+                legacy_plano = metrics["planogram_compliance"]
+
+        pipeline = run_shelf_cv_pipeline(
+            raw,
+            metadata,
+            luna_analysis=luna_analysis,
+            legacy_planogram_compliance=legacy_plano if isinstance(legacy_plano, dict) else None,
+        )
+        if pipeline:
+            _merge_shelf_pipeline(result, pipeline)
+        return result
 
     if plano:
         result["astra_planogram_analysis"] = plano
