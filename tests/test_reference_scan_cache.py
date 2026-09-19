@@ -189,6 +189,24 @@ def test_lookup_lays_cache_on_user_upload(lays_image):
     assert by_variant["American Style Cream & Onion"] == 12
 
 
+def test_ai_audit_modes_skip_reference_cache(lays_image):
+    assert (
+        lookup_reference_parsed(
+            lays_image,
+            {"analysis_mode": "shelf_only", "vision_prompt": "CV-only prompt"},
+        )
+        is None
+    )
+    assert (
+        lookup_reference_parsed(
+            lays_image,
+            {"analysis_mode": "planogram_comparison", "skip_reference_cache": True},
+        )
+        is None
+    )
+    assert lookup_reference_parsed(lays_image, {"analysis_mode": "shelf_only"}) is None
+
+
 def test_run_make_scan_uses_lays_cache_for_user_upload(lays_image, monkeypatch):
     monkeypatch.setenv("MAKE_LOCAL_ANNOTATE", "false")
     from app.make_scan import run_make_scan_from_image

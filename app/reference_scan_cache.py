@@ -260,11 +260,24 @@ def lookup_reference_parsed(
         return None
 
     meta = metadata or {}
+    # AI Audit / authenticated scans send a CV vision_prompt — never short-circuit
+    # with landing demo inventory cache (that payload has no shelf_cv JSON).
+    if meta.get("skip_reference_cache"):
+        return None
+    if str(meta.get("vision_prompt") or "").strip():
+        return None
+    analysis_mode = str(meta.get("analysis_mode") or "").strip().lower()
+    if analysis_mode in {
+        "shelf_only",
+        "planogram_comparison",
+        "no_planogram",
+        "with_planogram",
+        "image_only_shelf_analysis",
+    }:
+        return None
     if meta.get("user_upload"):
         if not meta.get("reference_sample_id"):
             return None
-    elif meta.get("skip_reference_cache"):
-        return None
 
     explicit_sample = meta.get("sample_id") or meta.get("reference_sample_id") or sample_id_from_url(
         image_url or meta.get("image_url")

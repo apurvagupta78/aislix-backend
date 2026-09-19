@@ -203,6 +203,7 @@ async def scan(request: Request):
             "vision_prompt": body.get("vision_prompt"),
             "focus_brand": body.get("focus_brand"),
             "expected_products": body.get("expected_products") or [],
+            "skip_reference_cache": body.get("skip_reference_cache"),
         }
 
         from app.scan_context import build_shelf_label, validate_scan_metadata
