@@ -50,6 +50,74 @@ def test_build_vision_user_message_injects_metadata():
     assert "chips" in message
 
 
+def test_build_vision_user_message_uses_custom_prompt():
+    custom = "You are Astra. Return planogram_comparison JSON only."
+    message = build_vision_user_message({"vision_prompt": custom, "category": "Snacks"})
+    assert message == custom
+    assert "Snacks" not in message
+
+
+def test_parse_make_response_astra_planogram():
+    from app.make_scan import parse_make_response
+
+    parsed = parse_make_response(
+        {
+            "mode": "planogram_comparison",
+            "operating_model": "supermarket",
+            "products": [
+                {
+                    "brand": "Lay's",
+                    "product_name": "Potato Chips",
+                    "variant": "Magic Masala",
+                    "expected_facings": 6,
+                    "actual_facings": 5,
+                    "confidence": 0.91,
+                }
+            ],
+            "summary": {
+                "total_planogram_rows": 1,
+                "products_matched": 1,
+                "overall_planogram_compliance_percent": 83.3,
+            },
+        },
+        metadata={"analysis_mode": "planogram_comparison"},
+    )
+    assert parsed["astra_planogram_analysis"] is not None
+    assert parsed["astra_mode"] == "planogram_comparison"
+    assert parsed["inventory"][0]["brand"] == "Lay's"
+    assert parsed["inventory"][0]["quantity"] == 5
+    assert "Planogram compliance audit complete." in (parsed["executive_summary"] or "")
+
+
+def test_parse_make_response_astra_shelf_only():
+    from app.make_scan import parse_make_response
+
+    parsed = parse_make_response(
+        {
+            "mode": "image_only_shelf_analysis",
+            "operating_model": "supermarket",
+            "products": [
+                {
+                    "brand": "Lay's",
+                    "product_name": "Potato Chips",
+                    "variant": "Magic Masala",
+                    "actual_facings": 4,
+                    "actual_visible_units": 8,
+                    "confidence": 0.88,
+                }
+            ],
+            "summary": {"products_identified": 1, "visible_facings": 4},
+            "visible_prices": [{"product_name": "Lay's Magic Masala", "price_inr": 20}],
+            "shelf_issues": [{"issue_type": "gap", "severity": "medium"}],
+        },
+        metadata={"analysis_mode": "shelf_only"},
+    )
+    assert parsed["astra_shelf_analysis"] is not None
+    assert parsed["astra_mode"] == "image_only_shelf_analysis"
+    assert parsed["inventory"][0]["quantity"] == 4
+    assert "Shelf analysis complete." in (parsed["executive_summary"] or "")
+
+
 @patch("app.recognizer.get_client")
 def test_call_openai_vision_success(mock_get_client, monkeypatch, tiny_image):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")

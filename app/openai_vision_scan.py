@@ -120,6 +120,10 @@ def load_shelf_audit_prompt() -> str:
 
 
 def build_vision_user_message(metadata: dict[str, Any]) -> str:
+    custom_prompt = (metadata.get("vision_prompt") or "").strip()
+    if custom_prompt:
+        return custom_prompt
+
     prompt = load_shelf_audit_prompt()
     metadata_json = json.dumps(build_scan_metadata_payload(metadata), ensure_ascii=False)
     if METADATA_PLACEHOLDER in prompt:
@@ -194,7 +198,7 @@ def call_openai_vision(
     if not output_text:
         raise OpenAIVisionScanError("Vision model returned an empty response.")
     try:
-        return parse_make_response(output_text)
+        return parse_make_response(output_text, metadata=metadata)
     except Exception as exc:
         raise OpenAIVisionScanError(f"Vision response was not valid JSON: {exc}") from exc
 

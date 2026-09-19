@@ -198,6 +198,10 @@ async def scan(request: Request):
             "planogram_version_id": body.get("planogram_version_id"),
             "primary_brand": body.get("primary_brand"),
             "customer_type": body.get("customer_type"),
+            "analysis_mode": body.get("analysis_mode"),
+            "vision_prompt": body.get("vision_prompt"),
+            "operating_model": body.get("operating_model"),
+            "focus_brand": body.get("focus_brand"),
         }
 
         from app.scan_context import build_shelf_label, validate_scan_metadata
@@ -530,6 +534,7 @@ async def landing_scan(request: Request):
         hash_ip,
         landing_metadata,
         landing_scan_response,
+        merge_landing_vision_metadata,
         parse_utm,
         resolve_sample_image,
         save_scan_failure,
@@ -639,6 +644,7 @@ async def landing_scan(request: Request):
         detected_sample_id=detected_sample_id,
         user_upload=is_user_upload,
     )
+    metadata = merge_landing_vision_metadata(metadata, payload)
 
     try:
         result = run_scan_from_image(image, metadata=metadata)

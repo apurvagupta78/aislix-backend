@@ -128,7 +128,10 @@ def finalize_make_scan(
     processing_ms: int,
 ) -> dict[str, Any]:
     if parsed.get("is_full"):
-        return _enrich_full_response(parsed["raw"], scan_id)
+        from app.astra_response import attach_astra_to_scan_result
+
+        result = _enrich_full_response(parsed["raw"], scan_id)
+        return attach_astra_to_scan_result(result, metadata=metadata, raw=parsed["raw"])
 
     scan_context = resolve_scan_context(metadata)
     raw = parsed["raw"]
@@ -472,7 +475,7 @@ def finalize_make_scan(
         )
     ).decode("utf-8")
 
-    return {
+    result = {
         "scan_id": scan_id,
         "model_version": MODEL_VERSION,
         "executive_summary": summary_text,
@@ -543,3 +546,7 @@ def finalize_make_scan(
             "shelf_mode": scan_context.get("shelf_mode"),
         },
     }
+
+    from app.astra_response import attach_astra_to_scan_result
+
+    return attach_astra_to_scan_result(result, metadata=metadata, raw=raw)

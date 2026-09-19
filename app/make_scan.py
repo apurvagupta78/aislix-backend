@@ -864,16 +864,35 @@ def _products_from_make_data(data: dict[str, Any]) -> list[dict[str, Any]] | Non
     return None
 
 
-def parse_make_response(raw: Any) -> dict[str, Any]:
+def parse_make_response(raw: Any, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
     """Normalize Make webhook JSON into a predictable internal shape."""
     data = _normalize_make_product_source(_unwrap_make_body(_coerce_json_object(raw)))
+
+    from app.astra_response import (
+        astra_executive_summary,
+        astra_product_rows,
+        astra_products_to_inventory_rows,
+        detect_astra_mode,
+        extract_astra_blocks,
+    )
+
+    astra_mode = detect_astra_mode(data, metadata)
+    astra_planogram, astra_shelf, _ = extract_astra_blocks(data, metadata)
 
     inventory = _products_from_make_data(data)
     if inventory is None and isinstance(data.get("inventory"), list):
         inventory = data["inventory"]
+    if inventory is None and astra_mode:
+        astra_rows = astra_product_rows(data, astra_mode)
+        if astra_rows:
+            inventory = astra_products_to_inventory_rows(astra_rows, mode=astra_mode)
 
     facings = data.get("facings") or data.get("classified") or data.get("products_detected")
     summary = data.get("executive_summary") or data.get("summary_text") or data.get("summary")
+    if not isinstance(summary, str) and astra_mode:
+        derived = astra_executive_summary(data, astra_mode)
+        if derived:
+            summary = derived
     annotated_image_base64 = (
         data.get("annotated_image_base64")
         or data.get("annotated_image")
@@ -911,6 +930,9 @@ def parse_make_response(raw: Any) -> dict[str, Any]:
         "recommended_actions": recommended_actions,
         "competitive_insights": competitive_insights,
         "retail_intelligence": retail_intelligence,
+        "astra_mode": astra_mode,
+        "astra_planogram_analysis": astra_planogram,
+        "astra_shelf_analysis": astra_shelf,
     }
 
 
@@ -952,7 +974,7 @@ def call_make_webhook(
     except ValueError:
         body = response.text
 
-    return parse_make_response(body)
+    return parse_make_response(body, metadata=metadata)
 
 
 def run_make_scan_from_image(
