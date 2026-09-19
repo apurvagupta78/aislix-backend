@@ -122,7 +122,9 @@ def load_shelf_audit_prompt() -> str:
 def build_vision_user_message(metadata: dict[str, Any]) -> str:
     from app.astra_vision import build_vision_prompt_text
 
-    custom_prompt = build_vision_prompt_text(metadata)
+    custom_prompt = (metadata.get("vision_prompt") or "").strip()
+    if not custom_prompt:
+        custom_prompt = build_vision_prompt_text(metadata)
     if custom_prompt:
         return custom_prompt
 
@@ -200,7 +202,7 @@ def call_openai_vision(
     if not output_text:
         raise OpenAIVisionScanError("Vision model returned an empty response.")
     try:
-        return parse_make_response(output_text)
+        return parse_make_response(output_text, metadata=metadata)
     except Exception as exc:
         raise OpenAIVisionScanError(f"Vision response was not valid JSON: {exc}") from exc
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -323,6 +324,49 @@ def sanitize_landing_inventory(inventory: list[dict[str, Any]]) -> list[dict[str
     return rows
 
 
+def merge_landing_vision_metadata(
+    metadata: dict[str, Any],
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply optional Astra vision fields from landing scan form/JSON payloads."""
+    out = dict(metadata)
+    for key in ("vision_prompt", "analysis_mode", "operating_model", "focus_brand", "customer_type"):
+        value = payload.get(key)
+        if value is None:
+            continue
+        if hasattr(value, "read"):
+            continue
+        text = str(value).strip()
+        if text:
+            out[key] = text
+
+    planogram_items = payload.get("planogram_items")
+    if isinstance(planogram_items, str) and planogram_items.strip():
+        try:
+            parsed = json.loads(planogram_items)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list) and parsed:
+            out["planogram_items"] = parsed
+            out["planogram_items_full"] = parsed
+    elif isinstance(planogram_items, list) and planogram_items:
+        out["planogram_items"] = planogram_items
+        out["planogram_items_full"] = planogram_items
+
+    audit_package = payload.get("audit_package")
+    if isinstance(audit_package, str) and audit_package.strip():
+        try:
+            parsed_pkg = json.loads(audit_package)
+        except json.JSONDecodeError:
+            parsed_pkg = None
+        if isinstance(parsed_pkg, dict):
+            out["audit_package"] = parsed_pkg
+    elif isinstance(audit_package, dict):
+        out["audit_package"] = audit_package
+
+    return out
+
+
 def landing_scan_response(
     full: dict[str, Any],
     session_token: str,
@@ -331,6 +375,7 @@ def landing_scan_response(
     scanned_at: str | None = None,
 ) -> dict[str, Any]:
     inventory = sanitize_landing_inventory(full.get("inventory") or [])
+    metrics = full.get("metrics") or full.get("summary") or {}
     return {
         "landing_session_id": session_token,
         "scan_id": full.get("scan_id"),
@@ -339,15 +384,16 @@ def landing_scan_response(
         "scan_mode": "audit_only" if not sample_id else "sample_with_planogram",
         "has_planogram": bool(sample_id),
         "sample_id": sample_id,
-        "metrics": full.get("metrics") or full.get("summary"),
+        "analysis_mode": full.get("analysis_mode") or metrics.get("analysis_mode"),
+        "metrics": metrics,
         "inventory": inventory,
         "products": full.get("products") or [],
         "brand_share": full.get("brand_share") or [],
         "top_brands": full.get("top_brands") or (full.get("brand_share") or [])[:10],
         "brand_share_all": full.get("brand_share_all") or [],
-        "brand_share_scope": full.get("brand_share_scope") or full.get("metrics", {}).get("brand_share_scope"),
+        "brand_share_scope": full.get("brand_share_scope") or metrics.get("brand_share_scope"),
         "brand_share_denominator": full.get("brand_share_denominator")
-        or full.get("metrics", {}).get("brand_share_denominator"),
+        or metrics.get("brand_share_denominator"),
         "compliance_alerts": full.get("compliance_alerts") or [],
         "subcategory_mismatches": full.get("subcategory_mismatches") or [],
         "recommendations": full.get("recommendations") or [],
@@ -355,6 +401,11 @@ def landing_scan_response(
         "executive_summary": full.get("executive_summary") or full.get("summary_text"),
         "role_summaries": full.get("role_summaries"),
         "retail_intelligence": full.get("retail_intelligence"),
+        "astra_planogram_analysis": full.get("astra_planogram_analysis") or metrics.get("astra_planogram_analysis"),
+        "astra_shelf_analysis": full.get("astra_shelf_analysis") or metrics.get("astra_shelf_analysis"),
+        "visible_prices": full.get("visible_prices") or [],
+        "visible_promotions": full.get("visible_promotions") or [],
+        "shelf_issues": full.get("shelf_issues") or [],
         "annotated_image_base64": full.get("annotated_image_base64"),
         "annotated_image_mime": full.get("annotated_image_mime", "image/jpeg"),
         "annotated_image_width": full.get("annotated_image_width"),

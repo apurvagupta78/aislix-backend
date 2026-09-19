@@ -34,6 +34,7 @@ from app.report_generator import (
     generate_csv_bytes,
     generate_pdf_bytes,
 )
+from app.astra_cv_validate import is_shelf_cv_payload
 from app.scan_context import resolve_scan_context
 from app.subcategory_compliance import analyze_subcategory_compliance, apply_compliance_to_inventory
 
@@ -128,7 +129,10 @@ def finalize_make_scan(
     processing_ms: int,
 ) -> dict[str, Any]:
     if parsed.get("is_full"):
-        return _enrich_full_response(parsed["raw"], scan_id)
+        from app.astra_response import attach_astra_to_scan_result
+
+        result = _enrich_full_response(parsed["raw"], scan_id)
+        return attach_astra_to_scan_result(result, metadata=metadata, raw=parsed["raw"])
 
     scan_context = resolve_scan_context(metadata)
     raw = parsed["raw"]
@@ -376,8 +380,33 @@ def finalize_make_scan(
         retail_intelligence["role_summaries"] = role_summaries
         metrics["role_summaries"] = role_summaries
     metrics["retail_intelligence"] = retail_intelligence
-    summary_text = parsed.get("executive_summary") or raw.get("summary_text") or executive_summary(
-        metrics, compliance_alerts=compliance_alerts
+    shelf_cv_pipeline = None
+    if is_shelf_cv_payload(raw):
+        from app.luna_vision_scan import luna_required, run_luna_secondary_scan
+        from app.shelf_pipeline import run_shelf_cv_pipeline
+
+        luna_analysis = run_luna_secondary_scan(raw, metadata) if luna_required(metadata) else None
+        shelf_cv_pipeline = run_shelf_cv_pipeline(
+            raw,
+            metadata,
+            luna_analysis=luna_analysis,
+            legacy_planogram_compliance=planogram_compliance if isinstance(planogram_compliance, dict) else None,
+        )
+        if shelf_cv_pipeline:
+            for key, value in shelf_cv_pipeline.items():
+                if key.startswith("executive_summary"):
+                    continue
+                metrics[key] = value
+            if shelf_cv_pipeline.get("calculated_metrics", {}).get("planogram_compliance"):
+                plano_metric = shelf_cv_pipeline["calculated_metrics"]["planogram_compliance"]
+                if isinstance(plano_metric, dict) and plano_metric.get("value") is not None:
+                    metrics["planogram_compliance_percent"] = plano_metric.get("value")
+
+    summary_text = (
+        (shelf_cv_pipeline or {}).get("executive_summary")
+        or parsed.get("executive_summary")
+        or raw.get("summary_text")
+        or (None if is_shelf_cv_payload(raw) else executive_summary(metrics, compliance_alerts=compliance_alerts))
     )
 
     export_facings = metadata.get("export_facings") or os.getenv(
@@ -472,7 +501,7 @@ def finalize_make_scan(
         )
     ).decode("utf-8")
 
-    return {
+    result = {
         "scan_id": scan_id,
         "model_version": MODEL_VERSION,
         "executive_summary": summary_text,
@@ -543,3 +572,7 @@ def finalize_make_scan(
             "shelf_mode": scan_context.get("shelf_mode"),
         },
     }
+
+    from app.astra_response import attach_astra_to_scan_result
+
+    return attach_astra_to_scan_result(result, metadata=metadata, raw=raw)
