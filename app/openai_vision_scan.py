@@ -120,6 +120,12 @@ def load_shelf_audit_prompt() -> str:
 
 
 def build_vision_user_message(metadata: dict[str, Any]) -> str:
+    from app.astra_vision import build_vision_prompt_text
+
+    custom_prompt = build_vision_prompt_text(metadata)
+    if custom_prompt:
+        return custom_prompt
+
     prompt = load_shelf_audit_prompt()
     metadata_json = json.dumps(build_scan_metadata_payload(metadata), ensure_ascii=False)
     if METADATA_PLACEHOLDER in prompt:
@@ -226,9 +232,12 @@ def run_openai_vision_scan_from_image(
     scan_id = scan_id or uuid.uuid4().hex[:8]
     metadata = enrich_reference_sample_metadata(image, metadata or {}, image_url=image_url)
 
+    from app.astra_vision import patch_parsed_for_astra_comparison
+
     parsed = lookup_reference_parsed(image, metadata, image_url=image_url)
     if parsed is None:
         parsed = call_openai_vision(scan_id=scan_id, image=image, metadata=metadata)
+    parsed, astra_key, astra_block = patch_parsed_for_astra_comparison(parsed, metadata)
     processing_ms = int((time.time() - started) * 1000)
     result = finalize_make_scan(
         image,
@@ -237,6 +246,8 @@ def run_openai_vision_scan_from_image(
         parsed=parsed,
         processing_ms=processing_ms,
     )
+    if astra_key and astra_block:
+        result[astra_key] = astra_block
     if parsed.get("reference_cache"):
         result["reference_cache"] = parsed["reference_cache"]
     return _apply_openai_model_labels(result)

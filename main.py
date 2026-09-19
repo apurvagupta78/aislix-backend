@@ -198,6 +198,10 @@ async def scan(request: Request):
             "planogram_version_id": body.get("planogram_version_id"),
             "primary_brand": body.get("primary_brand"),
             "customer_type": body.get("customer_type"),
+            "operating_model": body.get("operating_model"),
+            "analysis_mode": body.get("analysis_mode"),
+            "vision_prompt": body.get("vision_prompt"),
+            "expected_products": body.get("expected_products") or [],
         }
 
         from app.scan_context import build_shelf_label, validate_scan_metadata
@@ -439,6 +443,40 @@ def _form_field_str(form: dict, key: str) -> str | None:
     return text or None
 
 
+def _payload_field(form: dict, key: str):
+    val = form.get(key)
+    if val is None:
+        return None
+    if isinstance(val, (list, dict)):
+        return val
+    if hasattr(val, "read"):
+        return None
+    text = str(val).strip()
+    if not text:
+        return None
+    if text.startswith("[") or text.startswith("{"):
+        import json
+
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return text
+    return text
+
+
+def _merge_astra_payload(metadata: dict, payload: dict) -> dict:
+    merged = dict(metadata)
+    for key in ("vision_prompt", "analysis_mode", "operating_model", "customer_type"):
+        value = _payload_field(payload, key)
+        if value:
+            merged[key] = value
+    for key in ("planogram_items", "expected_products"):
+        value = _payload_field(payload, key)
+        if isinstance(value, list) and value:
+            merged[key] = value
+    return merged
+
+
 async def _parse_landing_scan_payload(request: Request) -> dict:
     content_type = (request.headers.get("content-type") or "").lower()
     if "application/json" in content_type:
@@ -639,6 +677,7 @@ async def landing_scan(request: Request):
         detected_sample_id=detected_sample_id,
         user_upload=is_user_upload,
     )
+    metadata = _merge_astra_payload(metadata, payload)
 
     try:
         result = run_scan_from_image(image, metadata=metadata)
