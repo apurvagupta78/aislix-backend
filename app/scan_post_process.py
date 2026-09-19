@@ -382,25 +382,33 @@ def finalize_make_scan(
     metrics["retail_intelligence"] = retail_intelligence
     shelf_cv_pipeline = None
     if is_shelf_cv_payload(raw):
-        from app.luna_vision_scan import luna_required, run_luna_secondary_scan
-        from app.shelf_pipeline import run_shelf_cv_pipeline
+        try:
+            from app.luna_vision_scan import luna_required, run_luna_secondary_scan
+            from app.shelf_pipeline import run_shelf_cv_pipeline
 
-        luna_analysis = run_luna_secondary_scan(raw, metadata) if luna_required(metadata) else None
-        shelf_cv_pipeline = run_shelf_cv_pipeline(
-            raw,
-            metadata,
-            luna_analysis=luna_analysis,
-            legacy_planogram_compliance=planogram_compliance if isinstance(planogram_compliance, dict) else None,
-        )
-        if shelf_cv_pipeline:
-            for key, value in shelf_cv_pipeline.items():
-                if key.startswith("executive_summary"):
-                    continue
-                metrics[key] = value
-            if shelf_cv_pipeline.get("calculated_metrics", {}).get("planogram_compliance"):
-                plano_metric = shelf_cv_pipeline["calculated_metrics"]["planogram_compliance"]
-                if isinstance(plano_metric, dict) and plano_metric.get("value") is not None:
-                    metrics["planogram_compliance_percent"] = plano_metric.get("value")
+            luna_analysis = run_luna_secondary_scan(raw, metadata) if luna_required(metadata) else None
+            shelf_cv_pipeline = run_shelf_cv_pipeline(
+                raw,
+                metadata,
+                luna_analysis=luna_analysis,
+                legacy_planogram_compliance=planogram_compliance if isinstance(planogram_compliance, dict) else None,
+            )
+            if shelf_cv_pipeline:
+                for key, value in shelf_cv_pipeline.items():
+                    if key.startswith("executive_summary"):
+                        continue
+                    metrics[key] = value
+                if shelf_cv_pipeline.get("calculated_metrics", {}).get("planogram_compliance"):
+                    plano_metric = shelf_cv_pipeline["calculated_metrics"]["planogram_compliance"]
+                    if isinstance(plano_metric, dict) and plano_metric.get("value") is not None:
+                        metrics["planogram_compliance_percent"] = plano_metric.get("value")
+        except Exception as exc:
+            # Never fail the whole scan because deterministic calc/summary failed —
+            # products/inventory from Astra must still persist for every customer scan.
+            print(f"shelf_cv_pipeline failed for scan {scan_id}: {exc!r}")
+            metrics["shelf_cv_pipeline_error"] = str(exc)[:500]
+            metrics["calc_engine_version"] = metrics.get("calc_engine_version") or "shelf_calc_v1_partial"
+            shelf_cv_pipeline = None
 
     summary_text = (
         (shelf_cv_pipeline or {}).get("executive_summary")

@@ -184,14 +184,36 @@ def call_openai_vision(
         f"OpenAI vision scan {scan_id}: starting model={vision_model()} effort={effort or 'none'} "
         f"detail={detail} timeout={int(timeout)}s image={image.shape[1]}x{image.shape[0]}"
     )
-    try:
-        response = get_client().responses.create(**request_kwargs, timeout=timeout)
-    except APITimeoutError as exc:
-        raise OpenAIVisionScanError(f"Vision scan timed out after {int(timeout)}s.") from exc
-    except OpenAIError as exc:
-        raise OpenAIVisionScanError(f"Vision scan request failed: {exc}") from exc
-    except Exception as exc:
-        raise OpenAIVisionScanError(f"Vision scan request failed: {exc}") from exc
+    last_exc: Exception | None = None
+    response = None
+    for attempt in range(2):
+        try:
+            response = get_client().responses.create(**request_kwargs, timeout=timeout)
+            last_exc = None
+            break
+        except APITimeoutError as exc:
+            raise OpenAIVisionScanError(f"Vision scan timed out after {int(timeout)}s.") from exc
+        except OpenAIError as exc:
+            last_exc = exc
+            msg = str(exc).lower()
+            retryable = any(
+                token in msg
+                for token in ("timeout", "temporar", "overloaded", "rate limit", "429", "500", "502", "503", "504")
+            )
+            if attempt == 0 and retryable:
+                print(f"OpenAI vision scan {scan_id}: retrying after transient error: {exc!r}")
+                time.sleep(1.5)
+                continue
+            raise OpenAIVisionScanError(f"Vision scan request failed: {exc}") from exc
+        except Exception as exc:
+            last_exc = exc
+            if attempt == 0:
+                print(f"OpenAI vision scan {scan_id}: retrying after unexpected error: {exc!r}")
+                time.sleep(1.5)
+                continue
+            raise OpenAIVisionScanError(f"Vision scan request failed: {exc}") from exc
+    if response is None:
+        raise OpenAIVisionScanError(f"Vision scan request failed: {last_exc}")
     elapsed = int((time.time() - started) * 1000)
     print(
         f"OpenAI vision scan {scan_id}: model={vision_model()} effort={effort or 'none'} "

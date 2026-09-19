@@ -213,24 +213,29 @@ def attach_astra_to_scan_result(
         if isinstance(metrics, dict) and metrics.get("calc_engine_version"):
             return result
 
-        from app.luna_vision_scan import luna_required, run_luna_secondary_scan
-        from app.shelf_pipeline import run_shelf_cv_pipeline
+        try:
+            from app.luna_vision_scan import luna_required, run_luna_secondary_scan
+            from app.shelf_pipeline import run_shelf_cv_pipeline
 
-        luna_analysis = run_luna_secondary_scan(raw, metadata) if luna_required(metadata) else None
-        legacy_plano = result.get("planogram_compliance")
-        if not isinstance(legacy_plano, dict):
-            metrics = result.get("metrics")
-            if isinstance(metrics, dict) and isinstance(metrics.get("planogram_compliance"), dict):
-                legacy_plano = metrics["planogram_compliance"]
+            luna_analysis = run_luna_secondary_scan(raw, metadata) if luna_required(metadata) else None
+            legacy_plano = result.get("planogram_compliance")
+            if not isinstance(legacy_plano, dict):
+                if isinstance(metrics, dict) and isinstance(metrics.get("planogram_compliance"), dict):
+                    legacy_plano = metrics["planogram_compliance"]
 
-        pipeline = run_shelf_cv_pipeline(
-            raw,
-            metadata,
-            luna_analysis=luna_analysis,
-            legacy_planogram_compliance=legacy_plano if isinstance(legacy_plano, dict) else None,
-        )
-        if pipeline:
-            _merge_shelf_pipeline(result, pipeline)
+            pipeline = run_shelf_cv_pipeline(
+                raw,
+                metadata,
+                luna_analysis=luna_analysis,
+                legacy_planogram_compliance=legacy_plano if isinstance(legacy_plano, dict) else None,
+            )
+            if pipeline:
+                _merge_shelf_pipeline(result, pipeline)
+        except Exception as exc:
+            print(f"attach_astra shelf_cv pipeline failed: {exc!r}")
+            metrics = result.setdefault("metrics", {})
+            if isinstance(metrics, dict):
+                metrics["shelf_cv_pipeline_error"] = str(exc)[:500]
         return result
 
     if plano:
