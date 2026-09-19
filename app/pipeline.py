@@ -556,20 +556,25 @@ def run_scan_from_image(
             sub_category=scan_context.get("sub_category") or metadata.get("sub_category"),
             customer_type=customer_type,
         )
-        pdf_b64 = generate_pdf_bytes(
-            scan_id=scan_id,
-            metrics=metrics,
-            inventory=inventory,
-            shares=shares,
-            recommendations=recommendations,
-            alerts=alerts,
-            compliance_alerts=compliance_alerts,
-            subcategory_mismatches=subcategory_mismatches,
-            executive_summary=summary_text,
-            logo_path=LOGO_PATH if LOGO_PATH.exists() else None,
-            annotated_jpeg=annotated_jpeg,
-            report_context=report_ctx,
-        )
+        try:
+            pdf_b64 = generate_pdf_bytes(
+                scan_id=scan_id,
+                metrics=metrics,
+                inventory=inventory,
+                shares=shares,
+                recommendations=recommendations,
+                alerts=alerts,
+                compliance_alerts=compliance_alerts,
+                subcategory_mismatches=subcategory_mismatches,
+                executive_summary=summary_text,
+                logo_path=LOGO_PATH if LOGO_PATH.exists() else None,
+                annotated_jpeg=annotated_jpeg,
+                report_context=report_ctx,
+            )
+        except Exception as exc:
+            print(f"PDF generation failed for scan {scan_id}: {exc!r}")
+            metrics["pdf_generation_error"] = str(exc)[:500]
+            pdf_b64 = None
         csv_b64 = base64.b64encode(
             generate_csv_bytes(
                 inventory,

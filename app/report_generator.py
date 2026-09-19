@@ -424,7 +424,7 @@ def _kpi_export_rows(metrics: dict) -> list[list]:
     return rows
 
 
-def _section1_rows(ctx: dict, executive_summary: str | None) -> list[list]:
+def _section1_rows(ctx: dict) -> list[list]:
     facility = (ctx.get("customer_type") or "retail").replace("_", " ").title()
     return [
         ["Field", "Value"],
@@ -433,8 +433,31 @@ def _section1_rows(ctx: dict, executive_summary: str | None) -> list[list]:
         ["Location", _na(ctx.get("location"))],
         ["Category / sub-category", _na(f"{ctx.get('category') or ''} / {ctx.get('sub_category') or ''}".strip(" /"))],
         ["Analysis boundary", _na(ctx.get("analysis_boundary"))],
-        ["Executive summary", _na(executive_summary)],
     ]
+
+
+def _append_executive_summary(story: list, styles, executive_summary: str | None) -> None:
+    """Render executive summary as flowable Paragraphs — never inside a Table cell.
+
+    ReportLab cannot split a single Table cell across pages; long Astra/Aislix
+    summaries previously raised LayoutError and failed the entire scan.
+    """
+    text = _na(executive_summary).strip()
+    if not text or text == "N/A":
+        return
+    from xml.sax.saxutils import escape
+
+    # Soft cap keeps PDFs readable; full summary remains in the API/UI payload.
+    if len(text) > 3500:
+        text = text[:3500].rstrip() + "…"
+    story.append(Paragraph("<b>Executive summary</b>", styles["Heading3"]))
+    # Chunk so no single Paragraph exceeds roughly one page of body text.
+    chunk_size = 1200
+    for start in range(0, len(text), chunk_size):
+        chunk = text[start : start + chunk_size]
+        story.append(Paragraph(escape(chunk).replace("\n", "<br/>"), styles["Normal"]))
+        story.append(Spacer(1, 0.08 * inch))
+    story.append(Spacer(1, 0.1 * inch))
 
 
 def _image_quality_score(iq: dict) -> str:
@@ -635,7 +658,14 @@ def generate_csv_bytes(
         f"# Analysis date,{now}",
         f"# Spec version,{REPORT_SPEC_VERSION}",
     ]
-    lines.extend(_csv_section("Section 1 — Purpose scope and business context", _section1_rows(ctx, executive_summary)))
+    lines.extend(_csv_section("Section 1 — Purpose scope and business context", _section1_rows(ctx)))
+    if executive_summary:
+        lines.extend(
+            _csv_section(
+                "Executive summary",
+                [["Executive summary"], [_na(executive_summary)]],
+            )
+        )
     lines.extend(_csv_section("Section 2 — Inputs and analysis method", _section2_rows(ctx, metrics)))
     lines.extend(_csv_section("Section 3 — Shelf location and reference fields", _section3_rows(ctx, metrics)))
     lines.extend(_csv_section("Section 4 — Product and observation fields", _inventory_observation_rows(inventory)))
@@ -798,9 +828,10 @@ def generate_pdf_bytes(
         story,
         styles,
         "Section 1 — Purpose, scope and business context",
-        _section1_rows(ctx, executive_summary),
+        _section1_rows(ctx),
         [1.6 * inch, 3.4 * inch],
     )
+    _append_executive_summary(story, styles, executive_summary)
     _append_pdf_section(
         story,
         styles,
