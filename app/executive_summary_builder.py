@@ -13,12 +13,14 @@ def _metric_value(metrics: dict[str, Any], key: str) -> tuple[Any, str]:
     return block, "CALCULATED" if block is not None else "UNAVAILABLE"
 
 
-def _format_metric(metrics: dict[str, Any], key: str, suffix: str = "") -> str:
+def _format_metric(metrics: dict[str, Any], key: str, suffix: str = "", *, na_label: str | None = None) -> str:
     value, status = _metric_value(metrics, key)
     if status == "COUNT_MISMATCH":
         return "Visual count verification pending review."
-    if status in {"UNAVAILABLE", "UNVERIFIABLE", "NOT_APPLICABLE"} or value is None:
-        return "Data unavailable"
+    if status == "NOT_APPLICABLE":
+        return na_label or "Not applicable"
+    if status in {"UNAVAILABLE", "UNVERIFIABLE"} or value is None:
+        return na_label or "Data unavailable"
     return f"{value}{suffix}"
 
 
@@ -44,7 +46,8 @@ def build_executive_summary(
     sub_category = metadata.get("sub_category") or "General"
     operating_model = astra_cv.get("operating_model") or metadata.get("operating_model") or "Not supplied"
     assignment = metadata.get("assignment_name") or metadata.get("audit_name") or "Ad hoc shelf audit"
-    mode_display = "Planogram comparison" if analysis_mode == "planogram_comparison" else "Shelf-only"
+    shelf_only = analysis_mode != "planogram_comparison"
+    mode_display = "Planogram comparison" if not shelf_only else "Shelf-only"
 
     section1 = "\n".join(
         [
@@ -60,7 +63,7 @@ def build_executive_summary(
     plano_val, plano_status = _metric_value(calculated_metrics, "planogram_compliance")
     if plano_status == "CALCULATED" and plano_val is not None:
         bullets.append(f"Planogram compliance: {plano_val}% (check-based).")
-    elif analysis_mode == "planogram_comparison":
+    elif not shelf_only:
         bullets.append("Planogram compliance: Data unavailable")
     risk = execution_risk or {}
     if risk.get("severity") and risk.get("severity") != "NONE":
@@ -74,11 +77,17 @@ def build_executive_summary(
         f"Brands identified: {_format_metric(calculated_metrics, 'brands_identified')}",
         f"Total actual facings: {_format_metric(calculated_metrics, 'total_actual_facings')}",
         f"Total actual visible units: {_format_metric(calculated_metrics, 'total_actual_visible_units')}",
-        f"Overall facing compliance: {_format_metric(calculated_metrics, 'overall_facing_compliance', '%')}",
     ]
+    if shelf_only:
+        section3_lines.append("Overall facing compliance: Not applicable (shelf-only — no expected facings).")
+        section3_lines.append("Planogram compliance: Not applicable (shelf-only).")
+    else:
+        section3_lines.append(
+            f"Overall facing compliance: {_format_metric(calculated_metrics, 'overall_facing_compliance', '%')}"
+        )
     section3 = "\n".join(section3_lines)
 
-    if analysis_mode != "planogram_comparison":
+    if shelf_only:
         section4 = "Not applicable — no planogram expected state."
     else:
         sku_match = _format_metric(calculated_metrics, "planogram_sku_match_percent", "%")
@@ -94,6 +103,12 @@ def build_executive_summary(
     for row in rows[:5]:
         if not isinstance(row, dict):
             continue
+        if shelf_only:
+            section5_lines.append(
+                f"{row.get('brand')} {row.get('product_name')} {row.get('variant') or ''}: "
+                f"facings {row.get('actual_facings')}, units {row.get('actual_visible_units')}"
+            )
+            continue
         fc = row.get("facing_compliance")
         fc_val = fc.get("value") if isinstance(fc, dict) else None
         fc_status = fc.get("status") if isinstance(fc, dict) else "UNAVAILABLE"
@@ -106,16 +121,29 @@ def build_executive_summary(
             f"{row.get('brand')} {row.get('product_name')} {row.get('variant') or ''}: "
             f"facings {row.get('actual_facings')}/{row.get('expected_facings')}, compliance {compliance_text}"
         )
-    section5 = "\n".join(section5_lines) if section5_lines else "Data unavailable"
+    section5 = "\n".join(section5_lines) if section5_lines else "No product rows available."
 
-    section6 = "Brand share metrics available in calculated analysis." if calculated_metrics else "Data unavailable"
+    brand_rows = (aislix_analysis or {}).get("brand_analysis") or []
+    brand_lines: list[str] = []
+    for brand_row in brand_rows[:8]:
+        if not isinstance(brand_row, dict):
+            continue
+        share = brand_row.get("share")
+        share_val = share.get("value") if isinstance(share, dict) else brand_row.get("share_of_facings_percent")
+        facings = brand_row.get("actual_facings") or brand_row.get("facings")
+        brand_lines.append(f"{brand_row.get('brand')}: {facings} facings · share {share_val}%")
+    section6 = (
+        "\n".join(brand_lines)
+        if brand_lines
+        else ("Brand share: see calculated brand analysis." if calculated_metrics else "Brand share unavailable.")
+    )
 
     if luna_analysis:
         prices = luna_analysis.get("visible_prices") or []
         promos = luna_analysis.get("promotions") or []
         section7 = f"Price observations: {len(prices)} · Promotions: {len(promos)}"
     else:
-        section7 = "Price and promotion intelligence: Data unavailable."
+        section7 = "Price and promotion intelligence: Not assessed (secondary vision not enabled)."
 
     shelf_issues = (luna_analysis or {}).get("shelf_issues") or []
     section8 = (
