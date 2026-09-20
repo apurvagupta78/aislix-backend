@@ -325,6 +325,217 @@ def _audit_kpi_pdf_rows(metrics: dict) -> list[list]:
     return rows
 
 
+def _metric_value_display(block: dict | None) -> str:
+    if not isinstance(block, dict):
+        return "—"
+    status = str(block.get("status") or "")
+    if status == "COUNT_MISMATCH":
+        return "COUNT VERIFICATION PENDING"
+    if status in {"UNAVAILABLE", "UNVERIFIABLE", "NOT_APPLICABLE"}:
+        return status.replace("_", " ")
+    value = block.get("value")
+    if value is None:
+        return "—"
+    unit = str(block.get("unit") or "")
+    if unit == "percent" or "compliance" in str(block.get("metric_id") or "").lower():
+        try:
+            return f"{round(float(value))}%"
+        except (TypeError, ValueError):
+            return str(value)
+    return str(value)
+
+
+def _aislix_full_result_sections(metrics: dict) -> list[tuple[str, list[list], list[float] | None]]:
+    """Build PDF tables that mirror the full AI audit result (not five-card KPIs)."""
+    sections: list[tuple[str, list[list], list[float] | None]] = []
+    calc = metrics.get("calculated_metrics") or {}
+    if isinstance(calc, dict) and calc:
+        rows = [["Metric", "Value", "Status"]]
+        for key, block in calc.items():
+            if not isinstance(block, dict):
+                continue
+            rows.append(
+                [
+                    _ascii_label(str(block.get("metric_id") or key)),
+                    _metric_value_display(block),
+                    _ascii_label(str(block.get("status") or "")),
+                ]
+            )
+        if len(rows) > 1:
+            sections.append(("Calculated metrics (Aislix)", rows, [2.4 * inch, 1.6 * inch, 1.4 * inch]))
+
+    plano = metrics.get("aislix_planogram_analysis") or {}
+    if isinstance(plano, dict) and plano:
+        products = plano.get("products") or []
+        if isinstance(products, list) and products:
+            rows = [["Brand", "Product", "Exp", "Act", "Status"]]
+            for row in products[:40]:
+                if not isinstance(row, dict):
+                    continue
+                act = row.get("actual_facings")
+                rows.append(
+                    [
+                        _ascii_label(str(row.get("brand") or ""))[:18],
+                        _ascii_label(str(row.get("product_name") or ""))[:22],
+                        _na(row.get("expected_facings")),
+                        "—" if act is None else _na(act),
+                        _ascii_label(str(row.get("overall_status") or row.get("match_status") or "")),
+                    ]
+                )
+            sections.append(
+                ("Planogram product comparison", rows, [1.1 * inch, 1.4 * inch, 0.55 * inch, 0.55 * inch, 1.0 * inch])
+            )
+
+        brands = plano.get("brand_analysis") or []
+        if isinstance(brands, list) and brands:
+            rows = [["Brand", "Exp share %", "Act share %", "Var pp", "Status"]]
+            for row in brands[:20]:
+                if not isinstance(row, dict):
+                    continue
+                rows.append(
+                    [
+                        _ascii_label(str(row.get("brand") or ""))[:22],
+                        _na(row.get("expected_share_percent")),
+                        _na(row.get("actual_share_percent")),
+                        _na(row.get("share_variance_pp")),
+                        _ascii_label(str(row.get("status") or "")),
+                    ]
+                )
+            sections.append(
+                ("Brand share vs plan", rows, [1.6 * inch, 0.9 * inch, 0.9 * inch, 0.7 * inch, 0.9 * inch])
+            )
+
+        categories = plano.get("category_analysis") or []
+        if isinstance(categories, list) and categories:
+            rows = [["Category", "Exp", "Act", "Compliance %"]]
+            for row in categories[:20]:
+                if not isinstance(row, dict):
+                    continue
+                act = row.get("actual_facings")
+                rows.append(
+                    [
+                        _ascii_label(str(row.get("category") or ""))[:24],
+                        _na(row.get("expected_facings")),
+                        "—" if act is None else _na(act),
+                        _na(row.get("compliance_percent")),
+                    ]
+                )
+            sections.append(
+                ("Category analysis", rows, [2.0 * inch, 0.7 * inch, 0.7 * inch, 1.0 * inch])
+            )
+
+        unplanned = plano.get("unplanned_products") or plano.get("observed_unplanned_products") or []
+        if isinstance(unplanned, list) and unplanned:
+            rows = [["Brand", "Product", "Facings", "Units"]]
+            for row in unplanned[:20]:
+                if not isinstance(row, dict):
+                    continue
+                rows.append(
+                    [
+                        _ascii_label(str(row.get("brand") or ""))[:18],
+                        _ascii_label(str(row.get("product_name") or ""))[:24],
+                        _na(row.get("actual_facings")),
+                        _na(row.get("actual_visible_units")),
+                    ]
+                )
+            sections.append(
+                ("Unplanned products on shelf", rows, [1.3 * inch, 1.8 * inch, 0.8 * inch, 0.8 * inch])
+            )
+
+    shelf = metrics.get("aislix_shelf_analysis") or {}
+    if isinstance(shelf, dict) and shelf and not plano:
+        products = shelf.get("products") or []
+        if isinstance(products, list) and products:
+            rows = [["Brand", "Product", "Facings", "Units", "Conf."]]
+            for row in products[:40]:
+                if not isinstance(row, dict):
+                    continue
+                rows.append(
+                    [
+                        _ascii_label(str(row.get("brand") or ""))[:18],
+                        _ascii_label(str(row.get("product_name") or ""))[:22],
+                        _na(row.get("actual_facings")),
+                        _na(row.get("actual_visible_units")),
+                        _na(row.get("confidence")),
+                    ]
+                )
+            sections.append(
+                ("Shelf products detected", rows, [1.2 * inch, 1.5 * inch, 0.7 * inch, 0.7 * inch, 0.6 * inch])
+            )
+        brands = shelf.get("brand_analysis") or []
+        if isinstance(brands, list) and brands:
+            rows = [["Brand", "Facings", "Share %"]]
+            for row in brands[:20]:
+                if not isinstance(row, dict):
+                    continue
+                share = row.get("share_of_facings_percent")
+                if share is None and isinstance(row.get("share"), dict):
+                    share = row["share"].get("value")
+                rows.append(
+                    [
+                        _ascii_label(str(row.get("brand") or ""))[:24],
+                        _na(row.get("facings") or row.get("actual_facings")),
+                        _na(share),
+                    ]
+                )
+            sections.append(("Brand facing share", rows, [2.4 * inch, 1.0 * inch, 1.0 * inch]))
+
+    risk = metrics.get("execution_risk") or {}
+    if isinstance(risk, dict) and (risk.get("rules_triggered") or risk.get("severity")):
+        rows = [["Severity", "Rule / reason"]]
+        rules = risk.get("rules_triggered") or []
+        if isinstance(rules, list) and rules:
+            for rule in rules[:12]:
+                if isinstance(rule, dict):
+                    rows.append(
+                        [
+                            _ascii_label(str(risk.get("severity") or "")),
+                            _ascii_label(str(rule.get("description") or rule.get("rule_id") or ""))[:60],
+                        ]
+                    )
+        else:
+            for reason in (risk.get("reasons") or [])[:8]:
+                rows.append([_ascii_label(str(risk.get("severity") or "")), _ascii_label(str(reason))[:60]])
+        if len(rows) > 1:
+            sections.append(("Execution risk", rows, [1.2 * inch, 4.0 * inch]))
+
+    luna = metrics.get("luna_secondary_analysis") or {}
+    if isinstance(luna, dict):
+        prices = luna.get("visible_prices") or metrics.get("visible_prices") or []
+        if isinstance(prices, list) and prices:
+            rows = [["Product", "Brand", "Price", "Type"]]
+            for row in prices[:20]:
+                if not isinstance(row, dict):
+                    continue
+                rows.append(
+                    [
+                        _ascii_label(str(row.get("product_name") or ""))[:22],
+                        _ascii_label(str(row.get("brand") or ""))[:14],
+                        _na(row.get("price")),
+                        _ascii_label(str(row.get("price_type") or "")),
+                    ]
+                )
+            sections.append(("Visible prices (Luna)", rows, [1.6 * inch, 1.1 * inch, 0.8 * inch, 1.0 * inch]))
+
+    validation = metrics.get("astra_cv_validation") or {}
+    if isinstance(validation, dict) and validation.get("count_verification_status") == "COUNT_MISMATCH":
+        sections.append(
+            (
+                "Count verification",
+                [
+                    ["Status", "Detail"],
+                    [
+                        "COUNT VERIFICATION PENDING",
+                        "Product-level vs summary counts disagree — aggregates not treated as valid.",
+                    ],
+                ],
+                [2.0 * inch, 3.2 * inch],
+            )
+        )
+
+    return sections
+
+
 def _price_exception_pdf_rows(metrics: dict) -> list[list]:
     intel = metrics.get("retail_intelligence") or {}
     pricing = intel.get("pricing") or {}
@@ -865,16 +1076,15 @@ def generate_pdf_bytes(
         [1.3 * inch, 0.7 * inch, 0.55 * inch, 0.55 * inch, 0.55 * inch, 0.55 * inch, 0.8 * inch],
     )
 
-    intel = metrics.get("retail_intelligence") or {}
-    dashboard = intel.get("audit_kpi_dashboard") or {}
-    if dashboard.get("primary_kpis"):
-        role_label = dashboard.get("role_label") or dashboard.get("role_id") or "Audit"
-        story.append(Paragraph(f"<b>Section 5a — {role_label} primary KPIs (five-card audit)</b>", styles["Heading2"]))
-        if dashboard.get("introduction"):
-            story.append(Paragraph(_ascii_label(str(dashboard["introduction"])), styles["Normal"]))
-        audit_rows = _audit_kpi_pdf_rows(metrics)
-        story.append(_styled_table(audit_rows, [1.45 * inch, 0.75 * inch, 0.65 * inch, 0.75 * inch, 0.55 * inch, 0.55 * inch]))
-        story.append(Spacer(1, 0.15 * inch))
+    # Full audit result sections (replaces former five-card / pass-PDF block).
+    for idx, (title, rows, widths) in enumerate(_aislix_full_result_sections(metrics), start=1):
+        _append_pdf_section(
+            story,
+            styles,
+            f"Section 5.{idx} — {title}",
+            [[str(c) for c in row] for row in rows],
+            widths,
+        )
 
     plano_exc = _planogram_exception_pdf_rows(metrics)
     if plano_exc:

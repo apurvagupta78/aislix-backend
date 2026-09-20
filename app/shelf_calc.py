@@ -473,10 +473,12 @@ def build_planogram_analysis(
     *,
     count_validation: dict[str, Any],
     sku_match_percent: float | None = None,
+    unplanned_products: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     enriched_rows = [build_planogram_row_metrics(row) for row in rows]
     planogram_compliance = calculate_planogram_compliance(enriched_rows)
     overall_facing = calculate_facing_compliance_aggregate(enriched_rows)
+    unplanned = [row for row in (unplanned_products or []) if isinstance(row, dict)]
 
     calculated_metrics = {
         "planogram_compliance": planogram_compliance.to_dict(),
@@ -499,9 +501,151 @@ def build_planogram_analysis(
             source="astra",
         ).to_dict()
 
+    brand_analysis = _planogram_brand_analysis(enriched_rows, unplanned)
+    category_analysis = _planogram_group_analysis(enriched_rows, unplanned, key="category")
+    subcategory_analysis = _planogram_group_analysis(enriched_rows, unplanned, key="subcategory")
+
     return {
         "mode": "planogram",
         "products": enriched_rows,
+        "unplanned_products": unplanned,
+        "brand_analysis": brand_analysis,
+        "category_analysis": category_analysis,
+        "subcategory_analysis": subcategory_analysis,
         "calculated_metrics": calculated_metrics,
         "count_validation": count_validation,
     }
+
+
+def _safe_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, dict):
+        # Nested metric_result dicts should not contribute to share sums.
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _planogram_brand_analysis(
+    rows: list[dict[str, Any]],
+    unplanned: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Shelf share = actual/totalActual (incl. unplanned); plan share = expected/totalExpected."""
+    expected_by: dict[str, int] = {}
+    actual_by: dict[str, int] = {}
+
+    for row in rows:
+        brand = normalize_brand(row.get("brand"))
+        if not brand:
+            continue
+        exp = _safe_int(row.get("expected_facings"))
+        act = _safe_int(row.get("actual_facings"))
+        if exp is not None and exp > 0:
+            expected_by[brand] = expected_by.get(brand, 0) + exp
+        if act is not None and act > 0:
+            actual_by[brand] = actual_by.get(brand, 0) + act
+
+    for row in unplanned:
+        brand = normalize_brand(row.get("brand"))
+        if not brand:
+            continue
+        act = _safe_int(row.get("actual_facings"))
+        if act is not None and act > 0:
+            actual_by[brand] = actual_by.get(brand, 0) + act
+
+    total_expected = sum(expected_by.values())
+    total_actual = sum(actual_by.values())
+    brands = sorted(set(expected_by) | set(actual_by))
+    out: list[dict[str, Any]] = []
+    for brand in brands:
+        exp = expected_by.get(brand, 0)
+        act = actual_by.get(brand, 0)
+        exp_share = calculate_brand_share(exp, total_expected if total_expected > 0 else None)
+        act_share = calculate_brand_share(act, total_actual if total_actual > 0 else None)
+        variance = calculate_brand_share_variance_pp(act_share.value, exp_share.value)
+        status = "OK"
+        if act_share.value is not None and exp_share.value is not None:
+            if act_share.value + 0.5 < exp_share.value:
+                status = "UNDER_SHARE"
+            elif act_share.value > exp_share.value + 0.5:
+                status = "OVER_SHARE"
+        out.append(
+            {
+                "brand": brand,
+                "expected_facings": exp,
+                "actual_facings": act,
+                "expected_share_percent": exp_share.value,
+                "actual_share_percent": act_share.value,
+                "share_variance_pp": variance.value,
+                "status": status,
+                "expected_share": exp_share.to_dict(),
+                "actual_share": act_share.to_dict(),
+                "share_variance": variance.to_dict(),
+            }
+        )
+    out.sort(key=lambda row: (-(row.get("actual_facings") or 0), str(row.get("brand") or "")))
+    return out
+
+
+def _planogram_group_analysis(
+    rows: list[dict[str, Any]],
+    unplanned: list[dict[str, Any]],
+    *,
+    key: str,
+) -> list[dict[str, Any]]:
+    expected_by: dict[str, int] = {}
+    actual_by: dict[str, int] = {}
+
+    def _label(row: dict[str, Any]) -> str:
+        if key == "subcategory":
+            raw = row.get("subcategory") or row.get("sub_category")
+        else:
+            raw = row.get(key)
+        text = str(raw or "").strip()
+        return text or "Unspecified"
+
+    for row in rows:
+        label = _label(row)
+        exp = _safe_int(row.get("expected_facings"))
+        act = _safe_int(row.get("actual_facings"))
+        if exp is not None and exp > 0:
+            expected_by[label] = expected_by.get(label, 0) + exp
+        if act is not None:
+            actual_by[label] = actual_by.get(label, 0) + max(act, 0)
+
+    for row in unplanned:
+        label = _label(row)
+        act = _safe_int(row.get("actual_facings"))
+        if act is not None and act > 0:
+            actual_by[label] = actual_by.get(label, 0) + act
+
+    total_expected = sum(expected_by.values())
+    total_actual = sum(actual_by.values())
+    labels = sorted(set(expected_by) | set(actual_by))
+    out: list[dict[str, Any]] = []
+    for label in labels:
+        exp = expected_by.get(label, 0)
+        act = actual_by.get(label, 0) if label in actual_by else None
+        exp_share = calculate_brand_share(
+            exp, total_expected if total_expected > 0 else None, metric_id=f"{key}_expected_share"
+        )
+        act_share = calculate_brand_share(
+            act or 0, total_actual if total_actual > 0 else None, metric_id=f"{key}_actual_share"
+        )
+        entry: dict[str, Any] = {
+            "expected_facings": exp,
+            "actual_facings": act,
+            "expected_share_percent": exp_share.value,
+            "actual_share_percent": act_share.value if act is not None else None,
+        }
+        if key == "category":
+            entry["category"] = label
+        else:
+            entry["subcategory"] = label
+        out.append(entry)
+    out.sort(key=lambda row: (-(row.get("actual_facings") or 0), str(row.get(key) or "")))
+    return out
+

@@ -28,8 +28,9 @@ def test_brand_only_unverifiable_product_matches_odol():
             "confidence": 0.86,
         }
     ]
-    rows = join_planogram_with_cv(planogram, cv)
+    rows, unplanned = join_planogram_with_cv(planogram, cv)
     assert len(rows) == 1
+    assert len(unplanned) == 0
     assert rows[0]["match_status"] == "BRAND_MATCHED"
     assert rows[0]["actual_facings"] == 5
     assert rows[0]["actual_visible_units"] == 5
@@ -57,9 +58,11 @@ def test_colgate_brand_only_does_not_cross_match_doctor():
             "actual_visible_units": 15,
         }
     ]
-    rows = join_planogram_with_cv(planogram, cv)
+    rows, unplanned = join_planogram_with_cv(planogram, cv)
     assert rows[0]["match_status"] in {"NOT_FOUND", "UNVERIFIABLE"}
     assert rows[0]["actual_facings"] is None
+    assert len(unplanned) == 1
+    assert unplanned[0]["actual_facings"] == 15
 
 
 def test_full_identity_still_matched():
@@ -84,9 +87,10 @@ def test_full_identity_still_matched():
             "actual_visible_units": 5,
         }
     ]
-    rows = join_planogram_with_cv(planogram, cv)
+    rows, unplanned = join_planogram_with_cv(planogram, cv)
     assert rows[0]["match_status"] == "MATCHED"
     assert rows[0]["actual_facings"] == 5
+    assert unplanned == []
 
 
 def test_placeholder_tokens_do_not_inflate_overlap():

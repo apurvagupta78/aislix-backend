@@ -51,11 +51,15 @@ def run_shelf_cv_pipeline(
 
     if analysis_mode == "planogram_comparison":
         planogram_items = metadata.get("planogram_items") or []
-        joined_rows = join_planogram_with_cv(planogram_items, products) if planogram_items else []
+        if planogram_items:
+            joined_rows, unplanned = join_planogram_with_cv(planogram_items, products)
+        else:
+            joined_rows, unplanned = [], []
         aislix_analysis = build_planogram_analysis(
             joined_rows,
             count_validation=count_validation,
             sku_match_percent=sku_match_percent,
+            unplanned_products=unplanned,
         )
         aislix_key = "aislix_planogram_analysis"
     else:

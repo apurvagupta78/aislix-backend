@@ -159,8 +159,8 @@ def _match_status_for_score(cv: dict[str, Any], score: float) -> str:
 def join_planogram_with_cv(
     planogram_items: list[dict[str, Any]],
     cv_products: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Build per-planogram-row joined records for shelf_calc."""
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build per-planogram-row joined records plus unmatched CV (unplanned) rows."""
     used_cv: set[int] = set()
     rows: list[dict[str, Any]] = []
 
@@ -249,4 +249,27 @@ def join_planogram_with_cv(
             }
         )
 
-    return rows
+    unplanned: list[dict[str, Any]] = []
+    for idx, cv in enumerate(cv_products):
+        if idx in used_cv:
+            continue
+        unplanned.append(
+            {
+                "brand": cv.get("brand"),
+                "product_name": cv.get("product_name") or cv.get("product"),
+                "variant": cv.get("variant"),
+                "sku": cv.get("sku"),
+                "category": cv.get("category"),
+                "subcategory": cv.get("subcategory") or cv.get("sub_category"),
+                "actual_facings": _int_or_none(cv.get("actual_facings")),
+                "actual_visible_units": _int_or_none(cv.get("actual_visible_units")),
+                "confidence": cv.get("confidence"),
+                "match_status": "UNPLANNED",
+                "source_actual": "astra",
+                "brand_status": cv.get("brand_status"),
+                "product_status": cv.get("product_status"),
+                "variant_status": cv.get("variant_status"),
+            }
+        )
+
+    return rows, unplanned
