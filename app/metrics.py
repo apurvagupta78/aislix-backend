@@ -864,7 +864,7 @@ def compute_financial_impact(
                 at_risk_skus += 1
 
     daily = round(oos_daily + at_risk_daily)
-    if daily <= 0 and oos_skus == 0 and at_risk_skus == 0:
+    if daily <= 0 and oos_skus == 0 and at_risk_skus == 0 and not used_planogram_pricing:
         return {
             "level": 1,
             "estimated_daily_lost_sales_inr": 0,
@@ -878,6 +878,23 @@ def compute_financial_impact(
             "confidence": "indicative",
             "source": "image_only",
             "estimate_status": "not_estimated",
+        }
+
+    if daily <= 0 and oos_skus == 0 and at_risk_skus == 0 and used_planogram_pricing:
+        return {
+            "level": 2,
+            "estimated_daily_lost_sales_inr": 0,
+            "estimated_weekly_lost_sales_inr": 0,
+            "estimated_monthly_lost_sales_inr": 0,
+            "oos_sku_count": 0,
+            "at_risk_sku_count": 0,
+            "methodology": (
+                "Planogram MRP and velocity are configured. No daily revenue-at-risk: "
+                "no OOS or shortfall SKUs on this scan. Inventory value is calculated separately from visible units × MRP."
+            ),
+            "confidence": "priced",
+            "source": "planogram",
+            "estimate_status": "estimated",
         }
 
     if not used_planogram_pricing and (oos_skus > 0 or at_risk_skus > 0):

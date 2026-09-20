@@ -406,6 +406,20 @@ def finalize_make_scan(
                     plano_metric = shelf_cv_pipeline["calculated_metrics"]["planogram_compliance"]
                     if isinstance(plano_metric, dict) and plano_metric.get("value") is not None:
                         metrics["planogram_compliance_percent"] = plano_metric.get("value")
+                from app.shelf_calc import enrich_financial_impact_with_inventory
+
+                inv = shelf_cv_pipeline.get("inventory_value")
+                if not isinstance(inv, dict):
+                    plano = shelf_cv_pipeline.get("aislix_planogram_analysis")
+                    if isinstance(plano, dict):
+                        inv = plano.get("inventory_value")
+                if isinstance(inv, dict) and inv.get("priced_sku_count"):
+                    prior = metrics.get("financial_impact")
+                    metrics["financial_impact"] = enrich_financial_impact_with_inventory(
+                        prior if isinstance(prior, dict) else {},
+                        inv,
+                    )
+                    metrics["inventory_value"] = inv
         except Exception as exc:
             # Never fail the whole scan because deterministic calc/summary failed —
             # products/inventory from Astra must still persist for every customer scan.

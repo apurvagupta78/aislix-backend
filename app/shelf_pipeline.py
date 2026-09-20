@@ -9,7 +9,12 @@ from app.cv_brand_canonicalize import canonicalize_shelf_cv_products
 from app.executive_summary_builder import build_executive_summary
 from app.execution_risk import evaluate_execution_risk
 from app.planogram_match import join_planogram_with_cv
-from app.shelf_calc import FORMULA_VERSION, build_planogram_analysis, build_shelf_only_analysis
+from app.shelf_calc import (
+    FORMULA_VERSION,
+    build_planogram_analysis,
+    build_shelf_only_analysis,
+    enrich_financial_impact_with_inventory,
+)
 
 CALC_ENGINE_VERSION = "shelf_calc_v1"
 
@@ -97,7 +102,7 @@ def run_shelf_cv_pipeline(
         corrective_actions=corrective_actions,
     )
 
-    return {
+    out: dict[str, Any] = {
         "analysis_mode": analysis_mode,
         "scan_complete": scan_complete,
         "scan_status": "needs_review" if not scan_complete else "complete",
@@ -111,3 +116,17 @@ def run_shelf_cv_pipeline(
         "luna_secondary_analysis": luna_analysis,
         **summary_payload,
     }
+
+    inventory_value = (
+        aislix_analysis.get("inventory_value")
+        if isinstance(aislix_analysis, dict)
+        else None
+    )
+    if isinstance(inventory_value, dict) and inventory_value.get("priced_sku_count"):
+        prior_fi = metadata.get("financial_impact")
+        if not isinstance(prior_fi, dict):
+            prior_fi = {}
+        out["financial_impact"] = enrich_financial_impact_with_inventory(prior_fi, inventory_value)
+        out["inventory_value"] = inventory_value
+
+    return out

@@ -517,7 +517,86 @@ def build_planogram_analysis(
         "subcategory_analysis": subcategory_analysis,
         "calculated_metrics": calculated_metrics,
         "count_validation": count_validation,
+        "inventory_value": compute_inventory_value_from_planogram_rows(enriched_rows),
     }
+
+
+def compute_inventory_value_from_planogram_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Visible / expected inventory ₹ from Astra counts × planogram MRP (Aislix calc)."""
+    visible_value = 0.0
+    expected_value = 0.0
+    gap_value = 0.0
+    priced_rows = 0
+    for row in rows:
+        mrp_raw = row.get("expected_mrp_inr") or row.get("mrp_inr")
+        if mrp_raw in (None, ""):
+            continue
+        try:
+            mrp = float(mrp_raw)
+        except (TypeError, ValueError):
+            continue
+        priced_rows += 1
+        actual_u = _safe_int(row.get("actual_visible_units"))
+        expected_u = _safe_int(row.get("expected_shelf_units"))
+        if actual_u is not None:
+            visible_value += actual_u * mrp
+        if expected_u is not None:
+            expected_value += expected_u * mrp
+        shortfall_block = row.get("visible_unit_shortfall")
+        shortfall: int | None = None
+        if isinstance(shortfall_block, dict) and shortfall_block.get("status") == "CALCULATED":
+            shortfall = _safe_int(shortfall_block.get("value"))
+        elif actual_u is not None and expected_u is not None:
+            shortfall = max(0, expected_u - actual_u)
+        if shortfall is not None:
+            gap_value += max(0, shortfall) * mrp
+
+    return {
+        "visible_inventory_value_inr": round(visible_value, 2) if priced_rows else None,
+        "expected_inventory_value_inr": round(expected_value, 2) if priced_rows else None,
+        "potential_inventory_value_gap_inr": round(gap_value, 2) if priced_rows else None,
+        "priced_sku_count": priced_rows,
+        "source": "aislix_calculation",
+        "formula": "visible_units × MRP; expected_units × MRP; shortfall × MRP",
+    }
+
+
+def enrich_financial_impact_with_inventory(
+    financial_impact: dict[str, Any] | None,
+    inventory_value: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Merge MRP inventory totals into financial_impact; fix false not_estimated when priced."""
+    base = dict(financial_impact or {})
+    inv = inventory_value or {}
+    priced = int(inv.get("priced_sku_count") or 0) > 0
+    if priced:
+        base["visible_inventory_value_inr"] = inv.get("visible_inventory_value_inr")
+        base["expected_inventory_value_inr"] = inv.get("expected_inventory_value_inr")
+        base["potential_inventory_value_gap_inr"] = inv.get("potential_inventory_value_gap_inr")
+        base["confidence"] = "priced"
+        base["source"] = "aislix_calculation"
+        if base.get("estimate_status") == "not_estimated" or not base.get("estimate_status"):
+            base["estimate_status"] = "estimated"
+        daily = float(base.get("estimated_daily_lost_sales_inr") or 0)
+        visible = inv.get("visible_inventory_value_inr")
+        expected = inv.get("expected_inventory_value_inr")
+        gap = inv.get("potential_inventory_value_gap_inr")
+        base["methodology"] = (
+            "Inventory value = visible units × planogram MRP; "
+            "expected value = expected shelf units × MRP; "
+            "potential value gap = unit shortfall × MRP. "
+            f"Visible ₹{visible if visible is not None else '—'}; "
+            f"expected ₹{expected if expected is not None else '—'}; "
+            f"gap ₹{gap if gap is not None else '—'}. "
+            + (
+                "No daily revenue-at-risk: all priced SKUs have sufficient visible units."
+                if daily <= 0
+                else "Daily/weekly value at risk uses avg daily sales × MRP for shortfalls."
+            )
+        )
+        if base.get("level", 1) < 2:
+            base["level"] = 2
+    return base
 
 
 def _safe_int(value: Any) -> int | None:
