@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.astra_cv_validate import is_shelf_cv_payload, verify_astra_count_consistency
+from app.cv_brand_canonicalize import canonicalize_shelf_cv_products
 from app.executive_summary_builder import build_executive_summary
 from app.execution_risk import evaluate_execution_risk
 from app.planogram_match import join_planogram_with_cv
@@ -38,6 +39,8 @@ def run_shelf_cv_pipeline(
         return None
 
     products = [row for row in (astra_payload.get("products") or []) if isinstance(row, dict)]
+    canonicalize_shelf_cv_products(products)
+    astra_payload["products"] = products
     count_validation = verify_astra_count_consistency(astra_payload)
     analysis_mode = normalize_api_analysis_mode(metadata, astra_payload)
     scan_complete = bool(count_validation.get("scan_complete"))

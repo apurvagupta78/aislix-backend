@@ -97,3 +97,16 @@ def test_shelf_only_products_identified_keeps_split_variant_rows():
     )
     assert analysis["calculated_metrics"]["products_identified"]["value"] == 3
     assert analysis["calculated_metrics"]["brands_identified"]["value"] == 1
+    assert analysis["calculated_metrics"]["variants_identified"]["value"] == 3
+
+
+def test_canonicalize_louis_chips_to_lays():
+    from app.cv_brand_canonicalize import canonicalize_shelf_cv_products
+
+    products = [
+        {"brand": "LOUIS", "product_name": "Chips", "variant": "Magic Masala"},
+        {"brand": "LOUIS", "product_name": "Chips", "variant": "UNVERIFIABLE"},
+    ]
+    canonicalize_shelf_cv_products(products)
+    assert products[0]["brand"] == "Lay's"
+    assert products[1]["brand"] == "Lay's"

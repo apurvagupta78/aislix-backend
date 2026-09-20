@@ -428,6 +428,18 @@ def build_shelf_only_analysis(
             value=len([b for b in brands if b]),
             unit="count",
         ).to_dict(),
+        "variants_identified": metric_result(
+            "variants_identified",
+            # Each identified product row is a distinct visual variant group on shelf.
+            value=len(
+                [
+                    p
+                    for p in products
+                    if str(p.get("product_status") or "IDENTIFIED").upper() != "UNVERIFIABLE"
+                ]
+            ),
+            unit="count",
+        ).to_dict(),
         "total_actual_facings": total_facings_metric.to_dict(),
         "total_actual_visible_units": (
             metric_result(
