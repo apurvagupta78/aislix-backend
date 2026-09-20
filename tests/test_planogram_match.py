@@ -302,3 +302,7 @@ def test_tangy_tomato_matches_spanish_tomato_tango_planogram():
     assert stt["source_actual"] == "astra"
     assert by_sku["lays-co"]["match_status"] == "MATCHED"
     assert by_sku["lays-co"]["actual_facings"] == 12
+    assert stt["actual_variant"] == "Tangy Tomato"
+    assert stt["actual_product_name"] == "Lay's Tangy Tomato Potato Chips"
+    assert stt["actual_brand"] == "Lay's"
+    assert stt["variant"] == "Spanish Tomato Tango"

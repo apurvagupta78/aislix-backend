@@ -10,6 +10,9 @@ from app.inventory import _normalize_brand_key
 from app.planogram_csv import build_match_key
 
 _MATCH_THRESHOLD = 0.72
+# Closest-planogram accept when brand is clear and name overlap is partial
+# (e.g. Astra "Tangy Tomato" vs planogram "Spanish Tomato Tango").
+_CLOSEST_MATCH_THRESHOLD = 0.58
 _BRAND_MATCH_THRESHOLD = 0.55
 _CHIPISH_PRODUCT = re.compile(r"\b(chips?|potato\s+chips?|crisps?|wafers?)\b", re.I)
 _PLACEHOLDER_TOKENS = frozenset(
@@ -213,6 +216,18 @@ def _score_cv_to_planogram(cv: dict[str, Any], item: dict[str, Any]) -> float:
             )
         ):
             brand_score = max(brand_score, 0.88)
+        # Closest-variant boost: shared flavor tokens (tomato, cream, masala, …)
+        # without requiring an exact alias map hit.
+        if not _cv_product_unverified(cv) and not _cv_variant_unverified(cv):
+            v_overlap = _token_overlap(
+                _normalize_variant_for_match(
+                    cv.get("variant"),
+                    cv.get("product_name") or cv.get("product"),
+                ),
+                _normalize_variant_for_match(item.get("variant"), item.get("product_name")),
+            )
+            if v_overlap >= 0.25:
+                brand_score = max(brand_score, round(0.55 + 0.45 * v_overlap, 3))
         exp_sub = _norm(item.get("sub_category") or item.get("subcategory") or "")
         cv_blob = _clean_identity_text(
             cv.get("product_name") or cv.get("product"),
@@ -247,18 +262,27 @@ def _float_or_none(value: Any) -> float | None:
 
 
 def _accept_threshold(cv: dict[str, Any]) -> float:
-    """Brand gate when product or variant is unverifiable; full match otherwise."""
+    """Brand gate when product or variant is unverifiable; closest match otherwise."""
     if not _cv_brand_identified(cv):
         return _MATCH_THRESHOLD
     if _cv_product_unverified(cv):
         return _BRAND_MATCH_THRESHOLD
     if _cv_variant_unverified(cv):
         return _BRAND_MATCH_THRESHOLD
-    return _MATCH_THRESHOLD
+    # Identified Astra rows may attach to the closest planogram SKU without
+    # requiring near-exact string equality.
+    return _CLOSEST_MATCH_THRESHOLD
 
 
 def _match_status_for_score(cv: dict[str, Any], score: float) -> str:
     if score >= _MATCH_THRESHOLD and not _cv_product_unverified(cv) and not _cv_variant_unverified(cv):
+        return "MATCHED"
+    if (
+        score >= _CLOSEST_MATCH_THRESHOLD
+        and _cv_brand_identified(cv)
+        and not _cv_product_unverified(cv)
+        and not _cv_variant_unverified(cv)
+    ):
         return "MATCHED"
     if score >= _BRAND_MATCH_THRESHOLD and _cv_brand_identified(cv):
         return "BRAND_MATCHED"
@@ -297,11 +321,17 @@ def _attach_cv(
     score: float,
     match_status: str,
 ) -> dict[str, Any]:
+    # Preserve Astra identity as-is — never overwrite expected planogram names.
+    actual_product = cv.get("product_name") or cv.get("product")
     return {
         **base,
         "actual_facings": _int_or_none(cv.get("actual_facings")),
         "actual_visible_units": _int_or_none(cv.get("actual_visible_units")),
         "actual_shelf_position": cv.get("shelf_position") or cv.get("actual_shelf_position"),
+        "actual_brand": cv.get("brand"),
+        "actual_product_name": actual_product,
+        "actual_variant": cv.get("variant"),
+        "actual_category": cv.get("category"),
         "match_status": match_status,
         "match_score": round(score, 3),
         "confidence": cv.get("confidence"),
@@ -361,6 +391,10 @@ def _residual_variant_unverified_attach(
                 "actual_facings",
                 "actual_visible_units",
                 "actual_shelf_position",
+                "actual_brand",
+                "actual_product_name",
+                "actual_variant",
+                "actual_category",
                 "match_status",
                 "match_score",
                 "confidence",
@@ -466,6 +500,10 @@ def join_planogram_with_cv(
                 "sku": cv.get("sku"),
                 "category": cv.get("category"),
                 "subcategory": cv.get("subcategory") or cv.get("sub_category"),
+                "actual_brand": cv.get("brand"),
+                "actual_product_name": cv.get("product_name") or cv.get("product"),
+                "actual_variant": cv.get("variant"),
+                "actual_category": cv.get("category"),
                 "actual_facings": _int_or_none(cv.get("actual_facings")),
                 "actual_visible_units": _int_or_none(cv.get("actual_visible_units")),
                 "confidence": cv.get("confidence"),
