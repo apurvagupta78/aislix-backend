@@ -233,10 +233,9 @@ def _row_checks(row: dict[str, Any]) -> tuple[int, int]:
     match_status = str(row.get("match_status") or "").upper()
     if match_status in {"NOT_FOUND", "UNVERIFIABLE"}:
         applicable += 1
-        if match_status == "NOT_FOUND":
-            pass
         return passed, applicable
 
+    # MATCHED and BRAND_MATCHED both count as present on shelf.
     applicable += 1
     passed += 1
 

@@ -5,13 +5,70 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.inventory import _normalize_brand_key
 from app.planogram_csv import build_match_key
 
 _MATCH_THRESHOLD = 0.72
+_BRAND_MATCH_THRESHOLD = 0.55
+_PLACEHOLDER_TOKENS = frozenset(
+    {
+        "unverifiable",
+        "unknown",
+        "unidentified",
+        "n/a",
+        "na",
+        "none",
+        "null",
+        "-",
+        "—",
+    }
+)
 
 
 def _norm(text: Any) -> str:
     return re.sub(r"\s+", " ", str(text or "").strip().lower())
+
+
+def _clean_identity_text(*parts: Any) -> str:
+    tokens: list[str] = []
+    for part in parts:
+        for token in _norm(part).split():
+            if token in _PLACEHOLDER_TOKENS:
+                continue
+            tokens.append(token)
+    return " ".join(tokens)
+
+
+def _status_upper(row: dict[str, Any], key: str, default: str = "IDENTIFIED") -> str:
+    return str(row.get(key) or default).strip().upper()
+
+
+def _is_placeholder_field(value: Any) -> bool:
+    text = _norm(value)
+    return not text or text in _PLACEHOLDER_TOKENS
+
+
+def _cv_product_unverified(cv: dict[str, Any]) -> bool:
+    product_status = _status_upper(cv, "product_status")
+    if product_status in {"UNVERIFIABLE", "UNKNOWN", "UNIDENTIFIED"}:
+        return True
+    return _is_placeholder_field(cv.get("product_name") or cv.get("product"))
+
+
+def _cv_brand_identified(cv: dict[str, Any]) -> bool:
+    if _is_placeholder_field(cv.get("brand")):
+        return False
+    return _status_upper(cv, "brand_status") in {"IDENTIFIED", "MATCHED", "OK", ""}
+
+
+def _brand_keys_equal(a: Any, b: Any) -> bool:
+    left = _normalize_brand_key(str(a or ""), "")
+    right = _normalize_brand_key(str(b or ""), "")
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    return left in right or right in left
 
 
 def _cv_identity(row: dict[str, Any]) -> str:
@@ -43,14 +100,32 @@ def _token_overlap(a: str, b: str) -> float:
 def _score_cv_to_planogram(cv: dict[str, Any], item: dict[str, Any]) -> float:
     cv_sku = _norm(cv.get("sku"))
     item_sku = _norm(item.get("sku"))
-    if cv_sku and item_sku and cv_sku == item_sku:
+    if cv_sku and item_sku and cv_sku == item_sku and cv_sku not in _PLACEHOLDER_TOKENS:
         return 1.0
     if _cv_identity(cv) == _planogram_identity(item):
         return 0.95
-    return _token_overlap(
-        f"{cv.get('brand')} {cv.get('product_name')} {cv.get('variant')}",
-        f"{item.get('brand')} {item.get('product_name')} {item.get('variant')}",
-    )
+
+    cv_text = _clean_identity_text(cv.get("brand"), cv.get("product_name") or cv.get("product"), cv.get("variant"))
+    item_text = _clean_identity_text(item.get("brand"), item.get("product_name"), item.get("variant"))
+    overlap = _token_overlap(cv_text, item_text) if cv_text and item_text else 0.0
+
+    if _cv_brand_identified(cv) and _brand_keys_equal(cv.get("brand"), item.get("brand")):
+        # Brand-only Astra rows (product UNVERIFIABLE) must still clear a brand gate
+        # so presence/facings are not wiped when the SKU text is illegible.
+        brand_score = 0.62 if _cv_product_unverified(cv) else 0.58
+        exp_sub = _norm(item.get("sub_category") or item.get("subcategory") or "")
+        cv_blob = _clean_identity_text(
+            cv.get("product_name") or cv.get("product"),
+            cv.get("variant"),
+            cv.get("subcategory") or cv.get("sub_category"),
+            cv.get("category"),
+            cv.get("visual_notes"),
+        )
+        if exp_sub and exp_sub in cv_blob:
+            brand_score = max(brand_score, 0.68)
+        return max(overlap, brand_score)
+
+    return overlap
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -69,6 +144,16 @@ def _float_or_none(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _match_status_for_score(cv: dict[str, Any], score: float) -> str:
+    if score >= _MATCH_THRESHOLD and not _cv_product_unverified(cv):
+        return "MATCHED"
+    if score >= _BRAND_MATCH_THRESHOLD and _cv_brand_identified(cv):
+        return "BRAND_MATCHED"
+    if score >= 0.3:
+        return "UNVERIFIABLE"
+    return "NOT_FOUND"
 
 
 def join_planogram_with_cv(
@@ -111,7 +196,26 @@ def join_planogram_with_cv(
             "source_expected": "planogram",
         }
 
-        if best_idx < 0 or best_score < _MATCH_THRESHOLD:
+        if best_idx < 0:
+            rows.append(
+                {
+                    **base,
+                    "actual_facings": None,
+                    "actual_visible_units": None,
+                    "match_status": "NOT_FOUND",
+                    "match_score": round(best_score, 3),
+                    "source_actual": None,
+                }
+            )
+            continue
+
+        candidate = cv_products[best_idx]
+        if _cv_product_unverified(candidate) and _cv_brand_identified(candidate):
+            accept_threshold = _BRAND_MATCH_THRESHOLD
+        else:
+            accept_threshold = _MATCH_THRESHOLD
+
+        if best_score < accept_threshold:
             rows.append(
                 {
                     **base,
@@ -126,15 +230,22 @@ def join_planogram_with_cv(
 
         cv = cv_products[best_idx]
         used_cv.add(best_idx)
+        match_status = _match_status_for_score(cv, best_score)
+        # Brand-level accept still transfers visible facings so Aislix does not
+        # invent zero-unit CRITICAL risks when the brand is clearly on shelf.
         rows.append(
             {
                 **base,
                 "actual_facings": _int_or_none(cv.get("actual_facings")),
                 "actual_visible_units": _int_or_none(cv.get("actual_visible_units")),
-                "match_status": "MATCHED",
+                "actual_shelf_position": cv.get("shelf_position") or cv.get("actual_shelf_position"),
+                "match_status": match_status,
                 "match_score": round(best_score, 3),
                 "confidence": cv.get("confidence"),
                 "source_actual": "astra",
+                "brand_status": cv.get("brand_status"),
+                "product_status": cv.get("product_status"),
+                "variant_status": cv.get("variant_status"),
             }
         )
 

@@ -386,7 +386,11 @@ def finalize_make_scan(
             from app.luna_vision_scan import luna_required, run_luna_secondary_scan
             from app.shelf_pipeline import run_shelf_cv_pipeline
 
-            luna_analysis = run_luna_secondary_scan(raw, metadata) if luna_required(metadata) else None
+            luna_analysis = (
+                run_luna_secondary_scan(raw, metadata, image=image)
+                if luna_required(metadata)
+                else None
+            )
             shelf_cv_pipeline = run_shelf_cv_pipeline(
                 raw,
                 metadata,
