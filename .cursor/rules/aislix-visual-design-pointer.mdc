@@ -1,0 +1,16 @@
+---
+description: Pointer — Aislix UI must follow frontend Magic Pattern visual system (never invent dashboard colors/charts)
+alwaysApply: true
+---
+
+# Aislix UI visual system (backend agents)
+
+When any task touches UI, results presentation, dashboards, charts, KPI cards, or frontend copy:
+
+1. Follow the locked Magic Pattern system in **aislix-frontend** `.cursor/rules/aislix-visual-design-system.mdc` and `aislix-chart-visualization-map.mdc`.
+2. Do **not** invent chart colors, change KPI formulas, or fabricate metrics for demos.
+3. Do **not** change backend calculations to "make charts look better."
+4. Adjacent analytical cards must never share the same accent color.
+5. Unavailable metrics → `Data unavailable` / `N/A`, never fake `0`.
+
+Canonical tokens live in frontend `src/lib/ai-audit/kpi-palette.ts`.
