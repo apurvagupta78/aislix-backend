@@ -231,3 +231,74 @@ def test_two_unverifiable_variants_do_not_guess_which_flavor():
     assert all(r.get("source_actual") is None for r in rows)
     assert all(r["actual_facings"] is None for r in rows)
     assert len(unplanned) == 2
+
+
+def test_tangy_tomato_matches_spanish_tomato_tango_planogram():
+    """Astra OCR alternate flavor name must attach to planogram STT SKU."""
+    planogram = [
+        {
+            "brand": "lays",
+            "product_name": "potato chips",
+            "variant": "Magic Masala",
+            "sku": "lays-mm",
+            "expected_facings": 19,
+            "expected_shelf_units": 19,
+        },
+        {
+            "brand": "lays",
+            "product_name": "potato chips",
+            "variant": "Spanish Tomato Tango",
+            "sku": "lays-tt",
+            "expected_facings": 6,
+            "expected_shelf_units": 6,
+        },
+        {
+            "brand": "lays",
+            "product_name": "potato chips",
+            "variant": "Cream & Onion",
+            "sku": "lays-co",
+            "expected_facings": 12,
+            "expected_shelf_units": 12,
+        },
+    ]
+    cv = [
+        {
+            "brand": "Lay's",
+            "brand_status": "IDENTIFIED",
+            "product": "Lay's Magic Masala Potato Chips",
+            "variant": "Magic Masala",
+            "actual_facings": 19,
+            "actual_visible_units": 19,
+            "confidence": 0.9,
+        },
+        {
+            "brand": "Lay's",
+            "brand_status": "IDENTIFIED",
+            "product": "Lay's Tangy Tomato Potato Chips",
+            "variant": "Tangy Tomato",
+            "actual_facings": 6,
+            "actual_visible_units": 7,
+            "confidence": 0.64,
+        },
+        {
+            "brand": "Lay's",
+            "brand_status": "IDENTIFIED",
+            "product": "Lay's Cream & Onion Potato Chips",
+            "variant": "Cream & Onion",
+            "actual_facings": 12,
+            "actual_visible_units": 12,
+            "confidence": 0.8,
+        },
+    ]
+    rows, unplanned = join_planogram_with_cv(planogram, cv)
+    assert unplanned == []
+    by_sku = {str(r["sku"]): r for r in rows}
+    assert by_sku["lays-mm"]["match_status"] == "MATCHED"
+    assert by_sku["lays-mm"]["actual_facings"] == 19
+    stt = by_sku["lays-tt"]
+    assert stt["match_status"] == "MATCHED"
+    assert stt["actual_facings"] == 6
+    assert stt["actual_visible_units"] == 7
+    assert stt["source_actual"] == "astra"
+    assert by_sku["lays-co"]["match_status"] == "MATCHED"
+    assert by_sku["lays-co"]["actual_facings"] == 12

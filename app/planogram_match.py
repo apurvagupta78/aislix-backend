@@ -11,6 +11,7 @@ from app.planogram_csv import build_match_key
 
 _MATCH_THRESHOLD = 0.72
 _BRAND_MATCH_THRESHOLD = 0.55
+_CHIPISH_PRODUCT = re.compile(r"\b(chips?|potato\s+chips?|crisps?|wafers?)\b", re.I)
 _PLACEHOLDER_TOKENS = frozenset(
     {
         "unverifiable",
@@ -125,6 +126,56 @@ def _token_overlap(a: str, b: str) -> float:
     return len(ta & tb) / max(len(ta), len(tb))
 
 
+# Marketing / OCR alternate names that must resolve to the same flavor key.
+# Phrases are matched longest-first against normalized variant+product text.
+_VARIANT_PHRASE_ALIASES: tuple[tuple[str, str], ...] = (
+    ("spanish tomato tango", "tomato tango"),
+    ("tangy tomato", "tomato tango"),
+    ("tomato tango", "tomato tango"),
+    ("american style cream and onion", "cream and onion"),
+    ("cream & onion", "cream and onion"),
+    ("cream and onion", "cream and onion"),
+    ("india's magic masala", "magic masala"),
+    ("indias magic masala", "magic masala"),
+    ("magic masala", "magic masala"),
+)
+
+_VARIANT_FILLER = re.compile(
+    r"\b(spanish|american\s+style|india'?s?|classic)\b",
+    re.I,
+)
+
+
+def _normalize_variant_for_match(*parts: Any) -> str:
+    """Collapse OCR/marketing variant aliases into a stable comparison key."""
+    text = _norm(" ".join(str(p or "") for p in parts))
+    if not text or text in _PLACEHOLDER_TOKENS:
+        return ""
+    text = text.replace("&", " and ")
+    text = _VARIANT_FILLER.sub(" ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    for phrase, canonical in _VARIANT_PHRASE_ALIASES:
+        if phrase in text:
+            return canonical
+    return text
+
+
+def _variants_equivalent(cv: dict[str, Any], item: dict[str, Any]) -> bool:
+    cv_key = _normalize_variant_for_match(
+        cv.get("variant"),
+        cv.get("product_name") or cv.get("product"),
+    )
+    item_key = _normalize_variant_for_match(
+        item.get("variant"),
+        item.get("product_name"),
+    )
+    if not cv_key or not item_key:
+        return False
+    if cv_key == item_key:
+        return True
+    return cv_key in item_key or item_key in cv_key
+
+
 def _score_cv_to_planogram(cv: dict[str, Any], item: dict[str, Any]) -> float:
     cv_sku = _norm(cv.get("sku"))
     item_sku = _norm(item.get("sku"))
@@ -149,6 +200,19 @@ def _score_cv_to_planogram(cv: dict[str, Any], item: dict[str, Any]) -> float:
             and _product_keys_equal(cv.get("product_name") or cv.get("product"), item.get("product_name"))
         ):
             brand_score = max(brand_score, 0.70)
+        # Named variants that differ only by OCR/marketing alias (e.g. Tangy Tomato
+        # vs Spanish Tomato Tango) must clear the full MATCHED threshold.
+        if (
+            not _cv_product_unverified(cv)
+            and not _cv_variant_unverified(cv)
+            and _variants_equivalent(cv, item)
+            and (
+                _product_keys_equal(cv.get("product_name") or cv.get("product"), item.get("product_name"))
+                or _CHIPISH_PRODUCT.search(_norm(cv.get("product_name") or cv.get("product") or ""))
+                or _CHIPISH_PRODUCT.search(_norm(item.get("product_name") or ""))
+            )
+        ):
+            brand_score = max(brand_score, 0.88)
         exp_sub = _norm(item.get("sub_category") or item.get("subcategory") or "")
         cv_blob = _clean_identity_text(
             cv.get("product_name") or cv.get("product"),

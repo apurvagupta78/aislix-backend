@@ -26,6 +26,7 @@ _LAYS_BRAND_ALIASES = frozenset(
 
 _LAYS_VARIANT_MARKERS = (
     r"magic\s+masala",
+    r"tangy\s+tomato",
     r"tomato\s+tango",
     r"cream\s*(?:&|and)\s*onion",
     r"classic\s+salted",
