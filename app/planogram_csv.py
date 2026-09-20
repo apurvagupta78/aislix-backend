@@ -41,10 +41,14 @@ HEADER_ALIASES: dict[str, str] = {
     "qty": "expected_qty",
     "quantity": "expected_qty",
     "sku": "sku",
+    "product id": "sku",
+    "product_id": "sku",
+    "productid": "sku",
     "shelf position": "shelf_position",
     "position": "shelf_position",
     "mrp": "mrp_inr",
     "mrp inr": "mrp_inr",
+    "mrp_inr": "mrp_inr",
     "price": "mrp_inr",
     "price inr": "mrp_inr",
     "daily sales": "avg_daily_sales",
@@ -60,7 +64,7 @@ def csv_template_header() -> str:
     return (
         "location,category,sub_category,brand,product_name,variant,"
         "expected_facings,min_facings,max_facings,expected_shelf_units,"
-        "mrp_inr,avg_daily_sales,sku,shelf_position"
+        "price,avg_daily_sales,product_id,shelf_position"
     )
 
 
@@ -138,17 +142,17 @@ def normalize_planogram_row(row: dict[str, Any], row_num: int = 0) -> tuple[dict
 
     sub_category = normalize_sub_category_id(sub_category, category)
     variant = str(row.get("variant") or "").strip()
-    sku = str(row.get("sku") or "").strip()
+    sku = str(row.get("sku") or row.get("product_id") or row.get("product id") or "").strip()
 
     mrp_inr: float | None = None
-    mrp_raw = row.get("mrp_inr", row.get("mrp"))
+    mrp_raw = row.get("mrp_inr", row.get("mrp", row.get("price")))
     if mrp_raw not in (None, ""):
         try:
             mrp_inr = float(mrp_raw)
             if mrp_inr < 0:
-                errors.append(f"{prefix}mrp_inr must be >= 0")
+                errors.append(f"{prefix}price must be >= 0")
         except (TypeError, ValueError):
-            errors.append(f"{prefix}mrp_inr must be a number")
+            errors.append(f"{prefix}price must be a number")
 
     avg_daily_sales: float | None = None
     sales_raw = row.get("avg_daily_sales", row.get("sales"))
