@@ -16,9 +16,28 @@ from app.metric_result import (
 
 FORMULA_VERSION = "v1"
 
+_PLACEHOLDER_TOKENS = frozenset(
+    {
+        "unverifiable",
+        "unknown",
+        "unidentified",
+        "n/a",
+        "na",
+        "none",
+        "null",
+        "-",
+        "—",
+    }
+)
+
 
 def _norm(text: Any) -> str:
     return re.sub(r"\s+", " ", str(text or "").strip().lower())
+
+
+def _is_placeholder(value: Any) -> bool:
+    text = _norm(value)
+    return not text or text in _PLACEHOLDER_TOKENS
 
 
 def normalize_brand(value: Any) -> str:
@@ -26,19 +45,14 @@ def normalize_brand(value: Any) -> str:
 
 
 def normalize_product_identity(brand: Any, product_name: Any, variant: Any = "", sku: Any = "") -> str:
+    """Stable product key. Placeholder SKUs (e.g. UNVERIFIABLE) must not collapse distinct rows."""
     sku_key = _norm(sku)
-    if sku_key:
+    if sku_key and sku_key not in _PLACEHOLDER_TOKENS:
         return f"sku:{sku_key}"
-    return "|".join(
-        filter(
-            None,
-            [
-                normalize_brand(brand),
-                _norm(product_name),
-                _norm(variant),
-            ],
-        )
-    )
+    parts = [normalize_brand(brand), _norm(product_name)]
+    if not _is_placeholder(variant):
+        parts.append(_norm(variant))
+    return "|".join(filter(None, parts))
 
 
 def calculate_facing_variance(actual: int | None, expected: int | None) -> MetricResult:
@@ -340,15 +354,28 @@ def build_shelf_only_analysis(
     verified_facings = facings_check.get("verified_value")
     verified_units = units_check.get("verified_value")
 
-    identities = {
-        normalize_product_identity(p.get("brand"), p.get("product_name"), p.get("variant"), p.get("sku"))
-        for p in products
-        if str(p.get("product_status") or "IDENTIFIED").upper() != "UNVERIFIABLE"
-    }
+    # Count distinct identified product lines. When Astra splits same brand into
+    # separate rows (e.g. Magic Masala vs other unverifiable variants), keep them
+    # separate via row index so placeholder SKUs cannot collapse everything to 1.
+    identities: set[str] = set()
+    for idx, p in enumerate(products):
+        if str(p.get("product_status") or "IDENTIFIED").upper() == "UNVERIFIABLE":
+            continue
+        key = normalize_product_identity(
+            p.get("brand"), p.get("product_name"), p.get("variant"), p.get("sku")
+        )
+        if not key:
+            continue
+        # Distinct Astra rows with only placeholder SKU/variant stay distinct.
+        if _is_placeholder(p.get("sku")) and _is_placeholder(p.get("variant")):
+            key = f"{key}|row:{idx}"
+        identities.add(key)
     brands = {
         normalize_brand(p.get("brand"))
         for p in products
-        if p.get("brand") and str(p.get("brand_status") or "IDENTIFIED").upper() != "UNVERIFIABLE"
+        if p.get("brand")
+        and not _is_placeholder(p.get("brand"))
+        and str(p.get("brand_status") or "IDENTIFIED").upper() != "UNVERIFIABLE"
     }
 
     brand_facings: dict[str, int] = {}

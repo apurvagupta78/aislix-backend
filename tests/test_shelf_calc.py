@@ -1,10 +1,12 @@
 from app.shelf_calc import (
     build_planogram_row_metrics,
+    build_shelf_only_analysis,
     calculate_facing_compliance,
     calculate_facing_compliance_aggregate,
     calculate_visible_shelf_coverage_days,
     calculate_visible_unit_shortfall,
     calculate_visible_unit_value_gap,
+    normalize_product_identity,
 )
 
 
@@ -36,3 +38,62 @@ def test_two_sku_weighted_facing_compliance():
         {"actual_facings": 4, "expected_facings": 5},
     ]
     assert calculate_facing_compliance_aggregate(rows).value == 80.0
+
+
+def test_placeholder_sku_does_not_collapse_product_identities():
+    assert normalize_product_identity("Lay's", "Potato chips", "Magic Masala", "UNVERIFIABLE") == (
+        "lay's|potato chips|magic masala"
+    )
+    assert normalize_product_identity("Lay's", "Potato chips", "UNVERIFIABLE", "UNVERIFIABLE") == (
+        "lay's|potato chips"
+    )
+
+
+def test_shelf_only_products_identified_keeps_split_variant_rows():
+    products = [
+        {
+            "brand": "Lay's",
+            "brand_status": "IDENTIFIED",
+            "product_name": "Potato chips",
+            "product_status": "IDENTIFIED",
+            "variant": "Magic Masala",
+            "sku": "UNVERIFIABLE",
+            "actual_facings": 19,
+            "actual_visible_units": 13,
+        },
+        {
+            "brand": "Lay's",
+            "brand_status": "IDENTIFIED",
+            "product_name": "Potato chips",
+            "product_status": "IDENTIFIED",
+            "variant": "UNVERIFIABLE",
+            "sku": "UNVERIFIABLE",
+            "actual_facings": 6,
+            "actual_visible_units": 6,
+        },
+        {
+            "brand": "Lay's",
+            "brand_status": "IDENTIFIED",
+            "product_name": "Potato chips",
+            "product_status": "IDENTIFIED",
+            "variant": "UNVERIFIABLE",
+            "sku": "UNVERIFIABLE",
+            "actual_facings": 12,
+            "actual_visible_units": 6,
+        },
+    ]
+    analysis = build_shelf_only_analysis(
+        products,
+        count_validation={
+            "total_actual_facings": {
+                "status": "VERIFIED",
+                "verified_value": 37,
+            },
+            "total_actual_visible_units": {
+                "status": "VERIFIED",
+                "verified_value": 25,
+            },
+        },
+    )
+    assert analysis["calculated_metrics"]["products_identified"]["value"] == 3
+    assert analysis["calculated_metrics"]["brands_identified"]["value"] == 1
