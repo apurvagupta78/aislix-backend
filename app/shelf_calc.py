@@ -13,6 +13,7 @@ from app.metric_result import (
     unavailable,
     weighted_ratio,
 )
+from app.inventory import _normalize_brand_key
 
 FORMULA_VERSION = "v1"
 
@@ -41,7 +42,9 @@ def _is_placeholder(value: Any) -> bool:
 
 
 def normalize_brand(value: Any) -> str:
-    return _norm(value)
+    """Canonical brand key for share aggregation (Lay's / lays / Louis → same key)."""
+    key = _normalize_brand_key(str(value or ""), "")
+    return _norm(key)
 
 
 def normalize_product_identity(brand: Any, product_name: Any, variant: Any = "", sku: Any = "") -> str:

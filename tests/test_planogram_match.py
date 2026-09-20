@@ -105,3 +105,129 @@ def test_placeholder_tokens_do_not_inflate_overlap():
         {"brand": "Colgate", "product_name": "MaxFresh", "variant": "150g"},
     )
     assert score >= 0.55
+
+
+def test_lays_variant_unverifiable_attaches_to_remaining_planogram_row():
+    """Scan 2917f430 class: blue packs with illegible flavor → STT row gets Astra counts."""
+    planogram = [
+        {
+            "brand": "lays",
+            "product_name": "potato chips",
+            "variant": "Magic Masala",
+            "sku": "lays-mm",
+            "sub_category": "chips",
+            "expected_facings": 19,
+            "expected_shelf_units": 19,
+        },
+        {
+            "brand": "lays",
+            "product_name": "potato chips",
+            "variant": "Spanish Tomato Tango",
+            "sku": "lays-tt",
+            "sub_category": "chips",
+            "expected_facings": 6,
+            "expected_shelf_units": 6,
+        },
+        {
+            "brand": "lays",
+            "product_name": "potato chips",
+            "variant": "Cream & Onion",
+            "sku": "lays-co",
+            "sub_category": "chips",
+            "expected_facings": 12,
+            "expected_shelf_units": 12,
+        },
+    ]
+    cv = [
+        {
+            "brand": "Lay's",
+            "brand_status": "IDENTIFIED",
+            "product_name": "Potato chips",
+            "product_status": "IDENTIFIED",
+            "variant": "Magic Masala",
+            "variant_status": "IDENTIFIED",
+            "actual_facings": 19,
+            "actual_visible_units": 13,
+            "confidence": 0.86,
+        },
+        {
+            "brand": "Lay's",
+            "brand_status": "IDENTIFIED",
+            "product_name": "Potato chips",
+            "product_status": "IDENTIFIED",
+            "variant": "UNVERIFIABLE",
+            "variant_status": "UNVERIFIABLE",
+            "actual_facings": 6,
+            "actual_visible_units": 6,
+            "confidence": 0.83,
+            "visual_notes": "Six distinct blue-package fronts; variant text not legible.",
+        },
+        {
+            "brand": "Lay's",
+            "brand_status": "IDENTIFIED",
+            "product_name": "Potato chips",
+            "product_status": "IDENTIFIED",
+            "variant": "Cream & Onion",
+            "variant_status": "IDENTIFIED",
+            "actual_facings": 12,
+            "actual_visible_units": 6,
+            "confidence": 0.8,
+        },
+    ]
+    rows, unplanned = join_planogram_with_cv(planogram, cv)
+    assert len(unplanned) == 0
+    by_variant = {str(r["variant"]): r for r in rows}
+    assert by_variant["Magic Masala"]["match_status"] == "MATCHED"
+    assert by_variant["Magic Masala"]["actual_facings"] == 19
+    assert by_variant["Cream & Onion"]["match_status"] == "MATCHED"
+    assert by_variant["Cream & Onion"]["actual_facings"] == 12
+    stt = by_variant["Spanish Tomato Tango"]
+    assert stt["actual_facings"] == 6
+    assert stt["actual_visible_units"] == 6
+    assert stt["source_actual"] == "astra"
+    assert stt["match_status"] == "BRAND_MATCHED"
+    assert stt["variant_status"] == "UNVERIFIABLE"
+
+
+def test_two_unverifiable_variants_do_not_guess_which_flavor():
+    planogram = [
+        {
+            "brand": "Lay's",
+            "product_name": "Potato chips",
+            "variant": "Spanish Tomato Tango",
+            "expected_facings": 6,
+        },
+        {
+            "brand": "Lay's",
+            "product_name": "Potato chips",
+            "variant": "Classic Salted",
+            "expected_facings": 6,
+        },
+    ]
+    cv = [
+        {
+            "brand": "Lay's",
+            "brand_status": "IDENTIFIED",
+            "product_name": "Potato chips",
+            "product_status": "IDENTIFIED",
+            "variant": "UNVERIFIABLE",
+            "variant_status": "UNVERIFIABLE",
+            "actual_facings": 6,
+            "actual_visible_units": 6,
+        },
+        {
+            "brand": "Lay's",
+            "brand_status": "IDENTIFIED",
+            "product_name": "Potato chips",
+            "product_status": "IDENTIFIED",
+            "variant": "UNVERIFIABLE",
+            "variant_status": "UNVERIFIABLE",
+            "actual_facings": 5,
+            "actual_visible_units": 5,
+        },
+    ]
+    rows, unplanned = join_planogram_with_cv(planogram, cv)
+    # Ambiguous: leave both planogram rows open and both CV rows unplanned.
+    assert all(r.get("source_actual") is None for r in rows)
+    assert all(r["actual_facings"] is None for r in rows)
+    assert len(unplanned) == 2
