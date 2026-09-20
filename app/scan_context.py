@@ -652,9 +652,25 @@ PLANOGRAM_CATEGORY_ALIASES: dict[str, str] = {
     "frozen": "frozen foods & ice cream",
     "ice cream": "frozen foods & ice cream",
     "personal care products": "personal care",
+    "oral care": "personal care",
+    "oral hygiene": "personal care",
+    "toothpaste": "personal care",
+    "beauty": "personal care",
+    "cosmetics": "personal care",
+    "hair care": "personal care",
+    "skin care": "personal care",
+    "skincare": "personal care",
     "home care products": "home care",
+    "household": "home care",
+    "cleaning": "home care",
     "grocery": "grocery & staples",
     "staples": "grocery & staples",
+    "dairy": "dairy & chilled",
+    "chilled": "dairy & chilled",
+    "baby care": "baby & pet care",
+    "pet care": "baby & pet care",
+    "health": "health & wellness",
+    "wellness": "health & wellness",
 }
 
 # Finer planogram sub-types that belong on the same snack-rack audit as "Chips".
@@ -763,7 +779,31 @@ def resolve_aislix_category(raw: str | None) -> dict | None:
     if not raw or not str(raw).strip():
         return None
     load_aislix_categories()
-    return (_name_index or {}).get(_normalize_key(str(raw)))
+    key = _normalize_key(str(raw))
+    hit = (_name_index or {}).get(key)
+    if hit:
+        return hit
+    alias = PLANOGRAM_CATEGORY_ALIASES.get(key)
+    if alias:
+        return (_name_index or {}).get(_normalize_key(alias))
+    return None
+
+
+def resolve_category_from_subcategory(raw_sub: str | None) -> dict | None:
+    """When planogram category is free-text, infer aisle from a known subcategory label/id."""
+    if not raw_sub or not str(raw_sub).strip():
+        return None
+    load_aislix_categories()
+    sub_key = _slug_key(str(raw_sub))
+    if not sub_key:
+        return None
+    for cat in _categories or []:
+        for sub in cat.get("subcategories") or []:
+            sid = _slug_key(str(sub.get("id") or ""))
+            label = _slug_key(str(sub.get("label") or ""))
+            if sub_key in {sid, label}:
+                return cat
+    return None
 
 
 def resolve_subcategory_label(category: dict | None, sub_id: str | None) -> str | None:
@@ -1223,11 +1263,22 @@ def validate_scan_metadata(metadata: dict | None) -> list[str]:
     errors: list[str] = []
 
     category = metadata.get("category") or metadata.get("aislix_category")
+    sub = metadata.get("sub_category") or metadata.get("product_type")
     resolved = resolve_aislix_category(str(category)) if category else None
-    if required and not category:
+    if not resolved and sub:
+        resolved = resolve_category_from_subcategory(str(sub))
+    if not resolved and category:
+        # Customer planograms often use free-text aisle names. Prefer continuing
+        # under Others over rejecting the entire scan.
+        resolved = resolve_aislix_category("Others")
+    if resolved:
+        canonical = str(resolved.get("name") or "").strip()
+        if canonical:
+            metadata["category"] = canonical
+            metadata["aislix_category"] = canonical
+
+    if required and not category and not resolved:
         errors.append("category is required.")
-    elif category and not resolved:
-        errors.append(f"Unknown category: {category}")
 
     if required and not metadata.get("store_id"):
         errors.append("store_id is required.")
@@ -1242,7 +1293,6 @@ def validate_scan_metadata(metadata: dict | None) -> list[str]:
     if required and not shelf_label:
         errors.append("location is required.")
 
-    sub = metadata.get("sub_category") or metadata.get("product_type")
     if required and resolved and (resolved.get("subcategories") or []) and not sub:
         if _normalize_key(resolved.get("name") or "") != "others":
             errors.append("sub_category is required.")
