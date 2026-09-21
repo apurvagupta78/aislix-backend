@@ -8,11 +8,14 @@ import cv2
 import numpy as np
 
 from app.report_generator import (
+    PDF_CONTENT_WIDTH,
     PDF_SUMMARY_IMAGE_MAX_HEIGHT,
     PDF_SUMMARY_IMAGE_WIDTH,
     REPORT_TITLE,
     _annotation_label,
+    _executive_summary_flowables,
     _fit_image_size,
+    _scale_col_widths,
     build_report_context,
     encode_annotated_image_bytes,
     encode_shelf_image_bytes,
@@ -20,6 +23,9 @@ from app.report_generator import (
     generate_csv_bytes,
     generate_pdf_bytes,
 )
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import Paragraph
 
 
 def test_generate_annotated_image_boxes_only():
@@ -278,3 +284,97 @@ def test_pdf_eight_section_header():
     )
     assert pdf.startswith(b"%PDF")
     assert len(pdf) > 3000
+
+
+def test_executive_summary_strips_markdown_headings_to_bold_bullets():
+    styles = getSampleStyleSheet()
+    body = styles["Normal"]
+    heading = styles["Normal"]
+    text = "## Audit Overview\nShelf looks healthy.\n## Risks\n- Gap on endcap\nSecond issue line"
+    flowables = _executive_summary_flowables(text, heading_style=heading, body_style=body)
+    rendered = [getattr(f, "text", "") for f in flowables if isinstance(f, Paragraph)]
+    joined = "\n".join(rendered)
+    assert "##" not in joined
+    assert "<b>Audit Overview</b>" in joined
+    assert "<b>Risks</b>" in joined
+    assert "• Shelf looks healthy." in joined
+    assert "• Gap on endcap" in joined
+    assert "• Second issue line" in joined
+
+
+def test_pdf_col_widths_never_exceed_content_width():
+    widths = _scale_col_widths(
+        [0.6 * inch, 0.9 * inch, 0.55 * inch, 0.35 * inch, 0.4 * inch, 0.7 * inch, 0.75 * inch, 0.5 * inch, 0.55 * inch],
+        9,
+    )
+    assert abs(sum(widths) - float(PDF_CONTENT_WIDTH)) < 0.5
+
+
+def test_pdf_with_wide_section_tables_builds():
+    """Sections 4/5/5b/6/8 with dense rows must still produce a valid PDF."""
+    metrics = {
+        "total_products": 3,
+        "unique_skus": 3,
+        "unique_brands": 2,
+        "low_stock_products": 0,
+        "misplaced_products": 0,
+        "shelf_utilization_percent": 50.0,
+        "osa_percent": 100.0,
+        "average_confidence": 0.9,
+        "shelf_health_score": 85.0,
+        "total_facings": 3,
+        "financial_impact": {
+            "estimated_daily_lost_sales_inr": 120,
+            "estimated_weekly_lost_sales_inr": 840,
+            "oos_sku_count": 1,
+            "at_risk_sku_count": 1,
+            "confidence": "medium",
+            "methodology": "units × price",
+        },
+        "planogram_compliance": {
+            "lines": [
+                {
+                    "expected_brand": "Colgate",
+                    "expected_product": "MaxFresh",
+                    "actual_brand": "Pepsodent",
+                    "actual_product": "Germin-Check",
+                    "issue_type": "wrong_product",
+                    "severity": "high",
+                    "detail": "Facing mismatch on bay A-1",
+                }
+            ]
+        },
+    }
+    inventory = [
+        {
+            "brand": "Colgate",
+            "product_name": "MaxFresh Blue Gel Toothpaste Long Name",
+            "variant": "100g",
+            "quantity": 2,
+            "confidence": 0.91,
+            "x1": 10,
+            "y1": 20,
+            "x2": 80,
+            "y2": 120,
+            "recognition_source": "vision",
+            "stock_status": "in_stock",
+        }
+        for _ in range(12)
+    ]
+    summary = (
+        "## Audit Overview\nToothpaste bay audited with planogram.\n"
+        "## Executive Findings\n- Share gap on Colgate\n- Extra Pepsodent facing"
+    )
+    pdf = base64.b64decode(
+        generate_pdf_bytes(
+            "scan-wide-tables",
+            metrics,
+            inventory,
+            [{"brand": "Colgate", "share": 55.0}],
+            [{"title": "Restock", "impact": "high", "detail": "Fill gap"}],
+            executive_summary=summary,
+            report_context=build_report_context(scan_id="scan-wide-tables", metrics=metrics),
+        )
+    )
+    assert pdf.startswith(b"%PDF")
+    assert len(pdf) > 4000

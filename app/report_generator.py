@@ -5,14 +5,17 @@ from __future__ import annotations
 import base64
 import csv
 import io
+import re
+import unicodedata
 import uuid
 from datetime import datetime
+from xml.sax.saxutils import escape
 
 import cv2
 import numpy as np
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image as RLImage
@@ -25,6 +28,7 @@ OK_BOX_COLOR = (0, 210, 0)
 
 # Fixed slot in the PDF summary — keeps page 1 layout stable for portrait shelf photos.
 PDF_PAGE_MARGIN = 0.75 * inch
+PDF_CONTENT_WIDTH = A4[0] - (2 * PDF_PAGE_MARGIN)
 PDF_SUMMARY_IMAGE_WIDTH = 6.0 * inch
 PDF_SUMMARY_IMAGE_MAX_HEIGHT = 3.25 * inch
 
@@ -38,8 +42,6 @@ _CAPTURE_LIMITATIONS = [
     "Linear shelf share and physical centimeters require calibration not available from photo alone.",
     "Execution score is withheld when assessed KPI coverage is below 80%.",
 ]
-
-import unicodedata
 
 
 def _ascii_label(text: str) -> str:
@@ -648,27 +650,70 @@ def _section1_rows(ctx: dict) -> list[list]:
 
 
 def _append_executive_summary(story: list, styles, executive_summary: str | None) -> None:
-    """Render executive summary as flowable Paragraphs — never inside a Table cell.
+    """Render executive summary as bold headings + bullets — never raw ## markdown.
 
-    ReportLab cannot split a single Table cell across pages; long Astra/Aislix
-    summaries previously raised LayoutError and failed the entire scan.
+    ReportLab cannot split a single Table cell across pages; long summaries previously
+    raised LayoutError when forced into a table. Markdown ``##`` headings from the
+    deterministic builder are converted to bold labels with bullet body lines.
     """
     text = _na(executive_summary).strip()
     if not text or text == "N/A":
         return
-    from xml.sax.saxutils import escape
 
-    # Soft cap keeps PDFs readable; full summary remains in the API/UI payload.
     if len(text) > 3500:
         text = text[:3500].rstrip() + "…"
+
+    body = ParagraphStyle(
+        "ExecSummaryBody",
+        parent=styles["Normal"],
+        fontSize=9,
+        leading=12,
+        spaceAfter=2,
+    )
+    heading = ParagraphStyle(
+        "ExecSummaryHeading",
+        parent=styles["Normal"],
+        fontSize=10,
+        leading=13,
+        spaceBefore=8,
+        spaceAfter=3,
+        textColor=colors.HexColor("#102A43"),
+    )
+
     story.append(Paragraph("<b>Executive summary</b>", styles["Heading3"]))
-    # Chunk so no single Paragraph exceeds roughly one page of body text.
-    chunk_size = 1200
-    for start in range(0, len(text), chunk_size):
-        chunk = text[start : start + chunk_size]
-        story.append(Paragraph(escape(chunk).replace("\n", "<br/>"), styles["Normal"]))
-        story.append(Spacer(1, 0.08 * inch))
+    for flowable in _executive_summary_flowables(text, heading_style=heading, body_style=body):
+        story.append(flowable)
     story.append(Spacer(1, 0.1 * inch))
+
+
+def _executive_summary_flowables(text: str, heading_style, body_style) -> list:
+    """Parse markdown-ish executive summary into bold headings + bullet paragraphs."""
+    normalized = (
+        text.replace("\r\n", "\n")
+        .replace("\u2022", "•")
+        .strip()
+    )
+    # Drop markdown bold markers so PDF does not show asterisks.
+    normalized = re.sub(r"\*\*([^*]+)\*\*", r"\1", normalized)
+    lines = [ln.strip() for ln in normalized.split("\n") if ln.strip()]
+    flowables: list = []
+
+    heading_re = re.compile(r"^#{1,6}\s+(.*)$")
+    bullet_re = re.compile(r"^([•\-\*]|\d+[.)])\s+(.*)$")
+
+    for line in lines:
+        hm = heading_re.match(line)
+        if hm:
+            title = hm.group(1).strip().rstrip(":")
+            flowables.append(Paragraph(f"<b>{escape(title)}</b>", heading_style))
+            continue
+        bm = bullet_re.match(line)
+        if bm:
+            flowables.append(Paragraph(f"• {escape(bm.group(2).strip())}", body_style))
+            continue
+        # Body lines under a section become bullets (no bare ## / plain walls of text).
+        flowables.append(Paragraph(f"• {escape(line)}", body_style))
+    return flowables
 
 
 def _image_quality_score(iq: dict) -> str:
@@ -968,27 +1013,115 @@ def _append_annotated_shelf_section(story: list, styles, annotated_jpeg: bytes, 
     story.append(Spacer(1, 0.2 * inch))
 
 
-def _styled_table(rows: list[list], col_widths: list[float] | None = None) -> Table:
-    table = Table(rows, colWidths=col_widths)
+def _pdf_cell_text(value, max_len: int = 80) -> str:
+    """Soft-truncate cell text; wrapping Paragraphs handle the rest inside the table."""
+    text = str(value if value is not None else "")
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
+
+
+def _pdf_table_styles(base_styles):
+    """Compact paragraph styles so table cells wrap instead of overflowing the page."""
+    body = ParagraphStyle(
+        "PdfTableBody",
+        parent=base_styles["Normal"],
+        fontSize=7,
+        leading=9,
+        wordWrap="CJK",
+    )
+    header = ParagraphStyle(
+        "PdfTableHeader",
+        parent=base_styles["Normal"],
+        fontSize=7,
+        leading=9,
+        textColor=colors.white,
+        wordWrap="CJK",
+    )
+    section = ParagraphStyle(
+        "PdfSectionHeading",
+        parent=base_styles["Heading2"],
+        fontSize=11,
+        leading=14,
+        spaceBefore=6,
+        spaceAfter=6,
+        textColor=colors.HexColor("#102A43"),
+    )
+    return body, header, section
+
+
+def _scale_col_widths(col_widths: list[float] | None, n_cols: int) -> list[float]:
+    """Fit column widths to the printable page width so tables never spill/overlap."""
+    usable = float(PDF_CONTENT_WIDTH)
+    if n_cols <= 0:
+        return []
+    if not col_widths or len(col_widths) != n_cols:
+        return [usable / n_cols] * n_cols
+    total = float(sum(col_widths))
+    if total <= 0:
+        return [usable / n_cols] * n_cols
+    scale = usable / total
+    return [float(w) * scale for w in col_widths]
+
+
+def _table_cell(value, style, *, bold: bool = False) -> Paragraph:
+    text = escape(str(value if value is not None else "")).replace("\n", "<br/>")
+    if bold:
+        text = f"<b>{text}</b>"
+    return Paragraph(text, style)
+
+
+def _styled_table(
+    rows: list[list],
+    col_widths: list[float] | None = None,
+    styles=None,
+) -> Table:
+    styles = styles or getSampleStyleSheet()
+    body_style, header_style, _ = _pdf_table_styles(styles)
+    if not rows:
+        rows = [["—"]]
+    n_cols = max(len(row) for row in rows)
+    widths = _scale_col_widths(col_widths, n_cols)
+
+    wrapped: list[list] = []
+    for r_idx, row in enumerate(rows):
+        cells: list = []
+        for c_idx in range(n_cols):
+            raw = row[c_idx] if c_idx < len(row) else ""
+            if r_idx == 0:
+                cells.append(_table_cell(_pdf_cell_text(raw, 48), header_style, bold=True))
+            else:
+                cells.append(_table_cell(_pdf_cell_text(raw, 96), body_style))
+        wrapped.append(cells)
+
+    table = Table(wrapped, colWidths=widths, repeatRows=1)
     table.setStyle(
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#09283e")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D9E2E8")),
                 ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 3),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ]
         )
     )
+    # Allow large tables to split cleanly across pages instead of overlapping.
+    table.hAlign = "LEFT"
     return table
 
 
 def _append_pdf_section(story: list, styles, title: str, rows: list[list], col_widths: list[float] | None = None) -> None:
-    story.append(Paragraph(f"<b>{title}</b>", styles["Heading2"]))
+    _, _, section_style = _pdf_table_styles(styles)
+    story.append(Paragraph(f"<b>{escape(title)}</b>", section_style))
     if rows:
-        story.append(_styled_table(rows, col_widths))
-    story.append(Spacer(1, 0.15 * inch))
+        story.append(_styled_table(rows, col_widths, styles=styles))
+    story.append(Spacer(1, 0.18 * inch))
 
 
 def generate_pdf_bytes(
@@ -1063,8 +1196,8 @@ def generate_pdf_bytes(
         story,
         styles,
         "Section 4 — Product and observation fields",
-        [[str(c)[:32] for c in row] for row in obs_rows[:35]],
-        [0.6 * inch, 0.9 * inch, 0.55 * inch, 0.35 * inch, 0.4 * inch, 0.7 * inch, 0.75 * inch, 0.5 * inch, 0.55 * inch],
+        [[_pdf_cell_text(c, 64) for c in row] for row in obs_rows[:35]],
+        [0.7 * inch, 1.05 * inch, 0.65 * inch, 0.35 * inch, 0.45 * inch, 0.7 * inch, 0.85 * inch, 0.55 * inch, 0.7 * inch],
     )
 
     kpi_rows = _kpi_export_rows(metrics)
@@ -1072,8 +1205,8 @@ def generate_pdf_bytes(
         story,
         styles,
         "Section 5 — Core calculations and KPIs",
-        [[str(c) for c in row] for row in kpi_rows],
-        [1.3 * inch, 0.7 * inch, 0.55 * inch, 0.55 * inch, 0.55 * inch, 0.55 * inch, 0.8 * inch],
+        [[_pdf_cell_text(c, 72) for c in row] for row in kpi_rows],
+        [1.4 * inch, 0.75 * inch, 0.6 * inch, 0.6 * inch, 0.6 * inch, 0.6 * inch, 0.85 * inch],
     )
 
     # Full audit result sections (replaces former five-card / pass-PDF block).
@@ -1148,7 +1281,7 @@ def generate_pdf_bytes(
                 ]
                 for row in subcategory_mismatches[:10]
             ]
-            story.append(_styled_table(mismatch_rows, [0.85 * inch, 1.35 * inch, 0.85 * inch, 0.85 * inch, 0.4 * inch]))
+            story.append(_styled_table(mismatch_rows, [0.85 * inch, 1.35 * inch, 0.85 * inch, 0.85 * inch, 0.4 * inch], styles=styles))
         story.append(Spacer(1, 0.15 * inch))
 
     other_alerts = [a for a in alerts if a.get("category") != "compliance"]
