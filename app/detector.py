@@ -56,7 +56,20 @@ def load_image_bytes(data: bytes) -> np.ndarray:
 
 
 def load_image_from_url(url: str, timeout: int = 60) -> np.ndarray:
-    response = requests.get(url, timeout=timeout)
+    """Load an image from an http(s) URL or a data: URL (base64)."""
+    raw = (url or "").strip()
+    if raw.startswith("data:"):
+        # data:[<mediatype>][;base64],<data>
+        try:
+            header, b64 = raw.split(",", 1)
+        except ValueError as exc:
+            raise ValueError("Invalid data URL for scan image.") from exc
+        if ";base64" not in header.lower():
+            raise ValueError("Only base64 data URLs are supported for scan images.")
+        import base64
+
+        return load_image_bytes(base64.b64decode(b64))
+    response = requests.get(raw, timeout=timeout)
     response.raise_for_status()
     return load_image_bytes(response.content)
 
