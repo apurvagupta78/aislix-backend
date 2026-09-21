@@ -175,6 +175,18 @@ def run_scan_from_image(
     from app.make_scan import make_fallback_local, run_make_scan_from_image, use_make_provider
     from app.openai_vision_scan import run_openai_vision_scan_from_image, use_openai_provider
 
+    metadata = metadata or {}
+    analysis_mode = str(metadata.get("analysis_mode") or "").strip().lower()
+    # FNV QC is a single-unit disposition call with a custom vision_prompt.
+    # Never run YOLO shelf detection (close-up QC images often have zero boxes).
+    if analysis_mode == "fnv_qc":
+        return run_openai_vision_scan_from_image(
+            image,
+            scan_id=scan_id,
+            metadata=metadata,
+            image_url=image_url,
+        )
+
     if use_openai_provider():
         return run_openai_vision_scan_from_image(
             image,
@@ -199,7 +211,6 @@ def run_scan_from_image(
 
     started = time.time()
     scan_id = scan_id or uuid.uuid4().hex[:8]
-    metadata = metadata or {}
     work_dir = None
     try:
         scan_context = resolve_scan_context(metadata)
