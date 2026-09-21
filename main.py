@@ -158,12 +158,65 @@ async def scan(request: Request):
         data = await upload.read()
         if not data:
             raise HTTPException(status_code=400, detail="Empty file upload.")
-        try:
-            return run_scan_from_bytes(data)
-        except Exception as exc:
-            from app.user_errors import public_error_from_exception
 
-            raise HTTPException(status_code=422, detail=public_error_from_exception(exc)) from exc
+        scan_id = str(form.get("scan_id") or "").strip()
+        # Legacy sync path when no scan_id (landing / simple uploads).
+        if not scan_id:
+            try:
+                return run_scan_from_bytes(data)
+            except Exception as disc:
+                from app.user_errors import public_error_from_exception
+
+                raise HTTPException(
+                    status_code=422, detail=public_error_from_exception(disc)
+                ) from disc
+
+        metadata = {
+            "store_id": form.get("store_id"),
+            "location": form.get("location"),
+            "shelf_label": form.get("shelf_label"),
+            "category": form.get("category"),
+            "notes": form.get("notes"),
+            "sub_category": form.get("sub_category"),
+            "operating_model": form.get("operating_model"),
+            "analysis_mode": form.get("analysis_mode"),
+            "vision_prompt": form.get("vision_prompt"),
+            "focus_brand": form.get("focus_brand"),
+            "expected_products": [],
+            "skip_reference_cache": form.get("skip_reference_cache"),
+        }
+        mode = str(metadata.get("analysis_mode") or "").strip().lower()
+        if mode in {"shelf_only", "no_planogram", "image_only_shelf_analysis"}:
+            metadata["planogram_items"] = []
+            metadata["planogram_items_full"] = []
+            metadata.pop("planogram_version_id", None)
+            metadata["expected_products"] = []
+
+        from app.scan_context import build_shelf_label, validate_scan_metadata
+
+        validation_errors = validate_scan_metadata(metadata)
+        if validation_errors:
+            raise HTTPException(status_code=400, detail="; ".join(validation_errors))
+        if not metadata.get("shelf_label"):
+            metadata["shelf_label"] = build_shelf_label(
+                location=metadata.get("location"),
+            ) or None
+
+        existing = get_job(scan_id)
+        if existing:
+            if existing["status"] == "completed" and existing.get("result"):
+                return existing["result"]
+            if existing["status"] == "processing":
+                return JSONResponse(
+                    status_code=202,
+                    content={"scan_id": scan_id, "status": "processing"},
+                )
+
+        def _run_bytes() -> dict:
+            return run_scan_from_bytes(data, scan_id=scan_id, metadata=metadata)
+
+        started = start_job(scan_id, _run_bytes)
+        return JSONResponse(status_code=202, content=started)
 
     if "application/json" in content_type:
         body = await request.json()
