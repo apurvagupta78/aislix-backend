@@ -80,7 +80,9 @@ def home():
 
 @app.get("/health")
 def health():
+    from app.fnv_qc import is_fnv_qc_metadata
     from app.learned_catalog import count_learned
+    from app.make_scan import scan_provider
     from app.recognizer import active_recognition_mode
 
     return {
@@ -92,6 +94,10 @@ def health():
         "recognition_v3": os.getenv("RECOGNITION_V3", "false"),
         **_ocr_status_detail(),
         "retailklip": _retailklip_status(),
+        "scan_provider": scan_provider(),
+        # Ops marker: true when FNV disposition short-circuit is loaded (commit 88de1e1+).
+        "fnv_qc_finalize": is_fnv_qc_metadata({"analysis_mode": "fnv_qc"}),
+        "build": "fnv-qc-finalize-v1",
     }
 
 
