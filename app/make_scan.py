@@ -1016,11 +1016,14 @@ def run_make_scan_from_image(
 ) -> dict:
     import uuid
 
+    from app.fnv_qc import finalize_fnv_qc_result, is_fnv_qc_metadata, normalize_fnv_qc_metadata
     from app.reference_scan_cache import enrich_reference_sample_metadata, lookup_reference_parsed
 
     started = time.time()
     scan_id = scan_id or uuid.uuid4().hex[:8]
-    metadata = enrich_reference_sample_metadata(image, metadata or {}, image_url=image_url)
+    metadata = normalize_fnv_qc_metadata(
+        enrich_reference_sample_metadata(image, metadata or {}, image_url=image_url)
+    )
 
     parsed = lookup_reference_parsed(image, metadata, image_url=image_url)
     if parsed is None:
@@ -1031,6 +1034,17 @@ def run_make_scan_from_image(
             image_url=image_url,
         )
     processing_ms = int((time.time() - started) * 1000)
+
+    if is_fnv_qc_metadata(metadata):
+        result = finalize_fnv_qc_result(
+            scan_id=scan_id,
+            parsed=parsed,
+            processing_ms=processing_ms,
+        )
+        if parsed.get("reference_cache"):
+            result["reference_cache"] = parsed["reference_cache"]
+        return result
+
     result = finalize_make_scan(
         image,
         scan_id=scan_id,

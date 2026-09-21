@@ -175,11 +175,13 @@ def run_scan_from_image(
     from app.make_scan import make_fallback_local, run_make_scan_from_image, use_make_provider
     from app.openai_vision_scan import run_openai_vision_scan_from_image, use_openai_provider
 
-    metadata = metadata or {}
+    from app.fnv_qc import is_fnv_qc_metadata, normalize_fnv_qc_metadata
+
+    metadata = normalize_fnv_qc_metadata(metadata or {})
     analysis_mode = str(metadata.get("analysis_mode") or "").strip().lower()
     # FNV QC is a single-unit disposition call with a custom vision_prompt.
     # Never run YOLO shelf detection (close-up QC images often have zero boxes).
-    if analysis_mode == "fnv_qc":
+    if is_fnv_qc_metadata(metadata) or analysis_mode == "fnv_qc":
         if use_openai_provider():
             return run_openai_vision_scan_from_image(
                 image,

@@ -189,9 +189,13 @@ async def scan(request: Request):
             "analysis_mode": _form_text("analysis_mode"),
             "vision_prompt": _form_text("vision_prompt"),
             "focus_brand": _form_text("focus_brand"),
+            "purpose": _form_text("purpose"),
             "expected_products": [],
             "skip_reference_cache": _form_text("skip_reference_cache"),
         }
+        from app.fnv_qc import normalize_fnv_qc_metadata
+
+        metadata = normalize_fnv_qc_metadata(metadata)
         mode = str(metadata.get("analysis_mode") or "").strip().lower()
         if mode in {"shelf_only", "no_planogram", "image_only_shelf_analysis"}:
             metadata["planogram_items"] = []
@@ -262,9 +266,13 @@ async def scan(request: Request):
             "analysis_mode": body.get("analysis_mode"),
             "vision_prompt": body.get("vision_prompt"),
             "focus_brand": body.get("focus_brand"),
+            "purpose": body.get("purpose"),
             "expected_products": body.get("expected_products") or [],
             "skip_reference_cache": body.get("skip_reference_cache"),
         }
+        from app.fnv_qc import normalize_fnv_qc_metadata
+
+        metadata = normalize_fnv_qc_metadata(metadata)
         # shelf_only must never carry planogram rows — they flip comparison mode
         # and bloat the vision prompt until Astra returns unparseable JSON.
         mode = str(metadata.get("analysis_mode") or "").strip().lower()
