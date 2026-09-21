@@ -374,6 +374,65 @@ async def export_assets(request: Request):
     }
 
 
+@app.post("/scan/rebuild-pdf")
+async def rebuild_pdf(request: Request):
+    """Rebuild PDF from stored metrics/inventory + optional human verification (no re-scan)."""
+    from app.report_generator import generate_pdf_bytes, build_report_context
+
+    body = await request.json()
+    scan_id = str(body.get("scan_id") or "rebuild")
+    metrics = body.get("metrics") if isinstance(body.get("metrics"), dict) else {}
+    inventory = body.get("inventory") if isinstance(body.get("inventory"), list) else []
+    shares = body.get("shares") if isinstance(body.get("shares"), list) else []
+    recommendations = body.get("recommendations") if isinstance(body.get("recommendations"), list) else []
+    alerts = body.get("alerts") if isinstance(body.get("alerts"), list) else []
+    compliance_alerts = (
+        body.get("compliance_alerts") if isinstance(body.get("compliance_alerts"), list) else []
+    )
+    executive_summary = body.get("executive_summary")
+    human_verification = body.get("human_verification")
+    if isinstance(human_verification, dict):
+        metrics = {**metrics, "human_verification": human_verification}
+
+    annotated_jpeg = None
+    annotated_b64 = body.get("annotated_image_base64")
+    if isinstance(annotated_b64, str) and annotated_b64.strip():
+        import base64
+
+        raw = annotated_b64.strip()
+        if "," in raw and raw.lower().startswith("data:"):
+            raw = raw.split(",", 1)[1]
+        try:
+            annotated_jpeg = base64.b64decode(raw)
+        except Exception:
+            annotated_jpeg = None
+
+    report_ctx = build_report_context(
+        scan_id=scan_id,
+        metrics=metrics,
+        store_id=body.get("store_id"),
+        location=body.get("location") or body.get("shelf_label"),
+        category=body.get("category"),
+    )
+    try:
+        pdf_b64 = generate_pdf_bytes(
+            scan_id=scan_id,
+            metrics=metrics,
+            inventory=inventory,
+            shares=shares,
+            recommendations=recommendations,
+            alerts=alerts,
+            compliance_alerts=compliance_alerts,
+            executive_summary=executive_summary,
+            annotated_jpeg=annotated_jpeg,
+            report_context=report_ctx,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"PDF rebuild failed: {exc}") from exc
+
+    return {"pdf_base64": pdf_b64, "build": "human-verification-pdf-v1"}
+
+
 @app.post("/planogram/parse-csv")
 async def planogram_parse_csv(request: Request):
     """Validate planogram CSV; returns preview rows and errors (no DB write)."""

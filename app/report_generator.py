@@ -607,10 +607,29 @@ def _kpi_export_rows(metrics: dict) -> list[list]:
 
     total_facings = metrics.get("total_facings") or metrics.get("total_products")
     rec_cov = metrics.get("recognition_coverage_percent")
+    hv = metrics.get("human_verification") if isinstance(metrics.get("human_verification"), dict) else {}
+    ai_facings = hv.get("ai_facings", total_facings)
+    verified_facings = hv.get("verified_facings")
+    ai_units = hv.get("ai_visible_units", metrics.get("total_visible_units") or total_facings)
+    verified_units = hv.get("verified_visible_units")
     rows = [
         ["KPI", "Value", "Numerator", "Denominator", "Coverage", "State", "Scope"],
         row("Shelf execution score", exec_display, state_key="shelf_execution_score"),
         row("Visible facings", total_facings, total_facings, "assessed image", rec_cov),
+        row("AI Facings", ai_facings, ai_facings, "assessed image"),
+        row(
+            "Verified Facings",
+            verified_facings if verified_facings is not None else "N/A",
+            verified_facings if verified_facings is not None else "",
+            "human verified",
+        ),
+        row("AI Visible Units", ai_units, ai_units, "assessed image"),
+        row(
+            "Verified Visible Units",
+            verified_units if verified_units is not None else "N/A",
+            verified_units if verified_units is not None else "",
+            "human verified",
+        ),
         row("Unique SKUs", metrics.get("unique_skus"), metrics.get("unique_skus"), total_facings),
         row("Unique brands", metrics.get("unique_brands"), metrics.get("unique_brands"), total_facings),
         row("Recognition coverage %", rec_cov, "", "", rec_cov),
@@ -634,6 +653,45 @@ def _kpi_export_rows(metrics: dict) -> list[list]:
         row("Placement issues", metrics.get("placement_issue_count") or metrics.get("misplaced_products")),
         row("Avg confidence %", round(float(metrics.get("average_confidence") or 0) * 100, 1)),
     ]
+    return rows
+
+
+def _human_verification_pdf_rows(metrics: dict) -> list[list]:
+    """AI vs verified field rows for PDF (gate: both must appear)."""
+    hv = metrics.get("human_verification") if isinstance(metrics.get("human_verification"), dict) else {}
+    rows = [
+        ["Field", "AI value", "Verified value", "Verified at"],
+        [
+            "Facings (totals)",
+            _na(hv.get("ai_facings", metrics.get("total_facings"))),
+            _na(hv.get("verified_facings")) if hv.get("verified_facings") is not None else "N/A",
+            _na(hv.get("verified_at")),
+        ],
+        [
+            "Visible units (totals)",
+            _na(hv.get("ai_visible_units", metrics.get("total_visible_units") or metrics.get("total_facings"))),
+            _na(hv.get("verified_visible_units")) if hv.get("verified_visible_units") is not None else "N/A",
+            _na(hv.get("verified_at")),
+        ],
+    ]
+    lines = hv.get("lines") if isinstance(hv.get("lines"), list) else []
+    if lines:
+        rows.append(["—", "—", "—", "—"])
+        rows.append(["Product / field", "AI value", "Verified value", "Verified at"])
+        for line in lines[:40]:
+            if not isinstance(line, dict):
+                continue
+            label = _ascii_label(
+                f"{line.get('product') or line.get('detected_product_id') or ''} · {line.get('field_key') or ''}"
+            )[:40]
+            rows.append(
+                [
+                    label,
+                    _na(line.get("ai_value")),
+                    _na(line.get("verified_value")) if line.get("verified_value") is not None else "N/A",
+                    _na(line.get("verified_at")),
+                ]
+            )
     return rows
 
 
@@ -1207,6 +1265,15 @@ def generate_pdf_bytes(
         "Section 5 — Core calculations and KPIs",
         [[_pdf_cell_text(c, 72) for c in row] for row in kpi_rows],
         [1.4 * inch, 0.75 * inch, 0.6 * inch, 0.6 * inch, 0.6 * inch, 0.6 * inch, 0.85 * inch],
+    )
+
+    hv_rows = _human_verification_pdf_rows(metrics)
+    _append_pdf_section(
+        story,
+        styles,
+        "Section 5a — Human verification",
+        [[_pdf_cell_text(c, 72) for c in row] for row in hv_rows],
+        [1.6 * inch, 1.1 * inch, 1.1 * inch, 1.2 * inch],
     )
 
     # Full audit result sections (replaces former five-card / pass-PDF block).
