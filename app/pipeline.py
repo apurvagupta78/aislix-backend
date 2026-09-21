@@ -180,11 +180,22 @@ def run_scan_from_image(
     # FNV QC is a single-unit disposition call with a custom vision_prompt.
     # Never run YOLO shelf detection (close-up QC images often have zero boxes).
     if analysis_mode == "fnv_qc":
-        return run_openai_vision_scan_from_image(
-            image,
-            scan_id=scan_id,
-            metadata=metadata,
-            image_url=image_url,
+        if use_openai_provider():
+            return run_openai_vision_scan_from_image(
+                image,
+                scan_id=scan_id,
+                metadata=metadata,
+                image_url=image_url,
+            )
+        if use_make_provider():
+            return run_make_scan_from_image(
+                image,
+                scan_id=scan_id,
+                metadata=metadata,
+                image_url=image_url,
+            )
+        raise ValueError(
+            "FNV QC requires the OpenAI or Make vision provider. YOLO shelf detect is not used for QC images."
         )
 
     if use_openai_provider():

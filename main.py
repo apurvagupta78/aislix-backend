@@ -171,19 +171,26 @@ async def scan(request: Request):
                     status_code=422, detail=public_error_from_exception(disc)
                 ) from disc
 
+        def _form_text(key: str) -> str | None:
+            raw = form.get(key)
+            if raw is None:
+                return None
+            text = str(raw).strip()
+            return text or None
+
         metadata = {
-            "store_id": form.get("store_id"),
-            "location": form.get("location"),
-            "shelf_label": form.get("shelf_label"),
-            "category": form.get("category"),
-            "notes": form.get("notes"),
-            "sub_category": form.get("sub_category"),
-            "operating_model": form.get("operating_model"),
-            "analysis_mode": form.get("analysis_mode"),
-            "vision_prompt": form.get("vision_prompt"),
-            "focus_brand": form.get("focus_brand"),
+            "store_id": _form_text("store_id"),
+            "location": _form_text("location"),
+            "shelf_label": _form_text("shelf_label"),
+            "category": _form_text("category"),
+            "notes": _form_text("notes"),
+            "sub_category": _form_text("sub_category"),
+            "operating_model": _form_text("operating_model"),
+            "analysis_mode": _form_text("analysis_mode"),
+            "vision_prompt": _form_text("vision_prompt"),
+            "focus_brand": _form_text("focus_brand"),
             "expected_products": [],
-            "skip_reference_cache": form.get("skip_reference_cache"),
+            "skip_reference_cache": _form_text("skip_reference_cache"),
         }
         mode = str(metadata.get("analysis_mode") or "").strip().lower()
         if mode in {"shelf_only", "no_planogram", "image_only_shelf_analysis"}:
