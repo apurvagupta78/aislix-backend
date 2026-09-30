@@ -16,6 +16,7 @@ from app.scan_context import (
     aisle_category_matches,
     effective_sub_category,
     foreign_aisle_conflict,
+    keyword_hits,
     multi_sub_category_audit,
     resolve_subcategory_label,
     selected_sub_category_ids,
@@ -64,7 +65,7 @@ def _brand_subcategories(aislix_key: str, brand: str) -> set[str]:
 
 
 def _keyword_score(haystack: str, keywords: list[str]) -> int:
-    return sum(1 for kw in keywords if kw in haystack)
+    return keyword_hits(haystack, keywords)
 
 
 def _pc_brand_in_context(brand: str, scan_context: dict) -> bool:
@@ -318,6 +319,9 @@ def _evaluate_compliance(
     if aisle_category_matches(item.get("category"), scan_context.get("aislix_category")):
         pass
     elif allowed_catalog and item_cat not in {"", "general"} and item_cat not in allowed_catalog:
+        if _subcategory_product_guard(selected, haystack, f"{pack_text} {item_cat}"):
+            # Fine-grained AI categories ("Lemon-Lime Soft Drink") are not in the coarse catalog list.
+            return True, selected, selected_label
         if aislix_key == "personal care" and _pc_brand_in_context(brand, scan_context):
             pass
         elif aislix_key in SNACK_AISLE_KEYS and _snack_aisle_brand_guard(brand, scan_context):

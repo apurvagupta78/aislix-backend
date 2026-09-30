@@ -352,3 +352,28 @@ def test_axe_deodorant_not_mismatch_on_mixed_pc_shelf():
     result = analyze_subcategory_compliance(classified, ctx)
     assert result["misplaced_facings"] == 0
 
+
+
+def _soft_drinks_context() -> dict:
+    from app.scan_context import resolve_scan_context
+
+    return resolve_scan_context(
+        {"category": "Beverages", "sub_category": "soft_drinks", "sub_category_label": "Soft drinks"}
+    )
+
+
+def test_chocolate_is_not_a_cola_on_soft_drinks_audit():
+    classified = [_facing("Cadbury", "Cadbury Dairy Milk Chocolate", category="Chocolate")]
+    result = analyze_subcategory_compliance(classified, _soft_drinks_context())
+    assert classified[0]["subcategory_match"] is False
+    assert result["misplaced_facings"] == 1
+
+
+def test_fine_grained_soft_drink_category_is_compliant_on_soft_drinks_audit():
+    classified = [
+        _facing("7UP", "7UP Lemon-Lime Soda", category="Lemon-Lime Soft Drink"),
+        _facing("Fanta", "Fanta Soft Drink", category="Carbonated Soft Drink"),
+        _facing("Pepsi", "Pepsi Cola", category="Cola"),
+    ]
+    result = analyze_subcategory_compliance(classified, _soft_drinks_context())
+    assert result["misplaced_facings"] == 0

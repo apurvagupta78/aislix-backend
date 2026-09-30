@@ -474,6 +474,18 @@ def effective_sub_category(context: dict | None) -> str:
     return sub or "others"
 
 
+def text_has_keyword(text: str, keyword: str) -> bool:
+    """Keyword must start a word: 'cola' matches 'Coca-Cola' but not 'chocolate'."""
+    kw = (keyword or "").strip().lower()
+    if not kw:
+        return False
+    return re.search(r"(?<![a-z0-9])" + re.escape(kw), (text or "").lower()) is not None
+
+
+def keyword_hits(text: str, keywords) -> int:
+    return sum(1 for kw in keywords if text_has_keyword(text, kw))
+
+
 def _haystack_has_snack_markers(haystack: str) -> bool:
     hay = _normalize_key(haystack)
     return any(marker in hay for marker in SNACK_PRODUCT_MARKERS)
@@ -493,7 +505,7 @@ def foreign_aisle_conflict(
     combined = f"{haystack} {pack_text}".strip()
     if selected and selected != "others":
         keywords = SUB_CATEGORY_PRODUCT_KEYWORDS.get(selected) or []
-        if keywords and sum(1 for kw in keywords if kw in _normalize_key(combined)) > 0:
+        if keywords and keyword_hits(_normalize_key(combined), keywords) > 0:
             return None
     if aislix_key in SNACK_AISLE_KEYS and _haystack_has_snack_markers(combined):
         return None
@@ -515,7 +527,7 @@ def _infer_foreign_aisle_local(haystack: str, scan_aisle_key: str) -> tuple[str,
     for aisle_key, keywords in AISLE_PRODUCT_KEYWORDS.items():
         if aisle_key == scan_aisle_key:
             continue
-        score = sum(1 for kw in keywords if kw in haystack_l)
+        score = keyword_hits(haystack_l, keywords)
         if score > best_score:
             best_score = score
             best_aisle = aisle_key

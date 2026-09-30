@@ -24,6 +24,20 @@ def _format_metric(metrics: dict[str, Any], key: str, suffix: str = "", *, na_la
     return f"{value}{suffix}"
 
 
+_EMPTY_LABELS = {"", "none", "null", "unknown", "unverifiable", "n/a"}
+
+
+def _product_label(row: dict[str, Any]) -> str:
+    """Brand · product · variant without 'None' / placeholder fragments."""
+    parts: list[str] = []
+    for value in (row.get("brand"), row.get("product_name") or row.get("product"), row.get("variant")):
+        text = str(value or "").strip()
+        if text.lower() in _EMPTY_LABELS or text in parts:
+            continue
+        parts.append(text)
+    return " · ".join(parts) or "Unidentified product"
+
+
 def build_executive_summary(
     *,
     metadata: dict[str, Any],
@@ -105,8 +119,8 @@ def build_executive_summary(
             continue
         if shelf_only:
             section5_lines.append(
-                f"{row.get('brand')} {row.get('product_name')} {row.get('variant') or ''}: "
-                f"facings {row.get('actual_facings')}, units {row.get('actual_visible_units')}"
+                f"{_product_label(row)}: "
+                f"facings {row.get('actual_facings')}, visible units {row.get('actual_visible_units')}"
             )
             continue
         fc = row.get("facing_compliance")
@@ -118,7 +132,7 @@ def build_executive_summary(
             else "Verification required"
         )
         section5_lines.append(
-            f"{row.get('brand')} {row.get('product_name')} {row.get('variant') or ''}: "
+            f"{_product_label(row)}: "
             f"facings {row.get('actual_facings')}/{row.get('expected_facings')}, compliance {compliance_text}"
         )
     section5 = "\n".join(section5_lines) if section5_lines else "No product rows available."
@@ -188,8 +202,8 @@ def build_executive_summary(
         if not isinstance(row, dict):
             continue
         appendix_lines.append(
-            f"{row.get('brand')} | {row.get('product_name')} | facings {row.get('actual_facings')} | "
-            f"units {row.get('actual_visible_units')}"
+            f"{_product_label(row)} | facings {row.get('actual_facings')} | "
+            f"visible units {row.get('actual_visible_units')}"
         )
     section13 = "\n".join(appendix_lines) if appendix_lines else "Data unavailable"
 

@@ -164,3 +164,24 @@ def test_canonicalize_louis_chips_to_lays():
     canonicalize_shelf_cv_products(products)
     assert products[0]["brand"] == "Lay's"
     assert products[1]["brand"] == "Lay's"
+
+
+def test_shelf_only_brand_analysis_has_units_display_name_and_skips_illegible_brand_count():
+    products = [
+        {"brand": "Coca-Cola", "product_name": "Coca-Cola Cola", "variant": "Original", "actual_facings": 5, "actual_visible_units": 10},
+        {"brand": "Pepsi", "product_name": "Pepsi Cola", "variant": "Original", "actual_facings": 4, "actual_visible_units": 8},
+        {"brand": "Not legible", "product_name": "Biscuit Pack", "variant": "", "actual_facings": 1, "actual_visible_units": 2},
+    ]
+    analysis = build_shelf_only_analysis(
+        products,
+        count_validation={
+            "total_actual_facings": {"status": "VERIFIED", "verified_value": 10},
+            "total_actual_visible_units": {"status": "VERIFIED", "verified_value": 20},
+        },
+    )
+    rows = {row["brand"]: row for row in analysis["brand_analysis"]}
+    assert rows["Coca-Cola"]["actual_visible_units"] == 10
+    assert rows["Coca-Cola"]["share_of_visible_units_percent"] == 50.0
+    assert rows["Coca-Cola"]["rank_by_visible_units"] == 1
+    assert rows["Brand not legible"]["actual_facings"] == 1
+    assert analysis["calculated_metrics"]["brands_identified"]["value"] == 2

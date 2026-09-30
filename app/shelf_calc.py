@@ -26,6 +26,11 @@ _PLACEHOLDER_TOKENS = frozenset(
         "na",
         "none",
         "null",
+        "not legible",
+        "not readable",
+        "illegible",
+        "unreadable",
+        "not identifiable",
         "-",
         "—",
     }
@@ -382,6 +387,8 @@ def build_shelf_only_analysis(
     }
 
     brand_facings: dict[str, int] = {}
+    brand_units: dict[str, int] = {}
+    brand_display: dict[str, str] = {}
     for p in products:
         brand = normalize_brand(p.get("brand"))
         if not brand:
@@ -390,6 +397,14 @@ def build_shelf_only_analysis(
             brand_facings[brand] = brand_facings.get(brand, 0) + int(p.get("actual_facings") or 0)
         except (TypeError, ValueError):
             continue
+        try:
+            brand_units[brand] = brand_units.get(brand, 0) + int(p.get("actual_visible_units") or 0)
+        except (TypeError, ValueError):
+            pass
+        brand_display.setdefault(
+            brand,
+            "Brand not legible" if _is_placeholder(p.get("brand")) else str(p.get("brand")).strip(),
+        )
 
     total_facings_metric = (
         metric_result(
@@ -411,12 +426,37 @@ def build_shelf_only_analysis(
 
     brand_shares = []
     if verified_facings is not None and int(verified_facings) > 0:
-        for brand, facings in sorted(brand_facings.items(), key=lambda item: (-item[1], item[0])):
+        units_total = (
+            int(verified_units)
+            if verified_units is not None and units_check.get("status") == "VERIFIED"
+            else None
+        )
+        unit_rank = {
+            brand: index + 1
+            for index, (brand, _) in enumerate(
+                sorted(brand_units.items(), key=lambda item: (-item[1], item[0]))
+            )
+        }
+        ranked = sorted(brand_facings.items(), key=lambda item: (-item[1], item[0]))
+        for index, (brand, facings) in enumerate(ranked):
+            share = calculate_brand_share(facings, int(verified_facings)).to_dict()
+            units = brand_units.get(brand)
+            unit_share = (
+                calculate_brand_share(units, units_total, metric_id="brand_share_visible_units").to_dict()
+                if units is not None and units_total
+                else None
+            )
             brand_shares.append(
                 {
-                    "brand": brand,
+                    "brand": brand_display.get(brand, brand),
+                    "brand_key": brand,
                     "actual_facings": facings,
-                    "share": calculate_brand_share(facings, int(verified_facings)).to_dict(),
+                    "actual_visible_units": units if units_total else None,
+                    "share": share,
+                    "share_of_facings_percent": share.get("value"),
+                    "share_of_visible_units_percent": (unit_share or {}).get("value"),
+                    "rank_by_facings": index + 1,
+                    "rank_by_visible_units": unit_rank.get(brand) if units_total else None,
                 }
             )
 
