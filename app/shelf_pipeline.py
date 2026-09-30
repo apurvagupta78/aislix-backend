@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.astra_cv_validate import is_shelf_cv_payload, verify_astra_count_consistency
+from app.astra_cv_validate import (
+    apply_visible_units_cap,
+    cap_visible_units_to_facings,
+    is_shelf_cv_payload,
+    verify_astra_count_consistency,
+)
 from app.cv_brand_canonicalize import canonicalize_shelf_cv_products
 from app.executive_summary_builder import build_executive_summary
 from app.execution_risk import evaluate_execution_risk
@@ -47,6 +52,7 @@ def run_shelf_cv_pipeline(
     canonicalize_shelf_cv_products(products)
     astra_payload["products"] = products
     count_validation = verify_astra_count_consistency(astra_payload)
+    apply_visible_units_cap(count_validation, products, cap_visible_units_to_facings(products))
     analysis_mode = normalize_api_analysis_mode(metadata, astra_payload)
     scan_complete = bool(count_validation.get("scan_complete"))
 

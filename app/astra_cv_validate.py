@@ -101,6 +101,41 @@ def verify_count_field(
     }
 
 
+def cap_visible_units_to_facings(products: list[dict[str, Any]]) -> int:
+    """Clamp per-product visible units to facings; returns how many rows were capped.
+
+    Every unit facing the shopper (stacked or not) is a facing, so fully visible units
+    can never exceed facings. The raw Astra value is kept in ``astra_actual_visible_units``.
+    """
+    capped = 0
+    for row in products:
+        if not isinstance(row, dict):
+            continue
+        try:
+            facings = int(row.get("actual_facings"))
+            units = int(row.get("actual_visible_units"))
+        except (TypeError, ValueError):
+            continue
+        if facings > 0 and units > facings:
+            row.setdefault("astra_actual_visible_units", units)
+            row["actual_visible_units"] = facings
+            capped += 1
+    return capped
+
+
+def apply_visible_units_cap(count_validation: dict[str, Any], products: list[dict[str, Any]], capped: int) -> None:
+    """Point the units check at the capped product sum; Astra's raw totals stay for audit."""
+    units = count_validation.get("total_actual_visible_units")
+    if not capped or not isinstance(units, dict):
+        return
+    capped_sum = sum_product_field(products, "actual_visible_units")
+    units["astra_product_sum"] = units.get("product_sum")
+    units["product_sum"] = capped_sum
+    units["rows_capped_to_facings"] = capped
+    if units.get("status") == VERIFIED:
+        units["verified_value"] = capped_sum
+
+
 def verify_astra_count_consistency(data: dict[str, Any]) -> dict[str, Any]:
     """Compare product-level sums vs Astra summary totals."""
     products = [row for row in (data.get("products") or []) if isinstance(row, dict)]
