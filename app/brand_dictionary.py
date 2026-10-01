@@ -1161,7 +1161,11 @@ def _synthetic_brand_product(
     normalized: str,
     scan_context: dict | None,
 ) -> dict | None:
-    """Catalog gaps: return a typed label when OCR + aisle clearly indicate product kind."""
+    """Catalog gaps: return a typed label when OCR + aisle clearly indicate product kind.
+
+    Labels must be built with allow_brand_fallback=False: match_product_for_brand calls
+    this helper, so falling back into it again recurses forever.
+    """
     if not scan_context:
         return None
     from app.scan_context import effective_sub_category
@@ -1177,6 +1181,7 @@ def _synthetic_brand_product(
                 normalized,
                 confidence=0.86,
                 scan_context=scan_context,
+                allow_brand_fallback=False,
             )
 
     pack_type = infer_pc_product_type(normalized)
@@ -1196,6 +1201,7 @@ def _synthetic_brand_product(
                 normalized,
                 confidence=0.84,
                 scan_context=scan_context,
+                allow_brand_fallback=False,
             )
     return None
 
