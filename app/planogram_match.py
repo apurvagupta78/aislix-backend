@@ -7,6 +7,7 @@ from collections import defaultdict
 from typing import Any
 
 from app.inventory import _normalize_brand_key
+from app.location_analysis import labels_match, normalize_label
 from app.planogram_csv import build_match_key
 
 _MATCH_THRESHOLD = 0.72
@@ -296,6 +297,7 @@ def _planogram_base(item: dict[str, Any]) -> dict[str, Any]:
     expected_units = _int_or_none(item.get("expected_shelf_units"))
     return {
         "location": item.get("location"),
+        "expected_location": item.get("expected_location") or item.get("location"),
         "category": item.get("category"),
         "subcategory": item.get("sub_category") or item.get("subcategory"),
         "brand": item.get("brand"),
@@ -306,7 +308,9 @@ def _planogram_base(item: dict[str, Any]) -> dict[str, Any]:
         "min_facings": _int_or_none(item.get("min_facings")),
         "max_facings": _int_or_none(item.get("max_facings")),
         "expected_shelf_units": expected_units,
-        "expected_mrp_inr": _float_or_none(item.get("mrp_inr")),
+        "expected_mrp_inr": _float_or_none(
+            item.get("mrp_inr") or item.get("expected_price") or item.get("mrp")
+        ),
         "avg_daily_sales": _float_or_none(item.get("avg_daily_sales")),
         "expected_shelf_position": item.get("shelf_position"),
         "actual_shelf_position": None,
@@ -339,7 +343,62 @@ def _attach_cv(
         "brand_status": cv.get("brand_status"),
         "product_status": cv.get("product_status"),
         "variant_status": cv.get("variant_status"),
+        **_cv_location_price(cv),
     }
+
+
+def _cv_location_price(cv: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if "location_label" in cv:
+        out["actual_location_label"] = cv.get("location_label")
+        out["actual_location_label_status"] = cv.get("location_label_status")
+    if "rack_marker" in cv:
+        out["actual_rack_marker"] = cv.get("rack_marker")
+    if "visible_price" in cv:
+        out["visible_price"] = cv.get("visible_price")
+        out["price_source"] = cv.get("price_source")
+    return out
+
+
+def _location_bonus(cv: dict[str, Any], item: dict[str, Any]) -> float:
+    expected = item.get("expected_location") or item.get("location")
+    return 0.05 if labels_match(cv.get("location_label"), expected) else 0.0
+
+
+def _fold_other_locations(
+    rows: list[dict[str, Any]],
+    cv_products: list[dict[str, Any]],
+    used_cv: set[int],
+) -> None:
+    """Same product read in more bins: add those facings to the row when no bin is expected."""
+    for row in rows:
+        if row.get("source_actual") is None:
+            continue
+        if normalize_label(row.get("expected_location") or row.get("location")):
+            continue
+        identity = _cv_identity(
+            {
+                "brand": row.get("actual_brand"),
+                "product_name": row.get("actual_product_name"),
+                "variant": row.get("actual_variant"),
+            }
+        )
+        if not identity:
+            continue
+        extra_labels: list[str] = []
+        for idx, cv in enumerate(cv_products):
+            if idx in used_cv or _cv_identity(cv) != identity:
+                continue
+            if not normalize_label(cv.get("location_label")):
+                continue
+            used_cv.add(idx)
+            row["actual_facings"] = (row.get("actual_facings") or 0) + (_int_or_none(cv.get("actual_facings")) or 0)
+            row["actual_visible_units"] = (row.get("actual_visible_units") or 0) + (
+                _int_or_none(cv.get("actual_visible_units")) or 0
+            )
+            extra_labels.append(str(cv.get("location_label")))
+        if extra_labels:
+            row["additional_location_labels"] = extra_labels
 
 
 def _residual_variant_unverified_attach(
@@ -425,6 +484,10 @@ def join_planogram_with_cv(
             if idx in used_cv:
                 continue
             score = _score_cv_to_planogram(cv, item)
+            if score > 0 and best_idx >= 0 and score == best_score:
+                if _location_bonus(cv, item) > _location_bonus(cv_products[best_idx], item):
+                    best_idx = idx
+                continue
             if score > best_score:
                 best_score = score
                 best_idx = idx
@@ -487,6 +550,7 @@ def join_planogram_with_cv(
         rows.append(_attach_cv(base, candidate, score=best_score, match_status=match_status))
 
     _residual_variant_unverified_attach(rows, cv_products, used_cv)
+    _fold_other_locations(rows, cv_products, used_cv)
 
     unplanned: list[dict[str, Any]] = []
     for idx, cv in enumerate(cv_products):
@@ -512,6 +576,7 @@ def join_planogram_with_cv(
                 "brand_status": cv.get("brand_status"),
                 "product_status": cv.get("product_status"),
                 "variant_status": cv.get("variant_status"),
+                **_cv_location_price(cv),
             }
         )
 

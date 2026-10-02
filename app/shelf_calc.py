@@ -79,7 +79,7 @@ def calculate_facing_variance_percent(actual: int | None, expected: int | None) 
     if actual is None or expected is None:
         return unavailable("facing_variance_percent", unit="percent")
     if int(expected) == 0:
-        return unavailable("facing_variance_percent", unit="percent", explanation="expected_facings is zero")
+        return unavailable("facing_variance_percent", unit="percent", reason="expected_facings is zero")
     variance = int(actual) - int(expected)
     pct = percentage(variance, expected)
     return metric_result(
@@ -95,7 +95,7 @@ def calculate_facing_compliance(actual: int | None, expected: int | None) -> Met
     if actual is None or expected is None:
         return unavailable("facing_compliance", unit="percent")
     if int(expected) == 0:
-        return unavailable("facing_compliance", unit="percent", explanation="expected_facings is zero")
+        return unavailable("facing_compliance", unit="percent", reason="expected_facings is zero")
     pct = percentage(actual, expected)
     return metric_result(
         "facing_compliance",
@@ -210,7 +210,7 @@ def calculate_visible_shelf_coverage_days(actual: int | None, avg_daily_sales: f
     if actual is None:
         return unavailable("estimated_visible_shelf_coverage_days", unit="days")
     if avg_daily_sales is None or float(avg_daily_sales) <= 0:
-        return unavailable("estimated_visible_shelf_coverage_days", unit="days", explanation="avg_daily_sales unavailable")
+        return unavailable("estimated_visible_shelf_coverage_days", unit="days", reason="avg_daily_sales unavailable")
     days = round(int(actual) / float(avg_daily_sales), 1)
     return metric_result(
         "estimated_visible_shelf_coverage_days",
@@ -352,6 +352,20 @@ def build_planogram_row_metrics(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _variant_keys(products: list[dict[str, Any]]) -> set[str]:
+    keys: set[str] = set()
+    for idx, p in enumerate(products):
+        if str(p.get("product_status") or "IDENTIFIED").upper() == "UNVERIFIABLE":
+            continue
+        key = normalize_product_identity(
+            p.get("brand"), p.get("product_name") or p.get("product"), p.get("variant"), p.get("sku")
+        )
+        if not key or (_is_placeholder(p.get("sku")) and _is_placeholder(p.get("variant"))):
+            key = f"{key}|row:{idx}"
+        keys.add(key)
+    return keys
+
+
 def build_shelf_only_analysis(
     products: list[dict[str, Any]],
     *,
@@ -473,14 +487,9 @@ def build_shelf_only_analysis(
         ).to_dict(),
         "variants_identified": metric_result(
             "variants_identified",
-            # Each identified product row is a distinct visual variant group on shelf.
-            value=len(
-                [
-                    p
-                    for p in products
-                    if str(p.get("product_status") or "IDENTIFIED").upper() != "UNVERIFIABLE"
-                ]
-            ),
+            # Each identified product row is a distinct visual variant group on shelf;
+            # the same variant split across shelf-edge locations counts once.
+            value=len(_variant_keys(products)),
             unit="count",
         ).to_dict(),
         "total_actual_facings": total_facings_metric.to_dict(),

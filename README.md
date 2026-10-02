@@ -60,7 +60,7 @@ Replace the local YOLO/OCR pipeline with OpenAI vision directly (**recommended**
 - `OPENAI_API_KEY` — required
 - `OPENAI_VISION_MODEL=gpt-6-astra` — shelf audit model (A/B tested vs gpt-5.6-sol)
 - `OPENAI_VISION_REASONING_EFFORT=low` — target ~2–3 min scans (use `medium` only for hardest shelves)
-- `OPENAI_VISION_MAX_TOKENS=8192` — max output tokens (reasoning models need headroom for JSON)
+- `OPENAI_VISION_MAX_TOKENS=16384` — max output tokens (reasoning models need headroom for JSON; floor 12288 for location/price fields)
 - `OPENAI_VISION_TIMEOUT_SECONDS=240` — request timeout (~4 min cap; typical scans finish in 2–3 min)
 - `OPENAI_VISION_IMAGE_DETAIL=auto` — use `high` only for photos wider/taller than 1024px
 - `OPENAI_VISION_MAX_IMAGE_PX=2048` — downscale large uploads before the API call

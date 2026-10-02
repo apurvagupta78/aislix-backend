@@ -12,6 +12,7 @@ from app.astra_cv_validate import (
 )
 from app.cv_brand_canonicalize import canonicalize_shelf_cv_products
 from app.executive_summary_builder import build_executive_summary
+from app.location_analysis import annotate_planogram_rows, build_location_analysis
 from app.execution_risk import evaluate_execution_risk
 from app.planogram_match import join_planogram_with_cv
 from app.shelf_calc import (
@@ -56,6 +57,8 @@ def run_shelf_cv_pipeline(
     analysis_mode = normalize_api_analysis_mode(metadata, astra_payload)
     scan_complete = bool(count_validation.get("scan_complete"))
 
+    location_analysis = build_location_analysis(products, astra_payload)
+
     sku_match_percent = None
     if legacy_planogram_compliance:
         sku_match_percent = legacy_planogram_compliance.get("planogram_sku_match_percent")
@@ -64,6 +67,7 @@ def run_shelf_cv_pipeline(
         planogram_items = metadata.get("planogram_items") or []
         if planogram_items:
             joined_rows, unplanned = join_planogram_with_cv(planogram_items, products)
+            annotate_planogram_rows(joined_rows, location_analysis)
         else:
             joined_rows, unplanned = [], []
         aislix_analysis = build_planogram_analysis(
@@ -76,6 +80,7 @@ def run_shelf_cv_pipeline(
     else:
         aislix_analysis = build_shelf_only_analysis(products, count_validation=count_validation)
         aislix_key = "aislix_shelf_analysis"
+    aislix_analysis["location_analysis"] = location_analysis
 
     calculated_metrics = aislix_analysis.get("calculated_metrics") or {}
     if not scan_complete:
@@ -118,6 +123,7 @@ def run_shelf_cv_pipeline(
         "astra_cv_validation": count_validation,
         aislix_key: aislix_analysis,
         "calculated_metrics": calculated_metrics,
+        "location_analysis": location_analysis,
         "execution_risk": execution_risk,
         "luna_secondary_analysis": luna_analysis,
         **summary_payload,

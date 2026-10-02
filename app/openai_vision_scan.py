@@ -39,12 +39,16 @@ def vision_reasoning_effort() -> str:
     return os.getenv("OPENAI_VISION_REASONING_EFFORT", "low").strip().lower() or "low"
 
 
+_VISION_MIN_OUTPUT_TOKENS = 12288
+
+
 def vision_max_output_tokens() -> int:
-    raw = os.getenv("OPENAI_VISION_MAX_TOKENS", "8192")
+    """Per-product location label, rack and price fields need room for large shelves."""
+    raw = os.getenv("OPENAI_VISION_MAX_TOKENS", "16384")
     try:
-        return max(256, int(raw))
+        return max(_VISION_MIN_OUTPUT_TOKENS, int(raw))
     except ValueError:
-        return 8192
+        return 16384
 
 
 def vision_timeout_seconds() -> float:
