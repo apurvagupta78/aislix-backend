@@ -61,9 +61,12 @@ def normalize_sample_image(image: np.ndarray, sample_id: str) -> np.ndarray:
 
 
 def image_fingerprint(image: np.ndarray) -> str:
-    from app.report_generator import encode_shelf_image_bytes
-
-    return hashlib.sha256(encode_shelf_image_bytes(image)).hexdigest()
+    # Byte-for-byte the historical encoding so stored fingerprints keep matching.
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    ok, encoded = cv2.imencode(".jpg", rgb, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+    if not ok:
+        raise ValueError("Could not encode shelf image.")
+    return hashlib.sha256(encoded.tobytes()).hexdigest()
 
 
 def _difference_hash(image: np.ndarray, *, size: int = VISUAL_HASH_SIZE) -> np.ndarray:

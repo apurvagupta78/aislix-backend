@@ -166,9 +166,8 @@ def generate_annotated_image(
 
 
 def encode_shelf_image_bytes(image: np.ndarray, *, quality: int = 92) -> bytes:
-    """Encode the original shelf photo as JPEG (no boxes) — same color path as annotated output."""
-    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    ok, encoded = cv2.imencode(".jpg", rgb, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    """Encode the original shelf photo (BGR array) as JPEG (no boxes) — same color path as annotated output."""
+    ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
     if not ok:
         raise ValueError("Could not encode shelf image.")
     return encoded.tobytes()
@@ -192,9 +191,8 @@ def encode_vision_image_bytes(
 
 
 def encode_annotated_image_bytes(annotated: np.ndarray, *, quality: int = 92) -> bytes:
-    """Encode annotated shelf image once — shared by download JPEG and PDF embed."""
-    rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
-    ok, encoded = cv2.imencode(".jpg", rgb, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    """Encode annotated shelf image (BGR array) once — shared by download JPEG and PDF embed."""
+    ok, encoded = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
     if not ok:
         raise ValueError("Could not encode annotated shelf image.")
     return encoded.tobytes()

@@ -98,6 +98,15 @@ def test_original_and_annotated_share_dimensions():
     assert len(annotated) > 1000
 
 
+def test_encoded_jpegs_keep_color_order():
+    red_bgr = np.zeros((64, 64, 3), dtype=np.uint8)
+    red_bgr[..., 2] = 220
+    for jpeg in (encode_shelf_image_bytes(red_bgr), encode_annotated_image_bytes(red_bgr)):
+        decoded = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+        b, g, r = decoded[32, 32].tolist()
+        assert r > 180 and b < 40
+
+
 def test_pdf_uses_same_jpeg_bytes_as_download():
     image = np.full((240, 320, 3), 255, dtype=np.uint8)
     classified = [
