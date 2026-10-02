@@ -202,6 +202,7 @@ def location_status(
 
     WRONG_LOCATION is only possible when the expected label itself was read in this photo,
     so store-level locations (e.g. "A-1-L") never produce false wrong-location flags.
+    CORRECT needs a fully read label; a partial read ('?') that fits the expected label is NOT_READABLE.
     """
     exp = normalize_label(expected)
     if not exp:
@@ -210,13 +211,11 @@ def location_status(
     if act in ambiguous_labels:
         act = ""
     if act and labels_match(act, exp):
-        return "CORRECT"
-    expected_visible = any(labels_match(label, exp) for label in photo_labels)
-    if not expected_visible:
+        return "NOT_READABLE" if "?" in act else "CORRECT"
+    expected_read = any("?" not in label and labels_match(label, exp) for label in photo_labels)
+    if not expected_read and not any(labels_match(label, exp) for label in photo_labels):
         return "EXPECTED_NOT_IN_PHOTO"
-    if not act:
-        return "NOT_READABLE"
-    if "?" in act:
+    if not act or "?" in act or not expected_read:
         return "NOT_READABLE"
     return "WRONG_LOCATION"
 

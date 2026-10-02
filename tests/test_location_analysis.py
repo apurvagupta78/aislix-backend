@@ -100,6 +100,13 @@ def test_wrong_location_only_when_expected_label_is_in_photo():
     assert location_status("AMB-D0303", None, photo) == "NOT_READABLE"
 
 
+def test_partial_label_is_never_correct_or_proof_of_expected_bin():
+    assert location_status("AMB-D07B3", "AMB-?????", ["AMB-?????"]) == "NOT_READABLE"
+    assert location_status("AMB-D0302", "AMB-D03?2", ["AMB-D03?2"]) == "NOT_READABLE"
+    assert location_status("AMB-D07B3", "AMB-D07B4", ["AMB-?????", "AMB-D07B4"]) == "NOT_READABLE"
+    assert location_status("AMB-D07B3", "AMB-D07B4", ["AMB-D07B4", "AMB-D07C1"]) == "EXPECTED_NOT_IN_PHOTO"
+
+
 def test_price_status():
     assert price_status(85, "85") == "MATCH"
     assert price_status("110", "₹ 120.00") == "MISMATCH"
