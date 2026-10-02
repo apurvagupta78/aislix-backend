@@ -35,6 +35,20 @@ def labels_match(actual: Any, expected: Any) -> bool:
     return all(ca == "?" or ca == ce for ca, ce in zip(a, e))
 
 
+def _labels_compatible(a: str, b: str) -> bool:
+    """Two read labels could be the same physical label ('?' is unknown on either side)."""
+    return len(a) == len(b) and all(ca == cb or "?" in (ca, cb) for ca, cb in zip(a, b))
+
+
+def _ambiguous_labels(labels: list[str]) -> set[str]:
+    """Partial labels that could be two or more other labels read in the photo, e.g. 'AMB-D07??'."""
+    return {
+        label
+        for label in labels
+        if "?" in label and sum(1 for other in labels if other != label and _labels_compatible(label, other)) >= 2
+    }
+
+
 def _rack(value: Any) -> str | None:
     text = str(value or "").strip().upper()
     if not text or text.lower() in _PLACEHOLDER:
@@ -105,11 +119,13 @@ def build_location_analysis(
                 "rack_marker": rack,
                 "label_status": _label_status(row, label),
                 "_products": set(),
+                "_rows": 0,
                 "facings": 0,
                 "visible_units": 0,
             },
         )
         entry["_products"].add(_product_identity(row))
+        entry["_rows"] += 1
         entry["facings"] += _int(row.get("actual_facings"))
         entry["visible_units"] += _int(row.get("actual_visible_units"))
         if not entry["rack_marker"] and rack:
@@ -132,6 +148,7 @@ def build_location_analysis(
                 "rack_marker": rack,
                 "label_status": _label_status(raw, label),
                 "_products": set(),
+                "_rows": 0,
                 "facings": 0,
                 "visible_units": 0,
             },
@@ -139,9 +156,15 @@ def build_location_analysis(
         if not entry["rack_marker"] and rack:
             entry["rack_marker"] = rack
 
+    ambiguous = _ambiguous_labels(list(labels))
+    ambiguous_rows = 0
+    for label in ambiguous:
+        ambiguous_rows += labels.pop(label)["_rows"]
+
     locations: list[dict[str, Any]] = []
     for label in sorted(labels):
         entry = labels[label]
+        entry.pop("_rows")
         product_count = len(entry.pop("_products"))
         entry["products"] = product_count
         entry["empty"] = product_count == 0
@@ -156,9 +179,11 @@ def build_location_analysis(
             "location_labels_read": len(locations) if has_location_field else None,
             "empty_locations": len(empty) if has_location_field else None,
             "racks_detected": len(racks) if has_location_field else None,
-            "products_without_location": without_location if has_location_field else None,
+            "products_without_location": without_location + ambiguous_rows if has_location_field else None,
+            "ambiguous_labels": len(ambiguous) if has_location_field else None,
             "prices_read": prices_read if has_price_field else None,
         },
+        "ambiguous_label_values": sorted(ambiguous),
     }
 
 
@@ -170,6 +195,7 @@ def location_status(
     expected: Any,
     actual_label: Any,
     photo_labels: list[str],
+    ambiguous_labels: frozenset[str] | set[str] = frozenset(),
 ) -> str | None:
     """
     CORRECT / WRONG_LOCATION / NOT_READABLE / EXPECTED_NOT_IN_PHOTO / NO_EXPECTED.
@@ -181,6 +207,8 @@ def location_status(
     if not exp:
         return "NO_EXPECTED"
     act = normalize_label(actual_label)
+    if act in ambiguous_labels:
+        act = ""
     if act and labels_match(act, exp):
         return "CORRECT"
     expected_visible = any(labels_match(label, exp) for label in photo_labels)
@@ -207,6 +235,7 @@ def price_status(expected_price: Any, visible_price: Any) -> str:
 def annotate_planogram_rows(rows: list[dict[str, Any]], location_analysis: dict[str, Any]) -> None:
     """Add location_status / price_status to joined planogram rows in place."""
     photo_labels = labels_in_photo(location_analysis)
+    ambiguous = set(location_analysis.get("ambiguous_label_values") or [])
     for row in rows:
         if row.get("source_actual") is None:
             continue
@@ -215,6 +244,7 @@ def annotate_planogram_rows(rows: list[dict[str, Any]], location_analysis: dict[
                 row.get("expected_location") or row.get("location"),
                 row.get("actual_location_label"),
                 photo_labels,
+                ambiguous,
             )
         if "visible_price" in row:
             row["price_status"] = price_status(row.get("expected_mrp_inr"), row.get("visible_price"))

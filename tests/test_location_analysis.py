@@ -36,6 +36,23 @@ def _payload(products, labels=None):
     }
 
 
+def test_partial_label_matching_several_read_labels_is_not_a_location():
+    products = [
+        _row("Pink Rock Salt", "Catch", "AMB-D07?1", status="PARTIAL"),
+        _row("Pink Rock Salt", "Catch", "AMB-D07?2", status="PARTIAL"),
+        _row("Sugar", "Madhur", "AMB-D07??", status="PARTIAL"),
+        _row("Rice", "Daawat", "AMB-D07??", status="PARTIAL"),
+    ]
+
+    out = build_location_analysis(products, {})
+
+    assert [row["label"] for row in out["locations"]] == ["AMB-D07?1", "AMB-D07?2"]
+    assert out["metrics"]["ambiguous_labels"] == 1
+    assert out["metrics"]["products_without_location"] == 2
+    assert out["ambiguous_label_values"] == ["AMB-D07??"]
+    assert location_status("AMB-D0712", "AMB-D07??", ["AMB-D07?1", "AMB-D07?2"], {"AMB-D07??"}) == "NOT_READABLE"
+
+
 def test_location_rollup_empty_labels_racks_and_prices():
     products = [
         _row("Pink Rock Salt", "Catch", "AMB-D0703", rack="B"),
@@ -57,6 +74,7 @@ def test_location_rollup_empty_labels_racks_and_prices():
         "empty_locations": 1,
         "racks_detected": 2,
         "products_without_location": 1,
+        "ambiguous_labels": 0,
         "prices_read": 3,
     }
 
