@@ -275,6 +275,9 @@ async def scan(request: Request):
             "purpose": body.get("purpose"),
             "expected_products": body.get("expected_products") or [],
             "skip_reference_cache": body.get("skip_reference_cache"),
+            "comparison_basis": body.get("comparison_basis"),
+            "reference_items": body.get("reference_items"),
+            "reference_document": body.get("reference_document"),
         }
         from app.fnv_qc import normalize_fnv_qc_metadata
 

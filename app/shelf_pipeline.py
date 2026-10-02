@@ -15,6 +15,7 @@ from app.executive_summary_builder import build_executive_summary
 from app.location_analysis import annotate_planogram_rows, build_location_analysis
 from app.execution_risk import evaluate_execution_risk
 from app.planogram_match import join_planogram_with_cv
+from app.reference_match import build_reference_match, is_reference_comparison
 from app.shelf_calc import (
     FORMULA_VERSION,
     build_planogram_analysis,
@@ -82,6 +83,18 @@ def run_shelf_cv_pipeline(
         aislix_key = "aislix_shelf_analysis"
     aislix_analysis["location_analysis"] = location_analysis
 
+    reference_match = None
+    if is_reference_comparison(metadata):
+        document = metadata.get("reference_document")
+        reference_match = build_reference_match(
+            metadata["reference_items"],
+            products,
+            location_analysis,
+            count_pending=not scan_complete,
+            document=document if isinstance(document, dict) else None,
+        )
+        aislix_analysis["reference_match"] = reference_match
+
     calculated_metrics = aislix_analysis.get("calculated_metrics") or {}
     if not scan_complete:
         for key in ("total_actual_facings", "total_actual_visible_units", "planogram_compliance", "overall_facing_compliance"):
@@ -124,6 +137,7 @@ def run_shelf_cv_pipeline(
         aislix_key: aislix_analysis,
         "calculated_metrics": calculated_metrics,
         "location_analysis": location_analysis,
+        **({"reference_match": reference_match} if reference_match else {}),
         "execution_risk": execution_risk,
         "luna_secondary_analysis": luna_analysis,
         **summary_payload,
