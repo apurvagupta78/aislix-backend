@@ -133,7 +133,7 @@ def test_toothpaste_sample_defaults():
         sample_defaults=SAMPLE_DEFAULTS["toothpaste-a1l"],
     )
     assert meta["sub_category"] == "toothpaste"
-    assert "planogram_items" not in meta
+    assert meta.get("planogram_items")
     assert "shelf_brand_guide" in meta
     assert "Doctor" in meta["shelf_brand_guide"]
     assert "Dabur" in meta["shelf_brand_guide"]
@@ -339,7 +339,7 @@ def test_demo_allowance_empty_ip(monkeypatch):
 
 
 def test_demo_allowance_blocked_after_fifth(monkeypatch):
-    base = datetime(2026, 9, 13, 16, 42, tzinfo=timezone.utc)
+    base = datetime.now(timezone.utc) - timedelta(hours=1)
     rows = [
         {"updated_at": (base + timedelta(minutes=i)).isoformat()}
         for i in range(5)

@@ -73,9 +73,72 @@ def test_observe_mode_lets_requests_through(supabase_env, monkeypatch):
     assert _client().post("/scan", json={}).status_code == 400
 
 
+def test_default_mode_is_enforce(monkeypatch):
+    monkeypatch.delenv("BACKEND_AUTH_MODE", raising=False)
+    assert auth.auth_mode() == "enforce"
+
+
+SCAN = "11111111-1111-1111-1111-111111111111"
+USER = "22222222-2222-2222-2222-222222222222"
+ORG = "33333333-3333-3333-3333-333333333333"
+
+
+def test_user_can_access_scan_checks_active_org_membership(supabase_env, monkeypatch):
+    auth._access_cache.clear()
+    members: list[dict] = []
+
+    def rows(path):
+        if path.startswith("shelf_scans"):
+            return [{"org_id": ORG}]
+        assert f"org_id=eq.{ORG}" in path and f"user_id=eq.{USER}" in path and "status=eq.active" in path
+        return members
+
+    monkeypatch.setattr(auth, "_rest_rows", rows)
+    assert not auth.user_can_access_scan(USER, SCAN)
+    auth._access_cache.clear()
+    members.append({"user_id": USER})
+    assert auth.user_can_access_scan(USER, SCAN)
+    assert not auth.user_can_access_scan(USER, "not-a-uuid")
+
+
+def test_scan_status_hidden_from_other_orgs(supabase_env, monkeypatch):
+    monkeypatch.setenv("BACKEND_AUTH_MODE", "enforce")
+    monkeypatch.setattr(auth, "verify_user_token", lambda token: USER)
+    monkeypatch.setattr(auth, "user_can_access_scan", lambda user_id, scan_id: False)
+    client = _client()
+    headers = {"Authorization": "Bearer a.b.c"}
+    assert client.get(f"/scan/{SCAN}", headers=headers).status_code == 404
+    response = client.post(
+        "/scan",
+        json={"scan_id": SCAN, "image_urls": ["data:image/jpeg;base64,AAAA"], "category": "Personal Care"},
+        headers=headers,
+    )
+    assert response.status_code == 404
+
+
+def test_document_jobs_are_owner_only(supabase_env, monkeypatch):
+    monkeypatch.setenv("BACKEND_AUTH_MODE", "enforce")
+    auth.remember_job_owner("job-1", USER)
+    auth.require_job_owner("job-1", USER)
+    with pytest.raises(Exception):
+        auth.require_job_owner("job-1", "someone-else")
+
+
+def test_landing_convert_requires_sign_in(supabase_env, monkeypatch):
+    monkeypatch.setenv("BACKEND_AUTH_MODE", "enforce")
+    monkeypatch.setattr(auth, "verify_user_token", lambda token: None)
+    response = _client().post("/landing/convert", json={"session_token": "abcdefgh12345678", "user_id": USER})
+    assert response.status_code == 401
+
+
+def test_landing_share_persist_is_retired(supabase_env):
+    assert _client().post("/landing/share/persist", json={}).status_code == 410
+
+
 def test_scan_rejects_non_storage_image_url(supabase_env, monkeypatch):
     monkeypatch.setenv("BACKEND_AUTH_MODE", "enforce")
     monkeypatch.setattr(auth, "verify_user_token", lambda token: "user-1")
+    monkeypatch.setattr(auth, "user_can_access_scan", lambda user_id, scan_id: True)
     response = _client().post(
         "/scan",
         json={"scan_id": "s1", "image_urls": ["https://evil.example.com/a.jpg"], "category": "Personal Care"},

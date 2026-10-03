@@ -191,8 +191,6 @@ def finalize_make_scan(
     if photo_batches:
         merged = merge_classified_photos(photo_batches)
         classified = merged["classified"]
-        from app.inventory import aggregate_inventory
-
         inventory = aggregate_inventory(classified)
         scan_context["multi_photo"] = {
             "photo_count": merged["photo_count"],

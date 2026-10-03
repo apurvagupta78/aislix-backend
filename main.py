@@ -8,12 +8,25 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
-from app.auth import assert_fetchable_url, auth_status, enforce_limits, limiter, require_user
+from app.auth import (
+    assert_fetchable_url,
+    auth_status,
+    edge_ip,
+    enforce_limits,
+    limiter,
+    remember_job_owner,
+    require_job_owner,
+    require_scan_access,
+    require_user,
+)
 
 load_dotenv()
 
 LANDING_SCAN_GLOBAL_DAILY_LIMIT = int(os.getenv("LANDING_SCAN_GLOBAL_DAILY_LIMIT", "150"))
-MAX_SHARE_SNAPSHOT_BYTES = 3 * 1024 * 1024
+LANDING_SCAN_EDGE_DAILY_LIMIT = int(os.getenv("LANDING_SCAN_EDGE_DAILY_LIMIT", "100"))
+MAX_LANDING_BODY_BYTES = 12 * 1024 * 1024
+MAX_LANDING_TEXT_CHARS = 60_000
+MAX_LANDING_PLANOGRAM_CHARS = 400_000
 
 
 def _checked_fetch_url(url: str) -> str:
@@ -28,12 +41,9 @@ DATA_DIR = BASE_DIR / "data"
 
 DEFAULT_ORIGINS = [
     "https://aislix.lovable.app",
-    "https://id-preview--449a1800-6064-43d4-9afe-f713a920d0d4.lovable.app",
     "https://app.aislix.com",
     "https://aislix.com",
     "https://www.aislix.com",
-    "http://localhost:5173",
-    "http://localhost:3000",
 ]
 
 cors_origins = os.getenv("CORS_ORIGINS", ",".join(DEFAULT_ORIGINS))
@@ -56,7 +66,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -153,18 +163,19 @@ def list_categories():
     return {"categories": categories_for_api()}
 
 
-@app.get("/scan/{scan_id}", dependencies=[Depends(require_user)])
-def scan_status(scan_id: str):
+@app.get("/scan/{scan_id}")
+def scan_status(scan_id: str, user_id: str | None = Depends(require_user)):
     from app.jobs import get_job
 
+    require_scan_access(user_id, scan_id)
     job = get_job(scan_id)
     if not job:
         raise HTTPException(status_code=404, detail="Scan job not found.")
     return job
 
 
-@app.post("/scan", dependencies=[Depends(require_user)])
-async def scan(request: Request):
+@app.post("/scan")
+async def scan(request: Request, user_id: str | None = Depends(require_user)):
     from app.jobs import get_job, start_job
     from app.pipeline import run_scan_from_bytes, run_scan_from_url
 
@@ -180,7 +191,9 @@ async def scan(request: Request):
             raise HTTPException(status_code=400, detail="Empty file upload.")
 
         scan_id = str(form.get("scan_id") or "").strip()
-        # Legacy sync path when no scan_id (landing / simple uploads).
+        if scan_id:
+            require_scan_access(user_id, scan_id)
+        # Legacy sync path when no scan_id (simple uploads).
         if not scan_id:
             try:
                 return run_scan_from_bytes(data)
@@ -254,6 +267,7 @@ async def scan(request: Request):
         scan_id = body.get("scan_id")
         if not scan_id:
             raise HTTPException(status_code=400, detail="scan_id is required.")
+        require_scan_access(user_id, str(scan_id))
 
         metadata = {
             "store_id": body.get("store_id"),
@@ -356,8 +370,8 @@ async def scan(request: Request):
     )
 
 
-@app.post("/scan/export-assets", dependencies=[Depends(require_user)])
-async def export_assets(request: Request):
+@app.post("/scan/export-assets")
+async def export_assets(request: Request, user_id: str | None = Depends(require_user)):
     """Regenerate PDF, annotated image, and CSV from a shelf image URL (sync)."""
     from app.pipeline import run_scan_from_url
 
@@ -366,6 +380,8 @@ async def export_assets(request: Request):
     if not image_url:
         raise HTTPException(status_code=400, detail="image_url is required.")
     _checked_fetch_url(str(image_url))
+    if body.get("scan_id"):
+        require_scan_access(user_id, str(body.get("scan_id")))
 
     metadata = {
         "store_id": body.get("store_id"),
@@ -446,13 +462,14 @@ async def rebuild_pdf(request: Request):
             report_context=report_ctx,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"PDF rebuild failed: {exc}") from exc
+        print(f"PDF rebuild failed for {scan_id}: {exc}")
+        raise HTTPException(status_code=500, detail="Could not rebuild the PDF report.") from exc
 
     return {"pdf_base64": pdf_b64, "build": "human-verification-pdf-v1"}
 
 
-@app.post("/documents/read", dependencies=[Depends(require_user)])
-async def documents_read(request: Request):
+@app.post("/documents/read")
+async def documents_read(request: Request, user_id: str | None = Depends(require_user)):
     """Start a page-by-page read of a reference document (PDF or photo) from a signed URL."""
     from app.document_reader import start_document_job
 
@@ -464,27 +481,54 @@ async def documents_read(request: Request):
     _checked_fetch_url(file_url)
     if mime_type not in {"application/pdf", "image/jpeg", "image/png", "image/webp"}:
         raise HTTPException(status_code=400, detail="Upload a PDF or a JPG, PNG or WebP image.")
-    return start_document_job(file_url, mime_type, body.get("filename"))
+    started = start_document_job(file_url, mime_type, body.get("filename"))
+    if isinstance(started, dict):
+        remember_job_owner(str(started.get("job_id") or ""), user_id)
+    return started
 
 
-@app.get("/documents/read/{job_id}", dependencies=[Depends(require_user)])
-def documents_read_status(job_id: str):
+@app.get("/documents/read/{job_id}")
+def documents_read_status(job_id: str, user_id: str | None = Depends(require_user)):
     from app.document_reader import get_document_job
 
+    require_job_owner(job_id, user_id)
     job = get_document_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Document job not found.")
     return job
 
 
-@app.get("/documents/read/{job_id}/page/{page_no}.jpg", dependencies=[Depends(require_user)])
-def documents_read_page(job_id: str, page_no: int):
+@app.get("/documents/read/{job_id}/page/{page_no}.jpg")
+def documents_read_page(job_id: str, page_no: int, user_id: str | None = Depends(require_user)):
     from app.document_reader import render_page_jpeg
 
+    require_job_owner(job_id, user_id)
     image = render_page_jpeg(job_id, page_no)
     if image is None:
         raise HTTPException(status_code=404, detail="Page not found.")
     return Response(content=image, media_type="image/jpeg")
+
+
+MAX_PLANOGRAM_BODY_BYTES = 2 * 1024 * 1024
+
+
+async def _capped_json(request: Request, route: str) -> dict:
+    """Anonymous planogram helpers: bounded body size and request rate."""
+    enforce_limits(request, route, per_ip=120, global_limit=3000, window_seconds=3600)
+    if int(request.headers.get("content-length") or 0) > MAX_PLANOGRAM_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="File is too large (max 2 MB).")
+    raw = await request.body()
+    if len(raw) > MAX_PLANOGRAM_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="File is too large (max 2 MB).")
+    try:
+        import json
+
+        body = json.loads(raw or b"{}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Expected JSON body.") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Expected JSON object.")
+    return body
 
 
 @app.post("/planogram/parse-csv")
@@ -493,14 +537,20 @@ async def planogram_parse_csv(request: Request):
     from app.planogram_csv import parse_csv_text
 
     content_type = request.headers.get("content-type", "")
+    if int(request.headers.get("content-length") or 0) > MAX_PLANOGRAM_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="File is too large (max 2 MB).")
     if "multipart/form-data" in content_type:
         form = await request.form()
         upload = form.get("file")
         if upload is None:
             raise HTTPException(status_code=400, detail='Missing "file" in multipart body.')
-        text = (await upload.read()).decode("utf-8-sig", errors="replace")
+        enforce_limits(request, "planogram_parse", per_ip=120, global_limit=3000, window_seconds=3600)
+        raw = await upload.read()
+        if len(raw) > MAX_PLANOGRAM_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="File is too large (max 2 MB).")
+        text = raw.decode("utf-8-sig", errors="replace")
     else:
-        body = await request.json()
+        body = await _capped_json(request, "planogram_parse")
         text = body.get("csv_text") or body.get("content") or ""
         if not text:
             raise HTTPException(status_code=400, detail="csv_text or file is required.")
@@ -513,7 +563,7 @@ async def planogram_compare(request: Request):
     """Compare expected planogram rows vs scan inventory (standalone or post-scan)."""
     from app.planogram_compliance import compare_planogram
 
-    body = await request.json()
+    body = await _capped_json(request, "planogram_compare")
     planogram_items = body.get("planogram_items") or []
     inventory = body.get("inventory") or []
     if not planogram_items:
@@ -537,7 +587,7 @@ async def planogram_normalize_row(request: Request):
     """Validate a single manual planogram row (Store Master form)."""
     from app.planogram_csv import normalize_planogram_row
 
-    body = await request.json()
+    body = await _capped_json(request, "planogram_row")
     row, errors = normalize_planogram_row(body)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
@@ -595,7 +645,7 @@ async def planogram_parse_package_csv(request: Request):
     """Validate assortment, prices, or promotions CSV."""
     from app.planogram_package_csv import parse_assortment_csv, parse_prices_csv, parse_promotions_csv
 
-    body = await request.json()
+    body = await _capped_json(request, "planogram_package")
     kind = str(body.get("kind") or "").strip().lower()
     content = body.get("content") or body.get("csv") or ""
     parsers = {
@@ -726,34 +776,8 @@ def landing_get_session(session_token: str):
 
 @app.post("/landing/share/persist")
 async def landing_share_persist(request: Request):
-    """Store a demo audit snapshot for public /share/:token links."""
-    from app.landing_email import APP_ORIGIN
-    from app.landing_leads import persist_share_session
-
-    enforce_limits(request, "share_persist", per_ip=120, global_limit=1200, window_seconds=3600)
-    if int(request.headers.get("content-length") or 0) > MAX_SHARE_SNAPSHOT_BYTES:
-        raise HTTPException(status_code=413, detail="Report snapshot is too large to share.")
-    try:
-        body = await request.json()
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="Expected JSON body.") from exc
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Expected JSON object.")
-
-    session_token = (
-        str(body.get("session_token") or body.get("landing_session_id") or "").strip()
-    )
-    snapshot = body.get("snapshot")
-    if not isinstance(snapshot, dict):
-        snapshot = body
-    if not session_token:
-        raise HTTPException(status_code=400, detail="Missing session token.")
-
-    row = persist_share_session(session_token, snapshot)
-    if not row:
-        raise HTTPException(status_code=503, detail="Could not save share link.")
-    share_url = f"{APP_ORIGIN.rstrip('/')}/share/{session_token}"
-    return {"ok": True, "landing_session_id": session_token, "url": share_url}
+    """Retired: demo shares are created from server-recorded sessions on aislix.com."""
+    raise HTTPException(status_code=410, detail="Share links are created on aislix.com.")
 
 
 @app.post("/landing/scan")
@@ -780,6 +804,15 @@ async def landing_scan(request: Request):
 
     if not ENABLED:
         raise HTTPException(status_code=503, detail="Landing scans are temporarily disabled.")
+    if int(request.headers.get("content-length") or 0) > MAX_LANDING_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="Image too large (max 10 MB).")
+    # Visitor IP arrives in X-Forwarded-For from the aislix.com proxy and can be forged by
+    # direct callers, so the connecting edge address gets its own daily ceiling.
+    if not limiter.allow(f"landing_scan:edge:{edge_ip(request) or 'unknown'}", LANDING_SCAN_EDGE_DAILY_LIMIT, 86400):
+        raise HTTPException(
+            status_code=429,
+            detail="The free demo is busy right now. Sign up free to run your own AI audits.",
+        )
 
     ip_hash = hash_ip(_client_ip(request))
     from app.landing_leads import demo_allowance_response, get_demo_allowance
@@ -801,6 +834,14 @@ async def landing_scan(request: Request):
         )
 
     payload = await _parse_landing_scan_payload(request)
+    for key, cap in (("vision_prompt", MAX_LANDING_TEXT_CHARS), ("planogram_items", MAX_LANDING_PLANOGRAM_CHARS)):
+        value = payload.get(key)
+        if value is not None and not hasattr(value, "read"):
+            import json
+
+            size = len(value) if isinstance(value, str) else len(json.dumps(value))
+            if size > cap:
+                raise HTTPException(status_code=413, detail="Audit setup is too large for the free demo.")
     utm = parse_utm(payload)
     session_token = (
         _form_field_str(payload, "landing_session_id")
@@ -1023,9 +1064,11 @@ async def landing_convert(request: Request, verified_user_id: str | None = Depen
 
     body = await request.json()
     session_token = (body.get("landing_session_id") or body.get("session_token") or "").strip()
-    user_id = verified_user_id or (body.get("user_id") or "").strip()
-    if not session_token or not user_id:
-        raise HTTPException(status_code=400, detail="landing_session_id and user_id are required.")
+    user_id = verified_user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Sign in to Aislix to use this feature.")
+    if not session_token:
+        raise HTTPException(status_code=400, detail="landing_session_id is required.")
 
     existing = get_session_public(session_token)
     if not existing:

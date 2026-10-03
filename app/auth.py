@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import os
+import re
 import threading
 import time
 from collections import deque
@@ -19,11 +20,12 @@ _token_lock = threading.Lock()
 _stats = {"verified": 0, "rejected": 0, "missing": 0}
 
 MSG_SIGN_IN = "Sign in to Aislix to use this feature."
+_UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 
 def auth_mode() -> str:
     """enforce = reject callers without a valid token; observe = verify and count only."""
-    mode = os.getenv("BACKEND_AUTH_MODE", "observe").strip().lower()
+    mode = os.getenv("BACKEND_AUTH_MODE", "enforce").strip().lower()
     return mode if mode in {"enforce", "observe", "off"} else "enforce"
 
 
@@ -97,6 +99,79 @@ def require_user(request: Request) -> str | None:
         raise HTTPException(status_code=401, detail=MSG_SIGN_IN)
     print(f"auth observe: {'missing' if not token else 'invalid'} token on {request.url.path}")
     return None
+
+
+ACCESS_CACHE_SECONDS = 120
+_access_cache: dict[str, tuple[float, bool]] = {}
+
+
+def _rest_rows(path: str) -> list[dict]:
+    base, key = _supabase()
+    try:
+        response = requests.get(
+            f"{base}/rest/v1/{path}",
+            headers={"apikey": key, "Authorization": f"Bearer {key}", "Accept": "application/json"},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=503, detail="Access check is unavailable. Try again.") from exc
+    if response.status_code != 200:
+        raise HTTPException(status_code=503, detail="Access check is unavailable. Try again.")
+    rows = response.json()
+    return rows if isinstance(rows, list) else []
+
+
+def user_can_access_scan(user_id: str, scan_id: str) -> bool:
+    """True when the user is an active member of the organization that owns the scan."""
+    if not _UUID.match(scan_id or "") or not _UUID.match(user_id or ""):
+        return False
+    cache_key = f"{user_id}:{scan_id}"
+    now = time.time()
+    with _token_lock:
+        hit = _access_cache.get(cache_key)
+        if hit and hit[0] > now:
+            return hit[1]
+    scans = _rest_rows(f"shelf_scans?id=eq.{scan_id}&select=org_id")
+    org_id = str((scans[0] or {}).get("org_id") or "") if scans else ""
+    allowed = bool(org_id) and bool(
+        _rest_rows(
+            f"organization_members?org_id=eq.{org_id}&user_id=eq.{user_id}&status=eq.active&select=user_id"
+        )
+    )
+    with _token_lock:
+        if len(_access_cache) > 5000:
+            _access_cache.clear()
+        _access_cache[cache_key] = (now + ACCESS_CACHE_SECONDS, allowed)
+    return allowed
+
+
+def require_scan_access(user_id: str | None, scan_id: str) -> None:
+    """Scan jobs are readable and runnable only by members of the scan's organization."""
+    base, key = _supabase()
+    if auth_mode() != "enforce" or not base or not key:
+        return
+    if not user_id or not user_can_access_scan(user_id, str(scan_id)):
+        raise HTTPException(status_code=404, detail="Scan job not found.")
+
+
+_job_owners: dict[str, str] = {}
+
+
+def remember_job_owner(job_id: str, user_id: str | None) -> None:
+    if job_id and user_id:
+        with _token_lock:
+            if len(_job_owners) > 20000:
+                _job_owners.clear()
+            _job_owners[job_id] = user_id
+
+
+def require_job_owner(job_id: str, user_id: str | None) -> None:
+    if auth_mode() != "enforce":
+        return
+    with _token_lock:
+        owner = _job_owners.get(job_id)
+    if not user_id or owner != user_id:
+        raise HTTPException(status_code=404, detail="Document job not found.")
 
 
 def edge_ip(request: Request) -> str | None:
