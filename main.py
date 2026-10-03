@@ -164,10 +164,10 @@ def list_categories():
 
 
 @app.get("/scan/{scan_id}")
-def scan_status(scan_id: str, user_id: str | None = Depends(require_user)):
+def scan_status(scan_id: str, request: Request, user_id: str | None = Depends(require_user)):
     from app.jobs import get_job
 
-    require_scan_access(user_id, scan_id)
+    require_scan_access(request, user_id, scan_id)
     job = get_job(scan_id)
     if not job:
         raise HTTPException(status_code=404, detail="Scan job not found.")
@@ -192,7 +192,7 @@ async def scan(request: Request, user_id: str | None = Depends(require_user)):
 
         scan_id = str(form.get("scan_id") or "").strip()
         if scan_id:
-            require_scan_access(user_id, scan_id)
+            require_scan_access(request, user_id, scan_id)
         # Legacy sync path when no scan_id (simple uploads).
         if not scan_id:
             try:
@@ -267,7 +267,7 @@ async def scan(request: Request, user_id: str | None = Depends(require_user)):
         scan_id = body.get("scan_id")
         if not scan_id:
             raise HTTPException(status_code=400, detail="scan_id is required.")
-        require_scan_access(user_id, str(scan_id))
+        require_scan_access(request, user_id, str(scan_id))
 
         metadata = {
             "store_id": body.get("store_id"),
@@ -381,7 +381,7 @@ async def export_assets(request: Request, user_id: str | None = Depends(require_
         raise HTTPException(status_code=400, detail="image_url is required.")
     _checked_fetch_url(str(image_url))
     if body.get("scan_id"):
-        require_scan_access(user_id, str(body.get("scan_id")))
+        require_scan_access(request, user_id, str(body.get("scan_id")))
 
     metadata = {
         "store_id": body.get("store_id"),

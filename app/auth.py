@@ -29,18 +29,36 @@ def auth_mode() -> str:
     return mode if mode in {"enforce", "observe", "off"} else "enforce"
 
 
+# The project URL is public. Pinning it means only this project's auth server can
+# vouch for a caller, whatever API key the caller presents.
+DEFAULT_SUPABASE_URL = "https://vythviniybatyrdyrmhg.supabase.co"
+
+
+def _supabase_url() -> str:
+    return (os.getenv("SUPABASE_URL", "").strip() or DEFAULT_SUPABASE_URL).rstrip("/")
+
+
 def _supabase() -> tuple[str, str]:
-    return (
-        os.getenv("SUPABASE_URL", "").strip().rstrip("/"),
-        os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip(),
+    return _supabase_url(), os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+
+
+def _api_key(request: Request | None) -> str:
+    """Gateway key for user-scoped Supabase calls: server-configured, else the caller's publishable key."""
+    configured = (
+        os.getenv("SUPABASE_ANON_KEY", "").strip()
+        or os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
+        or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     )
+    if configured or request is None:
+        return configured
+    return (request.headers.get("x-supabase-apikey") or "").strip()[:512]
 
 
 def auth_status() -> dict:
-    base, key = _supabase()
+    base = _supabase_url()
     return {
-        "mode": auth_mode() if base and key else "not_configured",
-        "supabase_host": urlparse(base).hostname if base else None,
+        "mode": auth_mode(),
+        "supabase_host": urlparse(base).hostname,
         **_stats,
     }
 
@@ -53,7 +71,7 @@ def _bearer(request: Request) -> str | None:
     return token if token.count(".") == 2 else None
 
 
-def verify_user_token(token: str) -> str | None:
+def verify_user_token(token: str, key: str = "") -> str | None:
     """Return the Supabase user id for a valid access token, else None."""
     digest = hashlib.sha256(token.encode()).hexdigest()
     now = time.time()
@@ -61,7 +79,9 @@ def verify_user_token(token: str) -> str | None:
         hit = _token_cache.get(digest)
         if hit and hit[0] > now:
             return hit[1]
-    base, key = _supabase()
+    if not key:
+        return None
+    base = _supabase_url()
     try:
         response = requests.get(
             f"{base}/auth/v1/user",
@@ -85,12 +105,11 @@ def verify_user_token(token: str) -> str | None:
 
 def require_user(request: Request) -> str | None:
     """FastAPI dependency for routes that spend AI credit or write data on a user's behalf."""
-    base, key = _supabase()
     mode = auth_mode()
-    if mode == "off" or not base or not key:
+    if mode == "off":
         return None
     token = _bearer(request)
-    user_id = verify_user_token(token) if token else None
+    user_id = verify_user_token(token, _api_key(request)) if token else None
     if user_id:
         _stats["verified"] += 1
         return user_id
@@ -105,12 +124,12 @@ ACCESS_CACHE_SECONDS = 120
 _access_cache: dict[str, tuple[float, bool]] = {}
 
 
-def _rest_rows(path: str) -> list[dict]:
-    base, key = _supabase()
+def _rest_rows_as_user(path: str, token: str, key: str) -> list[dict]:
+    """PostgREST read with the caller's own token, so the database's row-level security decides."""
     try:
         response = requests.get(
-            f"{base}/rest/v1/{path}",
-            headers={"apikey": key, "Authorization": f"Bearer {key}", "Accept": "application/json"},
+            f"{_supabase_url()}/rest/v1/{path}",
+            headers={"apikey": key, "Authorization": f"Bearer {token}", "Accept": "application/json"},
             timeout=10,
         )
     except requests.RequestException as exc:
@@ -121,9 +140,9 @@ def _rest_rows(path: str) -> list[dict]:
     return rows if isinstance(rows, list) else []
 
 
-def user_can_access_scan(user_id: str, scan_id: str) -> bool:
-    """True when the user is an active member of the organization that owns the scan."""
-    if not _UUID.match(scan_id or "") or not _UUID.match(user_id or ""):
+def user_can_access_scan(user_id: str, scan_id: str, token: str, key: str) -> bool:
+    """True when the scan is visible to the user under the same row-level rules the app uses."""
+    if not _UUID.match(scan_id or "") or not token or not key:
         return False
     cache_key = f"{user_id}:{scan_id}"
     now = time.time()
@@ -131,13 +150,7 @@ def user_can_access_scan(user_id: str, scan_id: str) -> bool:
         hit = _access_cache.get(cache_key)
         if hit and hit[0] > now:
             return hit[1]
-    scans = _rest_rows(f"shelf_scans?id=eq.{scan_id}&select=org_id")
-    org_id = str((scans[0] or {}).get("org_id") or "") if scans else ""
-    allowed = bool(org_id) and bool(
-        _rest_rows(
-            f"organization_members?org_id=eq.{org_id}&user_id=eq.{user_id}&status=eq.active&select=user_id"
-        )
-    )
+    allowed = bool(_rest_rows_as_user(f"shelf_scans?id=eq.{scan_id}&select=id", token, key))
     with _token_lock:
         if len(_access_cache) > 5000:
             _access_cache.clear()
@@ -145,12 +158,12 @@ def user_can_access_scan(user_id: str, scan_id: str) -> bool:
     return allowed
 
 
-def require_scan_access(user_id: str | None, scan_id: str) -> None:
-    """Scan jobs are readable and runnable only by members of the scan's organization."""
-    base, key = _supabase()
-    if auth_mode() != "enforce" or not base or not key:
+def require_scan_access(request: Request, user_id: str | None, scan_id: str) -> None:
+    """Scan jobs are readable and runnable only by users who can see the scan in the app."""
+    if auth_mode() != "enforce":
         return
-    if not user_id or not user_can_access_scan(user_id, str(scan_id)):
+    token = _bearer(request) or ""
+    if not user_id or not user_can_access_scan(user_id, str(scan_id), token, _api_key(request)):
         raise HTTPException(status_code=404, detail="Scan job not found.")
 
 

@@ -51,7 +51,7 @@ def _client():
 
 def test_enforce_rejects_missing_and_invalid_tokens(supabase_env, monkeypatch):
     monkeypatch.setenv("BACKEND_AUTH_MODE", "enforce")
-    monkeypatch.setattr(auth, "verify_user_token", lambda token: None)
+    monkeypatch.setattr(auth, "verify_user_token", lambda token, key="": None)
     client = _client()
     assert client.post("/scan", json={}).status_code == 401
     assert client.post("/scan", json={}, headers={"Authorization": "Bearer a.b.c"}).status_code == 401
@@ -60,7 +60,7 @@ def test_enforce_rejects_missing_and_invalid_tokens(supabase_env, monkeypatch):
 
 def test_enforce_accepts_valid_token(supabase_env, monkeypatch):
     monkeypatch.setenv("BACKEND_AUTH_MODE", "enforce")
-    monkeypatch.setattr(auth, "verify_user_token", lambda token: "user-1")
+    monkeypatch.setattr(auth, "verify_user_token", lambda token, key="": "user-1")
     client = _client()
     response = client.post("/scan", json={}, headers={"Authorization": "Bearer a.b.c"})
     assert response.status_code == 400
@@ -69,7 +69,7 @@ def test_enforce_accepts_valid_token(supabase_env, monkeypatch):
 
 def test_observe_mode_lets_requests_through(supabase_env, monkeypatch):
     monkeypatch.setenv("BACKEND_AUTH_MODE", "observe")
-    monkeypatch.setattr(auth, "verify_user_token", lambda token: None)
+    monkeypatch.setattr(auth, "verify_user_token", lambda token, key="": None)
     assert _client().post("/scan", json={}).status_code == 400
 
 
@@ -83,28 +83,40 @@ USER = "22222222-2222-2222-2222-222222222222"
 ORG = "33333333-3333-3333-3333-333333333333"
 
 
-def test_user_can_access_scan_checks_active_org_membership(supabase_env, monkeypatch):
+def test_user_can_access_scan_reads_as_the_user(supabase_env, monkeypatch):
     auth._access_cache.clear()
-    members: list[dict] = []
+    visible: list[dict] = []
+    calls: list[tuple[str, str, str]] = []
 
-    def rows(path):
-        if path.startswith("shelf_scans"):
-            return [{"org_id": ORG}]
-        assert f"org_id=eq.{ORG}" in path and f"user_id=eq.{USER}" in path and "status=eq.active" in path
-        return members
+    def rows(path, token, key):
+        calls.append((path, token, key))
+        return visible
 
-    monkeypatch.setattr(auth, "_rest_rows", rows)
-    assert not auth.user_can_access_scan(USER, SCAN)
+    monkeypatch.setattr(auth, "_rest_rows_as_user", rows)
+    assert not auth.user_can_access_scan(USER, SCAN, "user.jwt.token", "anon-key")
+    assert calls[-1] == (f"shelf_scans?id=eq.{SCAN}&select=id", "user.jwt.token", "anon-key")
     auth._access_cache.clear()
-    members.append({"user_id": USER})
-    assert auth.user_can_access_scan(USER, SCAN)
-    assert not auth.user_can_access_scan(USER, "not-a-uuid")
+    visible.append({"id": SCAN})
+    assert auth.user_can_access_scan(USER, SCAN, "user.jwt.token", "anon-key")
+    assert not auth.user_can_access_scan(USER, "not-a-uuid", "user.jwt.token", "anon-key")
+    assert not auth.user_can_access_scan(USER, SCAN, "", "anon-key")
+
+
+def test_api_key_falls_back_to_caller_publishable_key(monkeypatch):
+    for name in ("SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SERVICE_ROLE_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    request = SimpleNamespace(headers={"x-supabase-apikey": "sb_publishable_x"})
+    assert auth._api_key(request) == "sb_publishable_x"
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "server-anon")
+    assert auth._api_key(request) == "server-anon"
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    assert auth._supabase_url() == auth.DEFAULT_SUPABASE_URL
 
 
 def test_scan_status_hidden_from_other_orgs(supabase_env, monkeypatch):
     monkeypatch.setenv("BACKEND_AUTH_MODE", "enforce")
-    monkeypatch.setattr(auth, "verify_user_token", lambda token: USER)
-    monkeypatch.setattr(auth, "user_can_access_scan", lambda user_id, scan_id: False)
+    monkeypatch.setattr(auth, "verify_user_token", lambda token, key="": USER)
+    monkeypatch.setattr(auth, "user_can_access_scan", lambda user_id, scan_id, token, key: False)
     client = _client()
     headers = {"Authorization": "Bearer a.b.c"}
     assert client.get(f"/scan/{SCAN}", headers=headers).status_code == 404
@@ -126,7 +138,7 @@ def test_document_jobs_are_owner_only(supabase_env, monkeypatch):
 
 def test_landing_convert_requires_sign_in(supabase_env, monkeypatch):
     monkeypatch.setenv("BACKEND_AUTH_MODE", "enforce")
-    monkeypatch.setattr(auth, "verify_user_token", lambda token: None)
+    monkeypatch.setattr(auth, "verify_user_token", lambda token, key="": None)
     response = _client().post("/landing/convert", json={"session_token": "abcdefgh12345678", "user_id": USER})
     assert response.status_code == 401
 
@@ -137,8 +149,8 @@ def test_landing_share_persist_is_retired(supabase_env):
 
 def test_scan_rejects_non_storage_image_url(supabase_env, monkeypatch):
     monkeypatch.setenv("BACKEND_AUTH_MODE", "enforce")
-    monkeypatch.setattr(auth, "verify_user_token", lambda token: "user-1")
-    monkeypatch.setattr(auth, "user_can_access_scan", lambda user_id, scan_id: True)
+    monkeypatch.setattr(auth, "verify_user_token", lambda token, key="": "user-1")
+    monkeypatch.setattr(auth, "user_can_access_scan", lambda user_id, scan_id, token, key: True)
     response = _client().post(
         "/scan",
         json={"scan_id": "s1", "image_urls": ["https://evil.example.com/a.jpg"], "category": "Personal Care"},
