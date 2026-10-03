@@ -4,11 +4,24 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
+from app.auth import assert_fetchable_url, auth_status, enforce_limits, limiter, require_user
+
 load_dotenv()
+
+LANDING_SCAN_GLOBAL_DAILY_LIMIT = int(os.getenv("LANDING_SCAN_GLOBAL_DAILY_LIMIT", "150"))
+MAX_SHARE_SNAPSHOT_BYTES = 3 * 1024 * 1024
+
+
+def _checked_fetch_url(url: str) -> str:
+    try:
+        assert_fetchable_url(url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return url
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
@@ -98,6 +111,7 @@ def health():
         # Ops marker: true when FNV disposition short-circuit is loaded (commit 88de1e1+).
         "fnv_qc_finalize": is_fnv_qc_metadata({"analysis_mode": "fnv_qc"}),
         "build": "fnv-qc-finalize-v1",
+        "auth": auth_status(),
     }
 
 
@@ -139,7 +153,7 @@ def list_categories():
     return {"categories": categories_for_api()}
 
 
-@app.get("/scan/{scan_id}")
+@app.get("/scan/{scan_id}", dependencies=[Depends(require_user)])
 def scan_status(scan_id: str):
     from app.jobs import get_job
 
@@ -149,7 +163,7 @@ def scan_status(scan_id: str):
     return job
 
 
-@app.post("/scan")
+@app.post("/scan", dependencies=[Depends(require_user)])
 async def scan(request: Request):
     from app.jobs import get_job, start_job
     from app.pipeline import run_scan_from_bytes, run_scan_from_url
@@ -323,7 +337,7 @@ async def scan(request: Request):
             # Failed jobs must be re-runnable (Retry / re-process same scan_id).
             # Fall through so start_job replaces the failed entry.
 
-        image_url = image_urls[0]
+        image_url = _checked_fetch_url(str(image_urls[0]))
         learned_catalog = body.get("learned_catalog") or []
 
         def _run() -> dict:
@@ -342,7 +356,7 @@ async def scan(request: Request):
     )
 
 
-@app.post("/scan/export-assets")
+@app.post("/scan/export-assets", dependencies=[Depends(require_user)])
 async def export_assets(request: Request):
     """Regenerate PDF, annotated image, and CSV from a shelf image URL (sync)."""
     from app.pipeline import run_scan_from_url
@@ -351,6 +365,7 @@ async def export_assets(request: Request):
     image_url = body.get("image_url")
     if not image_url:
         raise HTTPException(status_code=400, detail="image_url is required.")
+    _checked_fetch_url(str(image_url))
 
     metadata = {
         "store_id": body.get("store_id"),
@@ -377,7 +392,7 @@ async def export_assets(request: Request):
     }
 
 
-@app.post("/scan/rebuild-pdf")
+@app.post("/scan/rebuild-pdf", dependencies=[Depends(require_user)])
 async def rebuild_pdf(request: Request):
     """Rebuild PDF from stored metrics/inventory + optional human verification (no re-scan)."""
     from app.report_generator import generate_pdf_bytes, build_report_context
@@ -436,7 +451,7 @@ async def rebuild_pdf(request: Request):
     return {"pdf_base64": pdf_b64, "build": "human-verification-pdf-v1"}
 
 
-@app.post("/documents/read")
+@app.post("/documents/read", dependencies=[Depends(require_user)])
 async def documents_read(request: Request):
     """Start a page-by-page read of a reference document (PDF or photo) from a signed URL."""
     from app.document_reader import start_document_job
@@ -446,12 +461,13 @@ async def documents_read(request: Request):
     mime_type = str(body.get("mime_type") or "").strip().lower()
     if not file_url.startswith("https://"):
         raise HTTPException(status_code=400, detail="file_url must be an https URL.")
+    _checked_fetch_url(file_url)
     if mime_type not in {"application/pdf", "image/jpeg", "image/png", "image/webp"}:
         raise HTTPException(status_code=400, detail="Upload a PDF or a JPG, PNG or WebP image.")
     return start_document_job(file_url, mime_type, body.get("filename"))
 
 
-@app.get("/documents/read/{job_id}")
+@app.get("/documents/read/{job_id}", dependencies=[Depends(require_user)])
 def documents_read_status(job_id: str):
     from app.document_reader import get_document_job
 
@@ -461,7 +477,7 @@ def documents_read_status(job_id: str):
     return job
 
 
-@app.get("/documents/read/{job_id}/page/{page_no}.jpg")
+@app.get("/documents/read/{job_id}/page/{page_no}.jpg", dependencies=[Depends(require_user)])
 def documents_read_page(job_id: str, page_no: int):
     from app.document_reader import render_page_jpeg
 
@@ -714,6 +730,9 @@ async def landing_share_persist(request: Request):
     from app.landing_email import APP_ORIGIN
     from app.landing_leads import persist_share_session
 
+    enforce_limits(request, "share_persist", per_ip=120, global_limit=1200, window_seconds=3600)
+    if int(request.headers.get("content-length") or 0) > MAX_SHARE_SNAPSHOT_BYTES:
+        raise HTTPException(status_code=413, detail="Report snapshot is too large to share.")
     try:
         body = await request.json()
     except Exception as exc:
@@ -775,6 +794,11 @@ async def landing_scan(request: Request):
         if next_at:
             detail += f" Next available: {next_at}."
         raise HTTPException(status_code=429, detail=detail)
+    if not limiter.allow("landing_scan:global", LANDING_SCAN_GLOBAL_DAILY_LIMIT, 86400):
+        raise HTTPException(
+            status_code=429,
+            detail="The free demo is busy right now. Sign up free to run your own AI audits.",
+        )
 
     payload = await _parse_landing_scan_payload(request)
     utm = parse_utm(payload)
@@ -893,6 +917,7 @@ async def landing_email_report(request: Request):
     from app.landing_leads import get_session_public
     from app.landing_report_email import send_demo_audit_report_email
 
+    enforce_limits(request, "email_report", per_ip=5, global_limit=60, window_seconds=3600)
     body = await request.json()
     session_token = (body.get("landing_session_id") or body.get("session_token") or "").strip()
     recipient = (body.get("recipient") or body.get("email") or "").strip().lower()
@@ -942,6 +967,7 @@ async def landing_lead(request: Request):
     from app.landing_email import send_landing_onboarding_email
     from app.landing_leads import capture_lead, ensure_session, hash_ip, mark_onboarding_email_sent
 
+    enforce_limits(request, "lead", per_ip=5, global_limit=120, window_seconds=3600)
     body = await request.json()
     session_token = (body.get("landing_session_id") or body.get("session_token") or "").strip() or None
     email = (body.get("email") or "").strip()
@@ -991,13 +1017,13 @@ async def landing_lead(request: Request):
 
 
 @app.post("/landing/convert")
-async def landing_convert(request: Request):
+async def landing_convert(request: Request, verified_user_id: str | None = Depends(require_user)):
     """Link a landing demo session to a user after signup."""
     from app.landing_leads import get_session_public, mark_converted
 
     body = await request.json()
     session_token = (body.get("landing_session_id") or body.get("session_token") or "").strip()
-    user_id = (body.get("user_id") or "").strip()
+    user_id = verified_user_id or (body.get("user_id") or "").strip()
     if not session_token or not user_id:
         raise HTTPException(status_code=400, detail="landing_session_id and user_id are required.")
 

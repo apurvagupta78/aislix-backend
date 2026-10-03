@@ -314,7 +314,10 @@ def _mistral_ocr(file_url: str, is_image: bool, pages: list[int]) -> dict[int, l
 
 
 def _download(url: str) -> bytes:
-    with requests.get(url, stream=True, timeout=180) as response:
+    from app.auth import assert_fetchable_url
+
+    assert_fetchable_url(url)
+    with requests.get(url, stream=True, timeout=180, allow_redirects=False) as response:
         response.raise_for_status()
         buf = io.BytesIO()
         for chunk in response.iter_content(1024 * 1024):

@@ -69,7 +69,10 @@ def load_image_from_url(url: str, timeout: int = 60) -> np.ndarray:
         import base64
 
         return load_image_bytes(base64.b64decode(b64))
-    response = requests.get(raw, timeout=timeout)
+    from app.auth import assert_fetchable_url
+
+    assert_fetchable_url(raw)
+    response = requests.get(raw, timeout=timeout, allow_redirects=False)
     response.raise_for_status()
     return load_image_bytes(response.content)
 
