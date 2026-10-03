@@ -17,3 +17,4 @@ faiss-cpu>=1.8.0
 easyocr>=1.7.0
 reportlab>=4.2.0
 PyYAML>=6.0.0
+pdfplumber>=0.11.4

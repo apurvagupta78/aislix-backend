@@ -436,6 +436,41 @@ async def rebuild_pdf(request: Request):
     return {"pdf_base64": pdf_b64, "build": "human-verification-pdf-v1"}
 
 
+@app.post("/documents/read")
+async def documents_read(request: Request):
+    """Start a page-by-page read of a reference document (PDF or photo) from a signed URL."""
+    from app.document_reader import start_document_job
+
+    body = await request.json()
+    file_url = str(body.get("file_url") or "").strip()
+    mime_type = str(body.get("mime_type") or "").strip().lower()
+    if not file_url.startswith("https://"):
+        raise HTTPException(status_code=400, detail="file_url must be an https URL.")
+    if mime_type not in {"application/pdf", "image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=400, detail="Upload a PDF or a JPG, PNG or WebP image.")
+    return start_document_job(file_url, mime_type, body.get("filename"))
+
+
+@app.get("/documents/read/{job_id}")
+def documents_read_status(job_id: str):
+    from app.document_reader import get_document_job
+
+    job = get_document_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Document job not found.")
+    return job
+
+
+@app.get("/documents/read/{job_id}/page/{page_no}.jpg")
+def documents_read_page(job_id: str, page_no: int):
+    from app.document_reader import render_page_jpeg
+
+    image = render_page_jpeg(job_id, page_no)
+    if image is None:
+        raise HTTPException(status_code=404, detail="Page not found.")
+    return Response(content=image, media_type="image/jpeg")
+
+
 @app.post("/planogram/parse-csv")
 async def planogram_parse_csv(request: Request):
     """Validate planogram CSV; returns preview rows and errors (no DB write)."""
