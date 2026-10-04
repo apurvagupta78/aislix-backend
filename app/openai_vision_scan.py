@@ -147,6 +147,48 @@ def call_openai_vision(
     image: np.ndarray,
     metadata: dict[str, Any],
 ) -> dict[str, Any]:
+    output_text = _vision_output_text(scan_id=scan_id, image=image, metadata=metadata)
+    try:
+        return parse_make_response(output_text, metadata=metadata)
+    except Exception as exc:
+        raise OpenAIVisionScanError(f"Vision response was not valid JSON: {exc}") from exc
+
+
+def call_openai_vision_multi(
+    *,
+    scan_id: str,
+    images: list[np.ndarray],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """One Astra call per photo (same prompt), merged into a single shelf_cv payload."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.make_scan import _coerce_json_object
+    from app.multi_photo_astra import merge_astra_photo_payloads
+
+    def _one(indexed: tuple[int, np.ndarray]) -> dict[str, Any]:
+        index, image = indexed
+        text = _vision_output_text(scan_id=f"{scan_id}-p{index + 1}", image=image, metadata=metadata)
+        try:
+            return _coerce_json_object(text)
+        except Exception as exc:
+            raise OpenAIVisionScanError(f"Photo {index + 1}: vision response was not valid JSON: {exc}") from exc
+
+    with ThreadPoolExecutor(max_workers=min(4, len(images))) as pool:
+        payloads = list(pool.map(_one, enumerate(images)))
+    merged = merge_astra_photo_payloads(payloads)
+    try:
+        return parse_make_response(merged, metadata=metadata)
+    except Exception as exc:
+        raise OpenAIVisionScanError(f"Merged vision response could not be read: {exc}") from exc
+
+
+def _vision_output_text(
+    *,
+    scan_id: str,
+    image: np.ndarray,
+    metadata: dict[str, Any],
+) -> str:
     from openai import APITimeoutError, OpenAIError
 
     from app.recognizer import get_client
@@ -227,10 +269,7 @@ def call_openai_vision(
     output_text = (getattr(response, "output_text", None) or "").strip()
     if not output_text:
         raise OpenAIVisionScanError("Vision model returned an empty response.")
-    try:
-        return parse_make_response(output_text, metadata=metadata)
-    except Exception as exc:
-        raise OpenAIVisionScanError(f"Vision response was not valid JSON: {exc}") from exc
+    return output_text
 
 
 def _apply_openai_model_labels(result: dict[str, Any]) -> dict[str, Any]:
@@ -251,6 +290,7 @@ def run_openai_vision_scan_from_image(
     metadata: dict | None = None,
     *,
     image_url: str | None = None,
+    extra_images: list[np.ndarray] | None = None,
 ) -> dict:
     import uuid
 
@@ -265,8 +305,13 @@ def run_openai_vision_scan_from_image(
 
     from app.astra_vision import patch_parsed_for_astra_comparison
 
-    parsed = lookup_reference_parsed(image, metadata, image_url=image_url)
-    if parsed is None:
+    multi = bool(extra_images) and not is_fnv_qc_metadata(metadata)
+    parsed = None if multi else lookup_reference_parsed(image, metadata, image_url=image_url)
+    if parsed is None and multi:
+        parsed = call_openai_vision_multi(
+            scan_id=scan_id, images=[image, *(extra_images or [])], metadata=metadata
+        )
+    elif parsed is None:
         parsed = call_openai_vision(scan_id=scan_id, image=image, metadata=metadata)
     processing_ms = int((time.time() - started) * 1000)
 
@@ -293,6 +338,10 @@ def run_openai_vision_scan_from_image(
         result[astra_key] = astra_block
     if parsed.get("reference_cache"):
         result["reference_cache"] = parsed["reference_cache"]
+    raw = parsed.get("raw")
+    multi_photo = raw.get("multi_photo") if isinstance(raw, dict) else None
+    if multi_photo and isinstance(result.get("metrics"), dict):
+        result["metrics"]["multi_photo"] = multi_photo
     return _apply_openai_model_labels(result)
 
 

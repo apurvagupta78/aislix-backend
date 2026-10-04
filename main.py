@@ -27,6 +27,8 @@ LANDING_SCAN_EDGE_DAILY_LIMIT = int(os.getenv("LANDING_SCAN_EDGE_DAILY_LIMIT", "
 MAX_LANDING_BODY_BYTES = 12 * 1024 * 1024
 MAX_LANDING_TEXT_CHARS = 60_000
 MAX_LANDING_PLANOGRAM_CHARS = 400_000
+MAX_SCAN_PHOTOS = 8
+MAX_LANDING_REFERENCE_LINES = 200
 
 
 def _checked_fetch_url(url: str) -> str:
@@ -352,6 +354,9 @@ async def scan(request: Request, user_id: str | None = Depends(require_user)):
             # Fall through so start_job replaces the failed entry.
 
         image_url = _checked_fetch_url(str(image_urls[0]))
+        extra_image_urls = [
+            _checked_fetch_url(str(u)) for u in image_urls[1:MAX_SCAN_PHOTOS] if u
+        ]
         learned_catalog = body.get("learned_catalog") or []
 
         def _run() -> dict:
@@ -359,7 +364,12 @@ async def scan(request: Request, user_id: str | None = Depends(require_user)):
                 from app.learned_catalog import import_learned_catalog
 
                 import_learned_catalog(learned_catalog)
-            return run_scan_from_url(image_url, scan_id=scan_id, metadata=metadata)
+            return run_scan_from_url(
+                image_url,
+                scan_id=scan_id,
+                metadata=metadata,
+                extra_image_urls=extra_image_urls,
+            )
 
         started = start_job(scan_id, _run)
         return JSONResponse(status_code=202, content=started)
@@ -720,6 +730,17 @@ def _merge_astra_payload(metadata: dict, payload: dict) -> dict:
         value = _payload_field(payload, key)
         if isinstance(value, list) and value:
             merged[key] = value
+    reference_items = _payload_field(payload, "reference_items")
+    if (
+        _payload_field(payload, "comparison_basis") == "reference"
+        and isinstance(reference_items, list)
+        and reference_items
+    ):
+        merged["comparison_basis"] = "reference"
+        merged["reference_items"] = [i for i in reference_items[:MAX_LANDING_REFERENCE_LINES] if isinstance(i, dict)]
+        document = _payload_field(payload, "reference_document")
+        if isinstance(document, dict):
+            merged["reference_document"] = document
     return merged
 
 
@@ -834,7 +855,11 @@ async def landing_scan(request: Request):
         )
 
     payload = await _parse_landing_scan_payload(request)
-    for key, cap in (("vision_prompt", MAX_LANDING_TEXT_CHARS), ("planogram_items", MAX_LANDING_PLANOGRAM_CHARS)):
+    for key, cap in (
+        ("vision_prompt", MAX_LANDING_TEXT_CHARS),
+        ("planogram_items", MAX_LANDING_PLANOGRAM_CHARS),
+        ("reference_items", MAX_LANDING_PLANOGRAM_CHARS),
+    ):
         value = payload.get(key)
         if value is not None and not hasattr(value, "read"):
             import json

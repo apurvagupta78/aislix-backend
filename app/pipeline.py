@@ -171,6 +171,7 @@ def run_scan_from_image(
     metadata: dict | None = None,
     *,
     image_url: str | None = None,
+    extra_images: list[np.ndarray] | None = None,
 ) -> dict:
     from app.make_scan import make_fallback_local, run_make_scan_from_image, use_make_provider
     from app.openai_vision_scan import run_openai_vision_scan_from_image, use_openai_provider
@@ -206,6 +207,7 @@ def run_scan_from_image(
             scan_id=scan_id,
             metadata=metadata,
             image_url=image_url,
+            extra_images=extra_images,
         )
 
     if use_make_provider():
@@ -694,5 +696,8 @@ def run_scan_from_bytes(data: bytes, **kwargs) -> dict:
     return run_scan_from_image(load_image_bytes(data), **kwargs)
 
 
-def run_scan_from_url(url: str, **kwargs) -> dict:
-    return run_scan_from_image(load_image_from_url(url), image_url=url, **kwargs)
+def run_scan_from_url(url: str, *, extra_image_urls: list[str] | None = None, **kwargs) -> dict:
+    extra_images = [load_image_from_url(u) for u in (extra_image_urls or [])]
+    return run_scan_from_image(
+        load_image_from_url(url), image_url=url, extra_images=extra_images or None, **kwargs
+    )
