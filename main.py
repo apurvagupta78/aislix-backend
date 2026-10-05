@@ -478,6 +478,26 @@ async def rebuild_pdf(request: Request):
     return {"pdf_base64": pdf_b64, "build": "human-verification-pdf-v1"}
 
 
+@app.post("/evidence/photo-metrics")
+async def evidence_photo_metrics(request: Request, user_id: str | None = Depends(require_user)):
+    """Capture time, fingerprint and quality numbers of an audit evidence photo (signed storage URL)."""
+    from starlette.concurrency import run_in_threadpool
+
+    from app.evidence_photo import download_photo, photo_metrics
+
+    if not limiter.allow(f"evidence-photo:{user_id or edge_ip(request) or 'unknown'}", 1200, 3600):
+        raise HTTPException(status_code=429, detail="Too many photos checked in the last hour. Try again later.")
+    body = await request.json()
+    image_url = _checked_fetch_url(str(body.get("image_url") or "").strip())
+    if image_url.startswith("data:"):
+        raise HTTPException(status_code=400, detail="image_url must be a storage URL.")
+    try:
+        data = await run_in_threadpool(download_photo, image_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await run_in_threadpool(photo_metrics, data)
+
+
 @app.post("/documents/read")
 async def documents_read(request: Request, user_id: str | None = Depends(require_user)):
     """Start a page-by-page read of a reference document (PDF or photo) from a signed URL."""
