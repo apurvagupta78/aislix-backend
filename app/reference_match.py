@@ -35,6 +35,38 @@ def _text(value: Any) -> str | None:
     return text or None
 
 
+_NO_PROMO = {"null", "none", "n/a", "na", "-", "no", "no offer", "no promotion"}
+_PROMO_KEY = ("promo", "offer", "scheme", "deal")
+
+
+def _promo_text(value: Any) -> str | None:
+    text = _text(value)
+    return None if text is None or text.lower() in _NO_PROMO else text
+
+
+def _expected_promo(item: dict[str, Any]) -> str | None:
+    """The document's promotion for a line: `expected_promo`, else a Promo / Offer / Scheme column."""
+    direct = _promo_text(item.get("expected_promo"))
+    if direct:
+        return direct
+    extra = item.get("extra_fields")
+    if isinstance(extra, dict):
+        for key, value in extra.items():
+            if any(word in str(key).lower() for word in _PROMO_KEY):
+                found = _promo_text(value)
+                if found:
+                    return found
+    return None
+
+
+def _promo_status(expected: str | None, shelf: str | None, *, found: bool) -> str:
+    if not found:
+        return "NOT_ON_SHELF"
+    if expected:
+        return "PROMO_SEEN" if shelf else "PROMO_NOT_SEEN"
+    return "UNEXPECTED_PROMO" if shelf else "NO_EXPECTED"
+
+
 def _percent(part: int, whole: int) -> float | None:
     return round(part * 100.0 / whole, 1) if whole else None
 
@@ -96,6 +128,8 @@ def _line(
         location = "NO_EXPECTED"
     else:
         location = row.get("location_status") if found else None
+    expected_promo = _expected_promo(item)
+    shelf_promo = _promo_text(row.get("promotion_text")) if found else None
     return {
         "line_no": item.get("line_no") if item.get("line_no") is not None else index + 1,
         "raw_text": _text(item.get("raw_text")),
@@ -123,6 +157,11 @@ def _line(
         "visible_price": row.get("visible_price") if found else None,
         "price_status": row.get("price_status") if found else None,
         "price_difference": row.get("price_difference") if found else None,
+        "expected_promo": expected_promo,
+        "shelf_promotion": shelf_promo,
+        "shelf_promotion_type": row.get("promotion_type") if shelf_promo else None,
+        "shelf_promo_price": row.get("promo_price") if shelf_promo else None,
+        "promo_status": _promo_status(expected_promo, shelf_promo, found=found),
     }
 
 
@@ -135,6 +174,8 @@ def _not_on_document(row: dict[str, Any], *, count_pending: bool) -> dict[str, A
         "shelf_units": None if count_pending else row.get("actual_visible_units"),
         "shelf_location_label": row.get("actual_location_label"),
         "visible_price": row.get("visible_price"),
+        "shelf_promotion": _promo_text(row.get("promotion_text")),
+        "shelf_promo_price": row.get("promo_price") if _promo_text(row.get("promotion_text")) else None,
         "confidence": row.get("confidence"),
         "brand_status": row.get("brand_status"),
         "product_status": row.get("product_status"),
@@ -180,6 +221,7 @@ def build_reference_match(
     location_correct = sum(1 for line in location_checked if line["location_status"] == "CORRECT")
     location_wrong = len(location_checked) - location_correct
     qty_checked = [line for line in lines if line["qty_status"] in {"COVERED", "BELOW_DOCUMENT"}]
+    promo_expected = [line for line in lines if line["expected_promo"]]
 
     invoice_total = sum(line["invoice_qty"] for line in lines if line["invoice_qty"] is not None)
     shelf_total = (
@@ -218,6 +260,11 @@ def build_reference_match(
             "location_lines_wrong": location_wrong,
             "location_match_percent": _percent(location_correct, len(location_checked)),
             "locations_on_document": sum(1 for line in lines if line["expected_location"]),
+            "promo_lines_expected": len(promo_expected),
+            "promo_lines_seen": sum(1 for line in promo_expected if line["promo_status"] == "PROMO_SEEN"),
+            "promo_lines_not_seen": sum(1 for line in promo_expected if line["promo_status"] == "PROMO_NOT_SEEN"),
+            "shelf_promotions_read": sum(1 for line in lines if line["shelf_promotion"])
+            + sum(1 for row in extra if row["shelf_promotion"]),
             "not_on_document": len(extra),
         },
         "lines": lines,

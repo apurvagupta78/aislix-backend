@@ -139,3 +139,48 @@ def test_pipeline_without_reference_has_no_block():
     payload = _payload([_row("Pink Rock Salt", "Catch", "AMB-D0703")])
     result = run_shelf_cv_pipeline(payload, {"analysis_mode": "shelf_only"})
     assert "reference_match" not in result
+
+
+def test_promotions_compare_document_promo_column_with_shelf_offer():
+    salt = _row("Pink Rock Salt", "Catch", "AMB-D0703")
+    salt.update({"promotion_text": "Buy 1 Get 1 Free", "promotion_type": "MULTI_BUY", "promo_price": None})
+    jam = _row("Mixed Fruit Jam", "Kissan", "AMB-D0302", price="160")
+    jam.update({"promotion_text": None, "promotion_type": "NONE", "promo_price": None})
+    rice = _row("Basmati Rice", "India Gate", "AMB-D0704")
+    rice.update({"promotion_text": "20% OFF", "promotion_type": "PRICE_OFF", "promo_price": "199"})
+    honey = _row("Pure Honey", "Dabur", "AMB-D0705")
+    honey.update({"promotion_text": "Save Rs 10", "promotion_type": "PRICE_OFF", "promo_price": "140"})
+    lines = [
+        {**_line("Pink Rock Salt", "Catch", line_no=1), "extra_fields": {"Promo": "BOGO"}},
+        {**_line("Mixed Fruit Jam", "Kissan", line_no=2), "expected_promo": "10% off"},
+        _line("Basmati Rice", "India Gate", line_no=3),
+        {**_line("Ghee", "Amul", line_no=4), "extra_fields": {"Offer": "Free spoon"}},
+    ]
+    products = [salt, jam, rice, honey]
+    out = build_reference_match(lines, products, build_location_analysis(products, {}), count_pending=False)
+
+    by_line = {line["line_no"]: line for line in out["lines"]}
+    assert by_line[1]["expected_promo"] == "BOGO"
+    assert by_line[1]["shelf_promotion"] == "Buy 1 Get 1 Free"
+    assert by_line[1]["promo_status"] == "PROMO_SEEN"
+    assert by_line[2]["promo_status"] == "PROMO_NOT_SEEN"
+    assert by_line[3]["promo_status"] == "UNEXPECTED_PROMO"
+    assert by_line[3]["shelf_promo_price"] == "199"
+    assert by_line[4]["promo_status"] == "NOT_ON_SHELF"
+    assert out["not_on_document"][0]["shelf_promotion"] == "Save Rs 10"
+    assert out["metrics"]["promo_lines_expected"] == 3
+    assert out["metrics"]["promo_lines_seen"] == 1
+    assert out["metrics"]["promo_lines_not_seen"] == 1
+    assert out["metrics"]["shelf_promotions_read"] == 3
+
+
+def test_scans_without_promotion_reading_report_no_expected_promo():
+    products = [_row("Pink Rock Salt", "Catch", "AMB-D0703")]
+    out = build_reference_match(
+        [_line("Pink Rock Salt", "Catch")], products, build_location_analysis(products, {}), count_pending=False
+    )
+    line = out["lines"][0]
+    assert line["expected_promo"] is None
+    assert line["shelf_promotion"] is None
+    assert line["promo_status"] == "NO_EXPECTED"
+    assert out["metrics"]["promo_lines_expected"] == 0

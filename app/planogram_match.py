@@ -357,6 +357,10 @@ def _cv_location_price(cv: dict[str, Any]) -> dict[str, Any]:
     if "visible_price" in cv:
         out["visible_price"] = cv.get("visible_price")
         out["price_source"] = cv.get("price_source")
+    if "promotion_text" in cv:
+        out["promotion_text"] = cv.get("promotion_text")
+        out["promotion_type"] = cv.get("promotion_type")
+        out["promo_price"] = cv.get("promo_price")
     return out
 
 
