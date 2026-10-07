@@ -112,6 +112,7 @@ def health():
     from app.learned_catalog import count_learned
     from app.make_scan import scan_provider
     from app.recognizer import active_recognition_mode
+    from app.report_cron import STATUS as report_cron_status
 
     return {
         "status": "ok",
@@ -127,6 +128,7 @@ def health():
         "fnv_qc_finalize": is_fnv_qc_metadata({"analysis_mode": "fnv_qc"}),
         "build": "fnv-qc-finalize-v1",
         "auth": auth_status(),
+        "report_cron": report_cron_status,
     }
 
 
