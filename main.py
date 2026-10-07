@@ -84,6 +84,9 @@ def on_startup():
 
     learned = load_learned()
     ensure_checkpoint()
+    from app.report_cron import start_report_cron
+
+    start_report_cron()
     rk = "yes" if is_available() else "no"
     ocr = active_ocr_engine() or "none"
     mode = active_recognition_mode()
