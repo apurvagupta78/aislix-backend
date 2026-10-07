@@ -51,6 +51,24 @@ def vision_max_output_tokens() -> int:
         return 16384
 
 
+def vision_retry_max_output_tokens() -> int:
+    raw = os.getenv("OPENAI_VISION_RETRY_MAX_TOKENS", "32768")
+    try:
+        return max(vision_max_output_tokens(), int(raw))
+    except ValueError:
+        return 32768
+
+
+def _hit_output_limit(response: Any) -> bool:
+    if getattr(response, "status", None) != "incomplete":
+        return False
+    details = getattr(response, "incomplete_details", None)
+    reason = getattr(details, "reason", None) if details is not None else None
+    if reason is None and isinstance(details, dict):
+        reason = details.get("reason")
+    return reason == "max_output_tokens"
+
+
 def vision_timeout_seconds() -> float:
     raw = os.getenv("OPENAI_VISION_TIMEOUT_SECONDS", "240")
     try:
@@ -260,6 +278,24 @@ def _vision_output_text(
             raise OpenAIVisionScanError(f"Vision scan request failed: {exc}") from exc
     if response is None:
         raise OpenAIVisionScanError(f"Vision scan request failed: {last_exc}")
+
+    # Dense shelves can exhaust the output budget mid-JSON; one retry with a larger
+    # budget returns the full product list instead of a cut-off one.
+    retry_budget = vision_retry_max_output_tokens()
+    if _hit_output_limit(response) and retry_budget > request_kwargs["max_output_tokens"]:
+        print(
+            f"OpenAI vision scan {scan_id}: output hit {request_kwargs['max_output_tokens']} tokens; "
+            f"retrying with {retry_budget}"
+        )
+        try:
+            response = get_client().responses.create(
+                **{**request_kwargs, "max_output_tokens": retry_budget}, timeout=timeout
+            )
+        except Exception as exc:  # keep the first (cut-off) answer if the retry fails
+            print(f"OpenAI vision scan {scan_id}: larger-budget retry failed: {exc!r}")
+    if _hit_output_limit(response):
+        print(f"OpenAI vision scan {scan_id}: output still cut off at the token limit")
+
     elapsed = int((time.time() - started) * 1000)
     print(
         f"OpenAI vision scan {scan_id}: model={vision_model()} effort={effort or 'none'} "

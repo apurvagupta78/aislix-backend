@@ -309,16 +309,32 @@ def _extract_json_object(text: str) -> dict[str, Any] | None:
     if start < 0:
         return None
 
+    # Cut-off output (token limit) leaves the outer object unparseable; the first
+    # complete object is then a single product row. Keep every complete row that
+    # follows it instead of returning one product as if it were the whole answer.
     decoder = json.JSONDecoder()
-    for idx in range(start, len(cleaned)):
+    rows: list[dict[str, Any]] = []
+    idx = start
+    while idx < len(cleaned):
         if cleaned[idx] != "{":
+            idx += 1
             continue
         try:
-            obj, _end = decoder.raw_decode(cleaned[idx:])
+            obj, end = decoder.raw_decode(cleaned, idx)
         except json.JSONDecodeError:
+            idx += 1
             continue
-        if isinstance(obj, dict):
+        if not isinstance(obj, dict):
+            idx = end
+            continue
+        if not _looks_like_product_row(obj):
+            if rows:
+                break
             return obj
+        rows.append(obj)
+        idx = end
+    if rows:
+        return {"products": rows, "output_truncated": True}
     return None
 
 
