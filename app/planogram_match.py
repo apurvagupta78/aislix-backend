@@ -180,14 +180,84 @@ def _variants_equivalent(cv: dict[str, Any], item: dict[str, Any]) -> bool:
     return cv_key in item_key or item_key in cv_key
 
 
-def _score_cv_to_planogram(cv: dict[str, Any], item: dict[str, Any]) -> float:
+_WORD = re.compile(r"[a-z0-9]+")
+# Pack / size words never tell two variants of a brand apart.
+_PACK_WORDS = frozenset(
+    {
+        "pack", "packs", "pc", "pcs", "piece", "pieces", "g", "gm", "gms", "kg", "ml", "l", "ltr",
+        "x", "new", "combo", "pouch", "box", "jar", "bottle", "can", "family", "value", "mini",
+        "jumbo", "big", "small", "large", "regular", "size", "and",
+    }
+)
+# Below the 0.3 UNVERIFIABLE floor: a named different flavour is a different product.
+_FLAVOR_CONFLICT_CAP = 0.29
+
+
+def _words(*parts: Any) -> set[str]:
+    out: set[str] = set()
+    for part in parts:
+        for word in _WORD.findall(_norm(part).replace("'", "").replace("&", " and ")):
+            if word not in _PLACEHOLDER_TOKENS:
+                out.add(word)
+    return out
+
+
+def _distinctive_words(items: list[dict[str, Any]]) -> list[set[str]]:
+    """Words only this line uses among expected lines of the same brand (e.g. "apple" in Texas Apple Candy)."""
+    names = [
+        _words(item.get("product_name"), item.get("variant"), _normalize_variant_for_match(item.get("variant")))
+        - _words(item.get("brand"))
+        for item in items
+    ]
+    out: list[set[str]] = []
+    for idx, item in enumerate(items):
+        siblings = [
+            names[other]
+            for other in range(len(items))
+            if other != idx and _brand_keys_equal(item.get("brand"), items[other].get("brand"))
+        ]
+        if not siblings:
+            out.append(set())
+            continue
+        shared = set().union(*siblings)
+        out.append({w for w in names[idx] - shared if w not in _PACK_WORDS and not any(c.isdigit() for c in w)})
+    return out
+
+
+def _flavor_conflict(cv: dict[str, Any], item: dict[str, Any], distinctive: set[str]) -> bool:
+    """Shelf row names its flavour, and none of the words that set this line apart from its siblings."""
+    if not distinctive or _cv_product_unverified(cv) or _cv_variant_unverified(cv):
+        return False
+    if _variants_equivalent(cv, item):
+        return False
+    cv_product = cv.get("product_name") or cv.get("product")
+    cv_words = _words(
+        cv.get("brand"),
+        cv_product,
+        cv.get("variant"),
+        _normalize_variant_for_match(cv.get("variant"), cv_product),
+    )
+    return not (distinctive & cv_words)
+
+
+def _score_cv_to_planogram(
+    cv: dict[str, Any],
+    item: dict[str, Any],
+    distinctive: set[str] | None = None,
+) -> float:
     cv_sku = _norm(cv.get("sku"))
     item_sku = _norm(item.get("sku"))
     if cv_sku and item_sku and cv_sku == item_sku and cv_sku not in _PLACEHOLDER_TOKENS:
         return 1.0
     if _cv_identity(cv) == _planogram_identity(item):
         return 0.95
+    score = _fuzzy_score(cv, item)
+    if distinctive and _flavor_conflict(cv, item, distinctive):
+        return min(score, _FLAVOR_CONFLICT_CAP)
+    return score
 
+
+def _fuzzy_score(cv: dict[str, Any], item: dict[str, Any]) -> float:
     cv_text = _clean_identity_text(cv.get("brand"), cv.get("product_name") or cv.get("product"), cv.get("variant"))
     item_text = _clean_identity_text(item.get("brand"), item.get("product_name"), item.get("variant"))
     overlap = _token_overlap(cv_text, item_text) if cv_text and item_text else 0.0
@@ -479,79 +549,70 @@ def join_planogram_with_cv(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Build per-planogram-row joined records plus unmatched CV (unplanned) rows."""
     used_cv: set[int] = set()
-    rows: list[dict[str, Any]] = []
+    distinctive = _distinctive_words(planogram_items)
+    scores = [
+        [_score_cv_to_planogram(cv, item, distinctive[i]) for cv in cv_products]
+        for i, item in enumerate(planogram_items)
+    ]
 
-    for item in planogram_items:
+    def deferred(cv: dict[str, Any], score: float) -> bool:
+        # Product-identified / variant-UNVERIFIABLE rows go to the residual pass so we only
+        # attach when exactly one open slot remains for that brand+product (no flavour guessing).
+        return _cv_variant_unverified(cv) and not _cv_product_unverified(cv) and score < _MATCH_THRESHOLD
+
+    # Strongest pairs first across all lines, so an earlier line cannot take a shelf product
+    # that fits a later line better.
+    pairs: list[tuple[float, float, int, int]] = []
+    for i, item in enumerate(planogram_items):
+        for j, cv in enumerate(cv_products):
+            score = scores[i][j]
+            if score <= 0 or score < _accept_threshold(cv) or deferred(cv, score):
+                continue
+            pairs.append((-score, -_location_bonus(cv, item), i, j))
+    pairs.sort()
+
+    assigned: dict[int, int] = {}
+    for _, _, i, j in pairs:
+        if i in assigned or j in used_cv:
+            continue
+        assigned[i] = j
+        used_cv.add(j)
+
+    rows: list[dict[str, Any]] = []
+    for i, item in enumerate(planogram_items):
+        base = _planogram_base(item)
+        if i in assigned:
+            candidate = cv_products[assigned[i]]
+            score = scores[i][assigned[i]]
+            # Brand-level accept still transfers visible facings so Aislix does not
+            # invent zero-unit CRITICAL risks when the brand is clearly on shelf.
+            rows.append(
+                _attach_cv(base, candidate, score=score, match_status=_match_status_for_score(candidate, score))
+            )
+            continue
+
         best_idx = -1
         best_score = 0.0
-        for idx, cv in enumerate(cv_products):
-            if idx in used_cv:
-                continue
-            score = _score_cv_to_planogram(cv, item)
-            if score > 0 and best_idx >= 0 and score == best_score:
-                if _location_bonus(cv, item) > _location_bonus(cv_products[best_idx], item):
-                    best_idx = idx
-                continue
-            if score > best_score:
-                best_score = score
-                best_idx = idx
-
-        base = _planogram_base(item)
-
+        for j in range(len(cv_products)):
+            if j not in used_cv and scores[i][j] > best_score:
+                best_score = scores[i][j]
+                best_idx = j
         if best_idx < 0:
-            rows.append(
-                {
-                    **base,
-                    "actual_facings": None,
-                    "actual_visible_units": None,
-                    "match_status": "NOT_FOUND",
-                    "match_score": round(best_score, 3),
-                    "source_actual": None,
-                }
-            )
-            continue
-
-        candidate = cv_products[best_idx]
-        accept_threshold = _accept_threshold(candidate)
-
-        # Defer product-identified / variant-UNVERIFIABLE rows to the residual
-        # pass so we only attach when exactly one open planogram slot remains
-        # for that brand+product (no guessing among multiple flavors).
-        if (
-            _cv_variant_unverified(candidate)
-            and not _cv_product_unverified(candidate)
-            and best_score < _MATCH_THRESHOLD
-        ):
-            rows.append(
-                {
-                    **base,
-                    "actual_facings": None,
-                    "actual_visible_units": None,
-                    "match_status": "UNVERIFIABLE",
-                    "match_score": round(best_score, 3),
-                    "source_actual": None,
-                }
-            )
-            continue
-
-        if best_score < accept_threshold:
-            rows.append(
-                {
-                    **base,
-                    "actual_facings": None,
-                    "actual_visible_units": None,
-                    "match_status": "NOT_FOUND" if best_score < 0.3 else "UNVERIFIABLE",
-                    "match_score": round(best_score, 3),
-                    "source_actual": None,
-                }
-            )
-            continue
-
-        used_cv.add(best_idx)
-        match_status = _match_status_for_score(candidate, best_score)
-        # Brand-level accept still transfers visible facings so Aislix does not
-        # invent zero-unit CRITICAL risks when the brand is clearly on shelf.
-        rows.append(_attach_cv(base, candidate, score=best_score, match_status=match_status))
+            status = "NOT_FOUND"
+        elif deferred(cv_products[best_idx], best_score):
+            status = "UNVERIFIABLE"
+        else:
+            status = "NOT_FOUND" if best_score < 0.3 else "UNVERIFIABLE"
+        rows.append(
+            {
+                **base,
+                "actual_facings": None,
+                "actual_visible_units": None,
+                "match_status": status,
+                "match_score": round(best_score, 3),
+                "source_actual": None,
+            }
+        )
 
     _residual_variant_unverified_attach(rows, cv_products, used_cv)
     _fold_other_locations(rows, cv_products, used_cv)
