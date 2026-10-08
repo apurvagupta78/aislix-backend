@@ -13,6 +13,7 @@ from app.astra_cv_validate import (
 from app.cv_brand_canonicalize import canonicalize_shelf_cv_products
 from app.executive_summary_builder import build_executive_summary
 from app.location_analysis import annotate_planogram_rows, build_location_analysis
+from app.metric_result import not_applicable
 from app.execution_risk import evaluate_execution_risk
 from app.planogram_match import join_planogram_with_cv
 from app.reference_match import build_reference_match, is_reference_comparison
@@ -24,6 +25,62 @@ from app.shelf_calc import (
 )
 
 CALC_ENGINE_VERSION = "shelf_calc_v1"
+
+_IDENTIFICATION_METRICS = (
+    "products_identified",
+    "brands_identified",
+    "variants_identified",
+    "total_actual_visible_units",
+)
+_PRESENCE_ONLY_REASON = "Your document has no facing targets — each line is checked for presence."
+
+
+def _add_identification_metrics(
+    aislix_analysis: dict[str, Any],
+    products: list[dict[str, Any]],
+    count_validation: dict[str, Any],
+) -> None:
+    """Planogram scans report what the AI identified on the shelf, same as shelf-only scans."""
+    shelf_metrics = build_shelf_only_analysis(products, count_validation=count_validation)["calculated_metrics"]
+    calculated = aislix_analysis.setdefault("calculated_metrics", {})
+    for key in _IDENTIFICATION_METRICS:
+        if key not in calculated and key in shelf_metrics:
+            calculated[key] = shelf_metrics[key]
+
+
+def document_sets_facings(metadata: dict[str, Any]) -> bool:
+    """True when the reference document carries facing targets (a planogram or a facings column)."""
+    document = metadata.get("reference_document")
+    document = document if isinstance(document, dict) else {}
+    if str(document.get("document_type") or "").strip().lower() == "planogram":
+        return True
+    if any("facing" in str(header).lower() for header in document.get("extra_columns") or []):
+        return True
+    for item in metadata.get("planogram_items") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            if int(float(item.get("expected_facings") or 0)) > 1:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def mark_facings_not_applicable(aislix_analysis: dict[str, Any]) -> None:
+    """Invoices / stock lists only expect presence, so facing compliance has no target."""
+    calculated = aislix_analysis.setdefault("calculated_metrics", {})
+    calculated["overall_facing_compliance"] = not_applicable(
+        "overall_facing_compliance", reason=_PRESENCE_ONLY_REASON
+    ).to_dict()
+    for row in aislix_analysis.get("products") or []:
+        if not isinstance(row, dict):
+            continue
+        row["facing_compliance"] = not_applicable("facing_compliance", reason=_PRESENCE_ONLY_REASON).to_dict()
+        row["facing_variance"] = not_applicable(
+            "facing_variance", unit="count", reason=_PRESENCE_ONLY_REASON
+        ).to_dict()
+    aislix_analysis["facing_targets"] = False
 
 
 def normalize_api_analysis_mode(metadata: dict[str, Any], astra_payload: dict[str, Any]) -> str:
@@ -77,6 +134,9 @@ def run_shelf_cv_pipeline(
             sku_match_percent=sku_match_percent,
             unplanned_products=unplanned,
         )
+        _add_identification_metrics(aislix_analysis, products, count_validation)
+        if is_reference_comparison(metadata) and not document_sets_facings(metadata):
+            mark_facings_not_applicable(aislix_analysis)
         aislix_key = "aislix_planogram_analysis"
     else:
         aislix_analysis = build_shelf_only_analysis(products, count_validation=count_validation)

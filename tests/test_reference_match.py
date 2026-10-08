@@ -135,6 +135,53 @@ def test_pipeline_persists_reference_match_block():
     assert result["aislix_planogram_analysis"]["reference_match"]["metrics"]["lines_found"] == 1
 
 
+def _stock_list_metadata(document, facings=1):
+    return {
+        "analysis_mode": "planogram_comparison",
+        "planogram_items": [
+            {"brand": "Catch", "product_name": "Pink Rock Salt", "variant": "1 kg", "expected_facings": facings},
+            {"brand": "Kissan", "product_name": "Mixed Fruit Jam", "variant": "1 kg", "expected_facings": facings},
+        ],
+        "comparison_basis": "reference",
+        "reference_items": [
+            _line("Pink Rock Salt", "Catch", qty=4),
+            _line("Mixed Fruit Jam", "Kissan", qty=2, line_no=2),
+        ],
+        "reference_document": document,
+    }
+
+
+def test_stock_list_without_facings_marks_facing_compliance_not_applicable():
+    payload = _payload([_row("Pink Rock Salt", "Catch", "AMB-D0703", facings=8, units=8)])
+    result = run_shelf_cv_pipeline(payload, _stock_list_metadata({"source": "csv", "extra_columns": []}))
+
+    analysis = result["aislix_planogram_analysis"]
+    assert result["calculated_metrics"]["overall_facing_compliance"]["status"] == "NOT_APPLICABLE"
+    assert analysis["facing_targets"] is False
+    assert all(row["facing_compliance"]["status"] == "NOT_APPLICABLE" for row in analysis["products"])
+    summary = result["executive_summary"]
+    assert "800" not in summary and "None" not in summary
+    assert "Mode: Document comparison" in summary
+    assert "Not applicable (document has no facing targets)" in summary
+    assert "Mixed Fruit Jam · 1 kg | not found on shelf" in summary
+
+
+def test_planogram_document_keeps_facing_compliance():
+    payload = _payload([_row("Pink Rock Salt", "Catch", "AMB-D0703", facings=2, units=4)])
+    result = run_shelf_cv_pipeline(payload, _stock_list_metadata({"document_type": "planogram"}, facings=2))
+    assert result["calculated_metrics"]["overall_facing_compliance"]["status"] == "CALCULATED"
+    assert "facing_targets" not in result["aislix_planogram_analysis"]
+
+
+def test_planogram_scans_report_products_and_brands_identified():
+    payload = _payload([_row("Pink Rock Salt", "Catch", "AMB-D0703"), _row("Basmati Rice", "India Gate", "AMB-D0704")])
+    result = run_shelf_cv_pipeline(payload, _stock_list_metadata({"source": "csv"}))
+    metrics = result["calculated_metrics"]
+    assert metrics["products_identified"]["value"] == 2
+    assert metrics["brands_identified"]["value"] == 2
+    assert "Products identified: 2" in result["executive_summary"]
+
+
 def test_pipeline_without_reference_has_no_block():
     payload = _payload([_row("Pink Rock Salt", "Catch", "AMB-D0703")])
     result = run_shelf_cv_pipeline(payload, {"analysis_mode": "shelf_only"})

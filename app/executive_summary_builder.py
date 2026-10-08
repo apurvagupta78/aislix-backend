@@ -38,6 +38,17 @@ def _product_label(row: dict[str, Any]) -> str:
     return " · ".join(parts) or "Unidentified product"
 
 
+def _count_text(value: Any) -> str:
+    return "—" if value is None or str(value).strip().lower() in _EMPTY_LABELS else str(value)
+
+
+def _presence_text(row: dict[str, Any]) -> str:
+    facings = row.get("actual_facings")
+    if facings is None and row.get("actual_visible_units") is None:
+        return "not found on shelf"
+    return f"found on shelf, {_count_text(facings)} facings, visible units {_count_text(row.get('actual_visible_units'))}"
+
+
 def build_executive_summary(
     *,
     metadata: dict[str, Any],
@@ -61,7 +72,11 @@ def build_executive_summary(
     operating_model = astra_cv.get("operating_model") or metadata.get("operating_model") or "Not supplied"
     assignment = metadata.get("assignment_name") or metadata.get("audit_name") or "Ad hoc shelf audit"
     shelf_only = analysis_mode != "planogram_comparison"
-    mode_display = "Planogram comparison" if not shelf_only else "Shelf-only"
+    document_mode = bool((aislix_analysis or {}).get("reference_match"))
+    facing_targets = (aislix_analysis or {}).get("facing_targets") is not False
+    mode_display = (
+        "Shelf-only" if shelf_only else "Document comparison" if document_mode else "Planogram comparison"
+    )
 
     section1 = "\n".join(
         [
@@ -97,7 +112,13 @@ def build_executive_summary(
         section3_lines.append("Planogram compliance: Not applicable (shelf-only).")
     else:
         section3_lines.append(
-            f"Overall facing compliance: {_format_metric(calculated_metrics, 'overall_facing_compliance', '%')}"
+            "Overall facing compliance: "
+            + _format_metric(
+                calculated_metrics,
+                "overall_facing_compliance",
+                "%",
+                na_label="Not applicable (document has no facing targets)",
+            )
         )
     section3 = "\n".join(section3_lines)
 
@@ -123,6 +144,9 @@ def build_executive_summary(
                 f"facings {row.get('actual_facings')}, visible units {row.get('actual_visible_units')}"
             )
             continue
+        if not facing_targets:
+            section5_lines.append(f"{_product_label(row)}: {_presence_text(row)}")
+            continue
         fc = row.get("facing_compliance")
         fc_val = fc.get("value") if isinstance(fc, dict) else None
         fc_status = fc.get("status") if isinstance(fc, dict) else "UNAVAILABLE"
@@ -133,7 +157,8 @@ def build_executive_summary(
         )
         section5_lines.append(
             f"{_product_label(row)}: "
-            f"facings {row.get('actual_facings')}/{row.get('expected_facings')}, compliance {compliance_text}"
+            f"facings {_count_text(row.get('actual_facings'))}/{_count_text(row.get('expected_facings'))}, "
+            f"compliance {compliance_text}"
         )
     section5 = "\n".join(section5_lines) if section5_lines else "No product rows available."
 
@@ -143,9 +168,15 @@ def build_executive_summary(
         if not isinstance(brand_row, dict):
             continue
         share = brand_row.get("share")
-        share_val = share.get("value") if isinstance(share, dict) else brand_row.get("share_of_facings_percent")
-        facings = brand_row.get("actual_facings") or brand_row.get("facings")
-        brand_lines.append(f"{brand_row.get('brand')}: {facings} facings · share {share_val}%")
+        share_val = share.get("value") if isinstance(share, dict) else None
+        for key in ("share_of_facings_percent", "actual_share_percent"):
+            if share_val is None:
+                share_val = brand_row.get(key)
+        facings = brand_row.get("actual_facings")
+        if facings is None:
+            facings = brand_row.get("facings")
+        share_text = f"share {share_val}%" if share_val is not None else "share Data unavailable"
+        brand_lines.append(f"{brand_row.get('brand')}: {_count_text(facings)} facings · {share_text}")
     section6 = (
         "\n".join(brand_lines)
         if brand_lines
@@ -201,9 +232,12 @@ def build_executive_summary(
     for row in products[:20]:
         if not isinstance(row, dict):
             continue
+        if row.get("actual_facings") is None and row.get("actual_visible_units") is None:
+            appendix_lines.append(f"{_product_label(row)} | not found on shelf")
+            continue
         appendix_lines.append(
-            f"{_product_label(row)} | facings {row.get('actual_facings')} | "
-            f"visible units {row.get('actual_visible_units')}"
+            f"{_product_label(row)} | facings {_count_text(row.get('actual_facings'))} | "
+            f"visible units {_count_text(row.get('actual_visible_units'))}"
         )
     section13 = "\n".join(appendix_lines) if appendix_lines else "Data unavailable"
 
