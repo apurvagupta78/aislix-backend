@@ -13,6 +13,7 @@ from app.metric_result import (
     unavailable,
     weighted_ratio,
 )
+from app.astra_cv_validate import count_usable
 from app.inventory import _normalize_brand_key
 
 FORMULA_VERSION = "v1"
@@ -428,7 +429,7 @@ def build_shelf_only_analysis(
             source="astra",
             status="CALCULATED",
         )
-        if facings_check.get("status") == "VERIFIED"
+        if count_usable(facings_check)
         else metric_result(
             "total_actual_facings",
             value=None,
@@ -442,7 +443,7 @@ def build_shelf_only_analysis(
     if verified_facings is not None and int(verified_facings) > 0:
         units_total = (
             int(verified_units)
-            if verified_units is not None and units_check.get("status") == "VERIFIED"
+            if verified_units is not None and count_usable(units_check)
             else None
         )
         unit_rank = {
@@ -500,7 +501,7 @@ def build_shelf_only_analysis(
                 unit="count",
                 source="astra",
             ).to_dict()
-            if units_check.get("status") == "VERIFIED"
+            if count_usable(units_check)
             else metric_result(
                 "total_actual_visible_units",
                 value=None,
@@ -545,7 +546,7 @@ def build_planogram_analysis(
         ).to_dict()
 
     facings_check = count_validation.get("total_actual_facings") or {}
-    if facings_check.get("status") == "VERIFIED":
+    if count_usable(facings_check):
         calculated_metrics["total_actual_facings"] = metric_result(
             "total_actual_facings",
             value=facings_check.get("verified_value"),

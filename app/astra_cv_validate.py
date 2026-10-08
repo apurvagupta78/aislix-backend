@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
 SHELF_CV_TYPE = "shelf_cv"
 VERIFIED = "VERIFIED"
+APPROXIMATE = "APPROXIMATE"
 COUNT_MISMATCH = "COUNT_MISMATCH"
+
+# Product rows vs Astra's own summary may disagree by a few units on dense shelves.
+# Within this gap the product-row sum is used and the scan is marked approximate.
+COUNT_TOLERANCE_UNITS = 2
+COUNT_TOLERANCE_FRACTION = 0.03
+
+
+def count_tolerance(product_sum: int, astra_summary: int) -> int:
+    return max(COUNT_TOLERANCE_UNITS, math.ceil(COUNT_TOLERANCE_FRACTION * max(product_sum, astra_summary)))
+
+
+def count_usable(check: dict[str, Any] | None) -> bool:
+    """True when the product-row sum can be used as the shelf total."""
+    return isinstance(check, dict) and check.get("status") in {VERIFIED, APPROXIMATE}
 
 
 def _norm(text: Any) -> str:
@@ -84,11 +100,22 @@ def verify_count_field(
         }
 
     if product_sum != astra_summary:
+        gap = abs(product_sum - astra_summary)
+        if gap <= count_tolerance(product_sum, astra_summary):
+            return {
+                "field": field_name,
+                "status": APPROXIMATE,
+                "product_sum": product_sum,
+                "astra_summary": astra_summary,
+                "gap": gap,
+                "verified_value": product_sum,
+            }
         return {
             "field": field_name,
             "status": COUNT_MISMATCH,
             "product_sum": product_sum,
             "astra_summary": astra_summary,
+            "gap": gap,
             "verified_value": None,
         }
 
@@ -132,7 +159,7 @@ def apply_visible_units_cap(count_validation: dict[str, Any], products: list[dic
     units["astra_product_sum"] = units.get("product_sum")
     units["product_sum"] = capped_sum
     units["rows_capped_to_facings"] = capped
-    if units.get("status") == VERIFIED:
+    if count_usable(units):
         units["verified_value"] = capped_sum
 
 
@@ -144,12 +171,21 @@ def verify_astra_count_consistency(data: dict[str, Any]) -> dict[str, Any]:
     facings = verify_count_field(products, summary, "actual_facings", "total_actual_facings")
     units = verify_count_field(products, summary, "actual_visible_units", "total_actual_visible_units")
 
-    has_mismatch = any(row.get("status") == COUNT_MISMATCH for row in (facings, units))
-    all_verified = all(row.get("status") == VERIFIED for row in (facings, units) if row.get("status") != "UNAVAILABLE")
+    checks = (facings, units)
+    has_mismatch = any(row.get("status") == COUNT_MISMATCH for row in checks)
+    available = [row for row in checks if row.get("status") != "UNAVAILABLE"]
+    if has_mismatch:
+        status = COUNT_MISMATCH
+    elif not all(count_usable(row) for row in available):
+        status = "PARTIAL"
+    elif any(row.get("status") == APPROXIMATE for row in available):
+        status = APPROXIMATE
+    else:
+        status = VERIFIED
 
     return {
         "total_actual_facings": facings,
         "total_actual_visible_units": units,
-        "count_verification_status": COUNT_MISMATCH if has_mismatch else (VERIFIED if all_verified else "PARTIAL"),
+        "count_verification_status": status,
         "scan_complete": not has_mismatch,
     }
