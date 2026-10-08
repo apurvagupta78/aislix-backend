@@ -360,8 +360,13 @@ def compare_planogram(
     scope_type: str | None = None,
     scope_values: dict | None = None,
     full_store_items: list[dict] | None = None,
+    flag_unlisted: bool = True,
 ) -> dict[str, Any]:
-    """Compare expected planogram rows vs detected inventory."""
+    """Compare expected planogram rows vs detected inventory.
+
+    ``flag_unlisted=False`` is for invoices / stock lists: they do not define the
+    whole shelf, so products not on them are counted but never raised as issues.
+    """
     scan_context = scan_context or {}
     inventory = _merge_inventory_by_product(list(inventory))
     scoped_expected = filter_planogram_by_scope(planogram_items, scope_type, scope_values, scan_context)
@@ -490,12 +495,16 @@ def compare_planogram(
                 "detail": detail,
             })
 
+    unlisted_count = 0
     for idx, actual in enumerate(inventory):
         if idx in used_actual:
             continue
         act_brand = actual.get("brand") or ""
         act_product = _display_product(actual)
         if _norm(act_brand) in {"", "unknown"} and _norm(act_product) in {"", "unknown", "unidentified sku"}:
+            continue
+        if not flag_unlisted:
+            unlisted_count += 1
             continue
         lines.append({
             "planogram_item_id": None,
@@ -518,7 +527,8 @@ def compare_planogram(
         "wrong_products": sum(1 for ln in lines if ln["issue_type"] == ISSUE_WRONG_PRODUCT),
         "wrong_category": sum(1 for ln in lines if ln["issue_type"] == ISSUE_WRONG_CATEGORY),
         "wrong_location": sum(1 for ln in lines if ln["issue_type"] == ISSUE_WRONG_LOCATION),
-        "unexpected_products": sum(1 for ln in lines if ln["issue_type"] == ISSUE_UNEXPECTED),
+        "unexpected_products": unlisted_count
+        + sum(1 for ln in lines if ln["issue_type"] == ISSUE_UNEXPECTED),
         "correct_products": sum(1 for ln in lines if ln["issue_type"] == ISSUE_CORRECT),
     }
 

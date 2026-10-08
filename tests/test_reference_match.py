@@ -1,5 +1,6 @@
-from app.reference_match import build_reference_match, is_reference_comparison
+from app.reference_match import build_reference_match, expected_list_covers_shelf, is_reference_comparison
 from app.location_analysis import build_location_analysis
+from app.planogram_compliance import compare_planogram
 from app.shelf_pipeline import run_shelf_cv_pipeline
 
 
@@ -231,3 +232,34 @@ def test_scans_without_promotion_reading_report_no_expected_promo():
     assert line["shelf_promotion"] is None
     assert line["promo_status"] == "NO_EXPECTED"
     assert out["metrics"]["promo_lines_expected"] == 0
+
+
+def _reference_meta(document_type):
+    return {
+        "comparison_basis": "reference",
+        "reference_items": [_line("Pink Rock Salt", "Catch")],
+        "reference_document": {"document_type": document_type, "extra_columns": []},
+    }
+
+
+def test_only_planograms_cover_the_whole_shelf():
+    assert expected_list_covers_shelf({})
+    assert expected_list_covers_shelf(_reference_meta("planogram"))
+    assert not expected_list_covers_shelf(_reference_meta("stock_list"))
+    assert not expected_list_covers_shelf(_reference_meta("invoice"))
+
+
+def test_products_not_on_a_stock_list_are_counted_but_not_raised():
+    expected = [{"brand": "Catch", "product_name": "Pink Rock Salt", "expected_qty": 2}]
+    inventory = [
+        {"brand": "Catch", "product_name": "Pink Rock Salt", "quantity": 2},
+        {"brand": "Tata", "product_name": "Iodised Salt", "quantity": 3},
+    ]
+    flagged = compare_planogram(expected, inventory)
+    assert [ln["issue_type"] for ln in flagged["lines"]].count("unexpected") == 1
+    assert any(a["issue_type"] == "unexpected" for a in flagged["corrective_actions"])
+
+    listed = compare_planogram(expected, inventory, flag_unlisted=False)
+    assert all(ln["issue_type"] != "unexpected" for ln in listed["lines"])
+    assert all(a["issue_type"] != "unexpected" for a in listed["corrective_actions"])
+    assert listed["summary"]["unexpected_products"] == 1

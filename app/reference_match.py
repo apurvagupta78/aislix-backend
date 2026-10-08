@@ -20,6 +20,15 @@ def is_reference_comparison(metadata: dict[str, Any]) -> bool:
     return basis == "reference" and isinstance(items, list) and any(isinstance(i, dict) for i in items)
 
 
+def expected_list_covers_shelf(metadata: dict[str, Any]) -> bool:
+    """A planogram defines the whole shelf; invoices, stock lists and orders do not."""
+    if not is_reference_comparison(metadata):
+        return True
+    document = metadata.get("reference_document")
+    document_type = str((document or {}).get("document_type") or "") if isinstance(document, dict) else ""
+    return document_type.strip().lower() == "planogram"
+
+
 def _num(value: Any) -> float | None:
     if value in (None, ""):
         return None

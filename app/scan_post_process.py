@@ -217,6 +217,7 @@ def finalize_make_scan(
     planogram_compliance = None
     if planogram_items:
         from app.planogram_compliance import compare_planogram
+        from app.reference_match import expected_list_covers_shelf
 
         planogram_compliance = compare_planogram(
             planogram_items=planogram_items,
@@ -225,6 +226,7 @@ def finalize_make_scan(
             scope_type=metadata.get("assignment_scope_type"),
             scope_values=metadata.get("assignment_scope_values") or {},
             full_store_items=metadata.get("planogram_items_full") or planogram_items,
+            flag_unlisted=expected_list_covers_shelf(metadata),
         )
         metrics_planogram = planogram_compliance.get("compliance_percent")
         if metrics_planogram is not None:
