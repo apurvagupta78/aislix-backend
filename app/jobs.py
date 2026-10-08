@@ -2,12 +2,27 @@
 
 from __future__ import annotations
 
+import time
 import traceback
 from collections.abc import Callable
 from typing import Any
 
 _lock = __import__("threading").Lock()
 _jobs: dict[str, dict[str, Any]] = {}
+
+# Anonymous demo jobs carry full results (images included); drop them once stale.
+LANDING_JOB_PREFIX = "landing:"
+LANDING_JOB_TTL_SECONDS = 3600
+
+
+def _prune_landing_jobs() -> None:
+    cutoff = time.time() - LANDING_JOB_TTL_SECONDS
+    for job_id in [
+        jid
+        for jid, job in _jobs.items()
+        if jid.startswith(LANDING_JOB_PREFIX) and job.get("finished_at", time.time()) < cutoff
+    ]:
+        del _jobs[job_id]
 
 
 def _classify_error(exc: Exception) -> str:
@@ -29,6 +44,7 @@ def _classify_error(exc: Exception) -> str:
 
 def start_job(scan_id: str, runner: Callable[[], dict]) -> dict[str, str]:
     with _lock:
+        _prune_landing_jobs()
         existing = _jobs.get(scan_id)
         if existing and existing["status"] == "processing":
             return {"scan_id": scan_id, "status": "processing"}
@@ -50,6 +66,7 @@ def start_job(scan_id: str, runner: Callable[[], dict]) -> dict[str, str]:
                     "error": None,
                     "error_code": None,
                     "error_detail": None,
+                    "finished_at": time.time(),
                 }
         except Exception as exc:
             from app.user_errors import public_error_from_exception
@@ -65,6 +82,7 @@ def start_job(scan_id: str, runner: Callable[[], dict]) -> dict[str, str]:
                     "error": public_error_from_exception(exc),
                     "error_code": code,
                     "error_detail": detail[:2000],
+                    "finished_at": time.time(),
                 }
 
     __import__("threading").Thread(target=_run, daemon=True).start()

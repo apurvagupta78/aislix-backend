@@ -976,30 +976,66 @@ async def landing_scan(request: Request):
     metadata = merge_landing_vision_metadata(metadata, payload)
     metadata = _merge_astra_payload(metadata, payload)
 
+    def _run_landing() -> dict:
+        try:
+            result = run_scan_from_image(image, metadata=metadata)
+        except Exception as exc:
+            from app.user_errors import public_error_from_exception
+
+            print(f"Landing scan failed ({token}): {exc}")
+            save_scan_failure(token, public_error_from_exception(exc))
+            raise
+
+        scan_id = result.get("scan_id") or "landing"
+        storage_path = upload_scan_image(token, scan_id, image_bytes)
+        save_scan_success(
+            token,
+            scan_id=scan_id,
+            sample_id=effective_sample_id,
+            image_storage_path=storage_path,
+            category=category or merged_defaults.get("category"),
+            full_result=result,
+        )
+
+        response = landing_scan_response(result, token, sample_id=effective_sample_id)
+        response.update(demo_allowance_response(ip_hash))
+        return response
+
+    # Full AI runs outlast the edge gateway timeout, so callers that can poll get a job.
+    if _form_field_str(payload, "async") == "1":
+        from app.jobs import start_job
+
+        start_job(_landing_job_id(token), _run_landing)
+        return JSONResponse(
+            status_code=202,
+            content={"landing_session_id": token, "status": "processing"},
+        )
+
     try:
-        result = run_scan_from_image(image, metadata=metadata)
+        return _run_landing()
     except Exception as exc:
         from app.user_errors import public_error_from_exception
 
-        public_error = public_error_from_exception(exc)
-        print(f"Landing scan failed ({token}): {exc}")
-        save_scan_failure(token, public_error)
-        raise HTTPException(status_code=422, detail=public_error) from exc
+        raise HTTPException(status_code=422, detail=public_error_from_exception(exc)) from exc
 
-    scan_id = result.get("scan_id") or "landing"
-    storage_path = upload_scan_image(token, scan_id, image_bytes)
-    save_scan_success(
-        token,
-        scan_id=scan_id,
-        sample_id=effective_sample_id,
-        image_storage_path=storage_path,
-        category=category or merged_defaults.get("category"),
-        full_result=result,
-    )
 
-    response = landing_scan_response(result, token, sample_id=effective_sample_id)
-    response.update(demo_allowance_response(ip_hash))
-    return response
+def _landing_job_id(session_token: str) -> str:
+    return f"landing:{session_token}"
+
+
+@app.get("/landing/scan/{session_token}/status")
+def landing_scan_status(session_token: str):
+    from app.jobs import get_job
+
+    job = get_job(_landing_job_id(session_token))
+    if not job:
+        raise HTTPException(status_code=404, detail="Demo audit not found. Please run it again.")
+    body: dict = {"landing_session_id": session_token, "status": job["status"]}
+    if job["status"] == "completed":
+        body["result"] = job.get("result")
+    elif job["status"] == "failed":
+        body["error"] = job.get("error")
+    return body
 
 
 @app.post("/landing/email-report")
