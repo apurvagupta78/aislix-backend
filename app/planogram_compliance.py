@@ -312,18 +312,31 @@ def _find_best_match(expected: dict, inventory: list[dict], used: set[int]) -> t
     return best_idx, best_score
 
 
-def _wrong_location_check(actual: dict, full_store_items: list[dict], current_aisle: str) -> dict | None:
-    """True when product belongs to another aisle in the full store planogram."""
+def _row_aisle(row: dict) -> str:
+    return _norm(row.get("aisle") or row.get("location") or "")
+
+
+def _wrong_location_check(
+    actual: dict,
+    full_store_items: list[dict],
+    current_aisle: str,
+    shelf_aisles: set[str] | None = None,
+) -> dict | None:
+    """Planogram row from another aisle that this unexpected product belongs to.
+
+    Only meaningful for products this shelf does not expect: anything matched to an
+    expected row is in the right place. ``shelf_aisles`` holds the aisle/location codes
+    of this shelf's own planogram rows so their codes never count as "another aisle".
+    """
     if not full_store_items or not current_aisle:
         return None
+    here = {_norm(current_aisle)} | (shelf_aisles or set())
     act_brand = _brand_key(actual)
-    act_product = _norm(_item_product_blob(actual))
     for row in full_store_items:
-        row_aisle = _norm(row.get("aisle") or row.get("location") or "")
-        if not row_aisle or row_aisle == _norm(current_aisle):
+        row_aisle = _row_aisle(row)
+        if not row_aisle or row_aisle in here:
             continue
-        row_blob = _item_product_blob(row)
-        if _brand_key(row) == act_brand and _token_overlap(row_blob, act_product) >= 0.4:
+        if _brand_key(row) == act_brand and _match_score(row, actual) >= 0.6:
             return row
     return None
 
@@ -379,6 +392,8 @@ def compare_planogram(
         or ""
     )
 
+    shelf_aisles = {a for a in (_row_aisle(row) for row in scoped_expected) if a}
+
     used_actual: set[int] = set()
     lines: list[dict] = []
 
@@ -386,7 +401,7 @@ def compare_planogram(
         idx, score = _find_best_match(expected, inventory, used_actual)
         exp_qty = int(expected.get("expected_qty") or 0)
         exp_brand = expected.get("brand") or ""
-        exp_product = expected.get("product_name") or ""
+        exp_product = _display_product(expected)
 
         if idx is None:
             lines.append({
@@ -424,22 +439,7 @@ def compare_planogram(
         elif exp_sub and detected_sub and not sub_categories_match(exp_sub, detected_sub, cat_name):
             wrong_cat = True
 
-        wrong_loc_row = _wrong_location_check(actual, full_store, current_aisle)
-
-        if wrong_loc_row:
-            lines.append({
-                "planogram_item_id": expected.get("id"),
-                "issue_type": ISSUE_WRONG_LOCATION,
-                "expected_brand": exp_brand,
-                "expected_product": exp_product,
-                "expected_qty": exp_qty,
-                "actual_brand": act_brand,
-                "actual_product": act_product,
-                "actual_qty": act_qty,
-                "severity": SEVERITY_CRITICAL,
-                "detail": wrong_loc_row.get("aisle") or wrong_loc_row.get("location") or "",
-            })
-        elif wrong_cat:
+        if wrong_cat:
             lines.append({
                 "planogram_item_id": expected.get("id"),
                 "issue_type": ISSUE_WRONG_CATEGORY,
@@ -505,6 +505,22 @@ def compare_planogram(
             continue
         if not flag_unlisted:
             unlisted_count += 1
+            continue
+        act_qty = int(actual.get("quantity") or actual.get("facings") or 0)
+        wrong_loc_row = _wrong_location_check(actual, full_store, current_aisle, shelf_aisles)
+        if wrong_loc_row:
+            lines.append({
+                "planogram_item_id": None,
+                "issue_type": ISSUE_WRONG_LOCATION,
+                "expected_brand": None,
+                "expected_product": None,
+                "expected_qty": 0,
+                "actual_brand": act_brand,
+                "actual_product": act_product,
+                "actual_qty": act_qty,
+                "severity": SEVERITY_CRITICAL,
+                "detail": wrong_loc_row.get("aisle") or wrong_loc_row.get("location") or "",
+            })
             continue
         lines.append({
             "planogram_item_id": None,

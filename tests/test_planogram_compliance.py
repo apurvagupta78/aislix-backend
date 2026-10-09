@@ -453,3 +453,46 @@ def test_make_inventory_variant_field_matches_lays_planogram():
     assert cream["actual_qty"] == 12
     assert tomato["issue_type"] == ISSUE_MISSING
 
+
+
+def test_matched_products_never_flagged_wrong_location():
+    """Planogram location codes (A-1-Z) differ from the scan's shelf label; matched rows stay correct."""
+    expected = [
+        {"id": f"p{i}", "brand": "Lay's", "product_name": "potato chips", "variant": flavour,
+         "expected_qty": qty, "aisle": "A-1-Z", "sub_category": "chips", "category": "Packaged Food & Snacks"}
+        for i, (flavour, qty) in enumerate([("Classic Salted", 19), ("Magic Masala", 6), ("Cream & Onion", 12)])
+    ]
+    inventory = [
+        {"brand": "Lay's", "product_name": "potato chips", "variant": "Classic Salted", "quantity": 19},
+        {"brand": "Lay's", "product_name": "potato chips", "variant": "Magic Masala", "quantity": 6},
+        {"brand": "Lay's", "product_name": "potato chips", "variant": "Cream & Onion", "quantity": 12},
+    ]
+    result = compare_planogram(
+        expected,
+        inventory,
+        scan_context={"sub_category": "chips", "aislix_category": "Packaged Food & Snacks", "shelf_label": "Snacks bay 1"},
+    )
+    assert {ln["issue_type"] for ln in result["lines"]} == {ISSUE_CORRECT}
+    assert result["summary"]["wrong_location"] == 0
+    assert result["scan_status"] == "compliant"
+    names = sorted(ln["expected_product"] for ln in result["lines"])
+    assert len(set(names)) == 3
+    assert all("(" in n for n in names)
+
+
+def test_unexpected_product_from_another_aisle_is_wrong_location():
+    shelf = [{"id": "s1", "brand": "Dove", "product_name": "Shampoo", "expected_qty": 2, "aisle": "A-1",
+              "sub_category": "shampoo", "category": "Personal Care"}]
+    other = [{"id": "o1", "brand": "Colgate", "product_name": "Strong Teeth Toothpaste", "expected_qty": 2,
+              "aisle": "B-4", "sub_category": "toothpaste", "category": "Personal Care"}]
+    inventory = [
+        {"brand": "Dove", "product_name": "Shampoo", "quantity": 2},
+        {"brand": "Colgate", "product_name": "Strong Teeth Toothpaste", "quantity": 1},
+    ]
+    result = compare_planogram(
+        shelf, inventory, scan_context={"shelf_label": "A-1"}, full_store_items=shelf + other,
+    )
+    by_type = {ln["issue_type"]: ln for ln in result["lines"]}
+    assert by_type[ISSUE_CORRECT]["actual_brand"] == "Dove"
+    assert by_type["wrong_location"]["actual_brand"] == "Colgate"
+    assert by_type["wrong_location"]["detail"] == "B-4"
