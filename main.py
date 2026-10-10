@@ -84,11 +84,9 @@ def on_startup():
 
     learned = load_learned()
     ensure_checkpoint()
-    from app.ops_cron import start_ops_cron
     from app.report_cron import start_report_cron
 
     start_report_cron()
-    start_ops_cron()
     rk = "yes" if is_available() else "no"
     ocr = active_ocr_engine() or "none"
     mode = active_recognition_mode()
@@ -114,7 +112,6 @@ def health():
     from app.learned_catalog import count_learned
     from app.make_scan import scan_provider
     from app.recognizer import active_recognition_mode
-    from app.ops_cron import STATUS as ops_cron_status
     from app.report_cron import STATUS as report_cron_status
 
     return {
@@ -132,7 +129,6 @@ def health():
         "build": "fnv-qc-finalize-v1",
         "auth": auth_status(),
         "report_cron": report_cron_status,
-        "ops_cron": ops_cron_status,
     }
 
 
